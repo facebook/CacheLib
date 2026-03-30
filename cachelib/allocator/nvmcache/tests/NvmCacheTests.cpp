@@ -215,11 +215,11 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
 
-  // read from ram cache first so that we will not cause evictions
+  // Read from ram cache first so that we will not cause evictions
   // to navy for items that are still in ram-cache until we start
-  // reading items from navy
+  // reading items from navy.
   for (unsigned int i = nKeys + 100; i-- > 0;) {
-    unsigned int index = i - 1;
+    unsigned int index = i;
     auto key = folly::sformat("key{}", index);
     auto hdl = this->fetch(key, false /* ramOnly */);
     hdl.wait();
@@ -247,6 +247,10 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
       ASSERT_EQ(nullptr, hdl);
     }
   }
+
+  // Flush to ensure all async navy callbacks (including GetCtx destruction
+  // which decrements handle counts) have fully completed.
+  nvm.flushNvmCache();
 
   // Reads are done. We should be at "0" active handle count across all threads.
   ASSERT_EQ(0, nvm.getNumActiveHandles());
