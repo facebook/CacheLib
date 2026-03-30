@@ -3014,6 +3014,89 @@ TEST_F(NvmCacheTest, NvmLargeItemFlagOnPromotion) {
   EXPECT_FALSE(testNvmLargeItemFlag("bh", 50, 'S'));
 }
 
+TEST_F(NvmCacheTest, AccessTimeMapPopulatedOnDramEviction) {
+  const int nKeys = 5;
+  const uint32_t allocSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("atm_multi", allocSize, nKeys, allocSize);
+
+  // ATM should now have entries for the NvmClean items that were evicted
+  // from DRAM (BlockCache items only).
+  auto* atm = this->getAccessTimeMap();
+  auto now = util::getCurrentTimeSec();
+  int populated = 0;
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("atm_multi_{}", i);
+    HashedKey hk{key};
+    auto ts = atm->get(hk.keyHash());
+    if (ts != std::nullopt) {
+      EXPECT_GT(*ts, 0);
+      EXPECT_LE(*ts, now);
+      ++populated;
+    }
+  }
+  EXPECT_GT(populated, 0);
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedForBigHashItems) {
+  // Enable truncation so small items route to BigHash instead of BlockCache.
+  this->config_.setSimpleFile(cacheDir_ + "/navy", 200 * 1024ULL * 1024ULL,
+                              true /* truncateFile */);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = this->config_;
+  nvmConfig.truncateItemToOriginalAllocSizeInNvm = true;
+  auto& config = this->getConfig();
+  config.enableNvmCache(nvmConfig);
+  this->poolAllocsizes_ = {20 * 1024};
+  this->makeCache();
+
+  const int nKeys = 5;
+  const uint32_t allocSize = 50;
+  const uint32_t fillerSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("bh", allocSize, nKeys, fillerSize);
+
+  // ATM should NOT have entries for the BigHash items — the isNvmLargeItem()
+  // bit is not set for BigHash items, preventing updateAccessTime().
+  auto* atm = this->getAccessTimeMap();
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("bh_{}", i);
+    HashedKey hk{key};
+    auto ts = atm->get(hk.keyHash());
+    EXPECT_EQ(std::nullopt, ts)
+        << "BigHash item " << key << " should not be in ATM";
+  }
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedOnRegularEviction) {
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  const uint32_t allocSize = 15 * 1024;
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+  EXPECT_EQ(0, atm->size());
+
+  // Insert many fresh items (never been to NVM, so NOT NvmClean).
+  // Evictions of these items go through the NVM put path, not
+  // the updateAccessTime path.
+  for (int i = 0; i < 1024; i++) {
+    auto key = folly::sformat("regular_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  ASSERT_GT(this->evictionCount(), 0);
+
+  // Non-NvmClean evictions should NOT populate the AccessTimeMap.
+  EXPECT_EQ(0, atm->size());
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

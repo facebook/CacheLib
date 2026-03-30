@@ -3951,6 +3951,14 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
   } else {
     recordEvent(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
                 AllocatorApiResult::EVICTED, candidate);
+    // When this item has an unmodified copy still present in BlockCache
+    // (large items only), record its latest DRAM access time in the Access
+    // Time Map as the value in the copy in BlockCache can be stale.
+    if (nvmCache_ && candidate->isNvmClean() && !candidate->isNvmEvicted() &&
+        candidate->isNvmLargeItem()) {
+      HashedKey hk{candidate->getKey()};
+      nvmCache_->updateAccessTime(hk, candidate->getLastAccessTime());
+    }
   }
   return {candidate, toRecycle};
 }

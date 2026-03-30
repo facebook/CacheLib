@@ -304,6 +304,12 @@ class NvmCache {
   // and the item is present in NVM (NvmClean set and NvmEvicted flag unset).
   void markNvmItemRemovedLocked(HashedKey hk);
 
+  void updateAccessTime(HashedKey hk, uint32_t accessTimeSecs) {
+    if (accessTimeMap_) {
+      accessTimeMap_->set(hk.keyHash(), accessTimeSecs);
+    }
+  }
+
  private:
   // Helper function to record event with NvmItem metadata
   // @param event    The allocator API event type

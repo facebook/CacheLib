@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/nvmcache/AccessTimeMap.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/Utils.h"
 
@@ -130,6 +131,64 @@ class NvmCacheTest : public testing::Test {
 
   NvmCacheT* getNvmCache() {
     return cache_ ? cache_->nvmCache_.get() : nullptr;
+  }
+
+  AccessTimeMap* getAccessTimeMap() {
+    auto* nvm = getNvmCache();
+    return nvm ? nvm->accessTimeMap_.get() : nullptr;
+  }
+
+  // Helper: insert items, push to NVM, remove from RAM, promote (verify
+  // NvmClean), then evict from DRAM by inserting fillers. Used by ATM tests
+  // that share this common setup/eviction flow. Caller handles any non-default
+  // cache setup beforehand and final ATM assertions afterward.
+  void insertPromoteAndEvictNvmCleanItems(const std::string& keyPrefix,
+                                          uint32_t itemAllocSize,
+                                          int nKeys,
+                                          uint32_t fillerAllocSize) {
+    auto& nvm = cache();
+    auto pid = poolId();
+
+    for (int i = 0; i < nKeys; i++) {
+      auto key = folly::sformat("{}_{}", keyPrefix, i);
+      auto it = nvm.allocate(pid, key, itemAllocSize);
+      ASSERT_NE(nullptr, it);
+      nvm.insertOrReplace(it);
+      ASSERT_TRUE(pushToNvmCacheFromRamForTesting(key));
+    }
+    nvm.flushNvmCache();
+
+    for (int i = 0; i < nKeys; i++) {
+      removeFromRamForTesting(folly::sformat("{}_{}", keyPrefix, i));
+    }
+
+    auto* atm = getAccessTimeMap();
+    ASSERT_NE(nullptr, atm);
+    EXPECT_EQ(0, atm->size());
+
+    for (int i = 0; i < nKeys; i++) {
+      auto key = folly::sformat("{}_{}", keyPrefix, i);
+      auto hdl = fetch(key, false /* ramOnly */);
+      ASSERT_NE(nullptr, hdl);
+      ASSERT_TRUE(hdl->isNvmClean());
+    }
+
+    EXPECT_EQ(0, atm->size());
+
+    const uint32_t numKeysPerRegion =
+        config_.blockCache().getRegionSize() / fillerAllocSize;
+    auto evictBefore = evictionCount();
+    for (int i = 0; i < 1024; i++) {
+      auto key = folly::sformat("filler_{}", i);
+      auto it = nvm.allocate(pid, key, fillerAllocSize);
+      ASSERT_NE(nullptr, it);
+      cache_->insertOrReplace(it);
+      if (i % numKeysPerRegion == 0) {
+        nvm.flushNvmCache();
+      }
+    }
+    nvm.flushNvmCache();
+    ASSERT_GT(evictionCount(), evictBefore);
   }
 
   std::unique_ptr<NvmItem> makeNvmItem(const Item& item) {
