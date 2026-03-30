@@ -20,9 +20,6 @@
 #include <folly/hash/Hash.h>
 #include <sys/stat.h>
 
-#include <fstream>
-#include <vector>
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <thrift/lib/cpp2/protocol/Serializer.h>
