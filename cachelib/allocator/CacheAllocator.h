@@ -5196,7 +5196,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
   }
   WriteHandle newItemHdl = allocateNewItemForOldItem(oldItem);
 
-  // if we have a valid handle, try to move, if not, we attemp to evict.
+  // if we have a valid handle, try to move, if not, we attempt to evict.
   if (newItemHdl) {
     // move can fail if another thread calls insertOrReplace
     // in this case oldItem is no longer valid (not accessible,
