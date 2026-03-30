@@ -5246,10 +5246,9 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
     auto ref = unmarkMovingAndWakeUpWaiters(oldItem, std::move(newItemHdl));
     XDCHECK_EQ(0u, ref);
   }
-  allocator_->free(&oldItem);
-
   (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, oldItem));
+  allocator_->free(&oldItem);
   stats_.numMoveSuccesses.inc();
   return true;
 }
