@@ -5216,18 +5216,23 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
   const auto allocInfo = allocator_->getAllocInfo(oldItem.getMemory());
   if (chainedItem) {
     newItemHdl.reset();
-    auto parentKey = parentItem->getKey();
+    // Copy the parent key before unmarkMoving because once we unmark,
+    // another thread is free to remove/evict and free the parent item,
+    // which would make parentItem->getKey() a dangling StringPiece.
+    std::string parentKey(parentItem->getKey().data(),
+                          parentItem->getKey().size());
+    const auto parentKeyView = Key{folly::StringPiece{parentKey}};
     parentItem->unmarkMoving();
     // We do another lookup here because once we unmark moving, another thread
     // is free to remove/evict the parent item. So its unsafe to increment
     // refcount on the parent item's memory. Instead we rely on a proper lookup.
-    auto parentHdl = findInternal(parentKey);
+    auto parentHdl = findInternal(parentKeyView);
     if (!parentHdl) {
       // Parent is gone, so we wake up waiting threads with a null handle.
-      wakeUpWaiters(parentItem->getKey(), {});
+      wakeUpWaiters(parentKeyView, {});
     } else {
       if (!parentHdl.isReady()) {
-        // Parnet handle isn't ready. This can be due to the parent got evicted
+        // Parent handle isn't ready. This can be due to the parent got evicted
         // into NvmCache, or another thread is moving the slab that the parent
         // handle is on (e.g. the parent got replaced and the new parent's slab
         // is being moved). In this case, we must wait synchronously and block
@@ -5235,7 +5240,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
         // expected to be very rare.
         parentHdl.wait();
       }
-      wakeUpWaiters(parentItem->getKey(), std::move(parentHdl));
+      wakeUpWaiters(parentKeyView, std::move(parentHdl));
     }
   } else {
     auto ref = unmarkMovingAndWakeUpWaiters(oldItem, std::move(newItemHdl));
