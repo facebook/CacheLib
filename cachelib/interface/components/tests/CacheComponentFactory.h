@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <folly/testing/TestUtil.h>
+
 #include "cachelib/interface/CacheComponent.h"
 #include "cachelib/interface/components/FlashCacheComponent.h"
 #include "cachelib/interface/components/RAMCacheComponent.h"
@@ -26,13 +28,22 @@ class CacheFactory {
  public:
   virtual ~CacheFactory() = default;
   virtual std::unique_ptr<CacheComponent> create() = 0;
+  virtual std::unique_ptr<CacheComponent> createPersistent() = 0;
+  virtual void onShutdown(CacheComponent& /* component */) {}
+  virtual Result<std::unique_ptr<CacheComponent>> recover() = 0;
 };
 
 class RAMCacheFactory : public CacheFactory {
  public:
   std::unique_ptr<CacheComponent> create() override;
+  std::unique_ptr<CacheComponent> createPersistent() override;
+  Result<std::unique_ptr<CacheComponent>> recover() override;
 
  private:
+  folly::test::TemporaryDirectory tmpDir_;
+
+  Result<RAMCacheComponent> createWithPersistence(
+      RAMCacheComponent::PersistenceConfig pc);
   static LruAllocatorConfig createConfig();
   static RAMCacheComponent::PoolConfig createPoolConfig();
 };
@@ -41,20 +52,33 @@ class FlashCacheFactory : public CacheFactory {
  public:
   FlashCacheFactory();
   std::unique_ptr<CacheComponent> create() override;
+  std::unique_ptr<CacheComponent> createPersistent() override;
+  void onShutdown(CacheComponent& /* component */) override;
+  Result<std::unique_ptr<CacheComponent>> recover() override;
 
  protected:
-  static std::unique_ptr<navy::Device> makeDevice();
+  static constexpr size_t kMetadataSize{/* 32KB */ 32 * 1024};
+  static constexpr size_t kCacheSize{/* 256KB */ 256 * 1024};
+  static constexpr size_t kDeviceSize{kMetadataSize + kCacheSize};
+  std::unique_ptr<navy::Device> savedDevice_;
+
+  virtual Result<std::unique_ptr<CacheComponent>> createWithPersistence(
+      std::unique_ptr<navy::Device> device,
+      FlashCacheComponent::PersistenceConfig pc);
+  static std::unique_ptr<navy::Device> makeDevice(size_t size);
   navy::BlockCache::Config makeConfig();
 
  private:
   static constexpr size_t kRegionSize{/* 16KB */ 16 * 1024};
-  static constexpr size_t kDeviceSize{/* 256KB */ 256 * 1024};
+  static constexpr uint32_t kIOAlignSize{4096};
   std::vector<uint32_t> hits_;
 };
 
 class ConsistentFlashCacheFactory : public FlashCacheFactory {
- public:
-  std::unique_ptr<CacheComponent> create() override;
+ protected:
+  Result<std::unique_ptr<CacheComponent>> createWithPersistence(
+      std::unique_ptr<navy::Device> device,
+      FlashCacheComponent::PersistenceConfig pc) override;
 
  private:
   static constexpr size_t kShardsPower{4};

@@ -23,11 +23,32 @@
 namespace facebook::cachelib::interface::test {
 
 std::unique_ptr<CacheComponent> RAMCacheFactory::create() {
-  auto config = createConfig();
-  auto poolConfig = createPoolConfig();
-  auto ramCache = ASSERT_OK(
-      RAMCacheComponent::create(std::move(config), std::move(poolConfig)));
+  auto ramCache = ASSERT_OK(createWithPersistence(
+      RAMCacheComponent::PersistenceConfig::noPersistenceOrRecovery()));
   return std::make_unique<RAMCacheComponent>(std::move(ramCache));
+}
+
+std::unique_ptr<CacheComponent> RAMCacheFactory::createPersistent() {
+  auto ramCache = ASSERT_OK(createWithPersistence(
+      RAMCacheComponent::PersistenceConfig::persistenceButNoRecovery(
+          tmpDir_.path().string())));
+  return std::make_unique<RAMCacheComponent>(std::move(ramCache));
+}
+
+Result<std::unique_ptr<CacheComponent>> RAMCacheFactory::recover() {
+  auto result = createWithPersistence(
+      RAMCacheComponent::PersistenceConfig::persistenceAndRecovery(
+          tmpDir_.path().string()));
+  if (result.hasError()) {
+    return folly::makeUnexpected(std::move(result).error());
+  }
+  return std::make_unique<RAMCacheComponent>(std::move(result).value());
+}
+
+Result<RAMCacheComponent> RAMCacheFactory::createWithPersistence(
+    RAMCacheComponent::PersistenceConfig pc) {
+  return RAMCacheComponent::create(createConfig(), createPoolConfig(),
+                                   std::move(pc));
 }
 
 /* static */ LruAllocatorConfig RAMCacheFactory::createConfig() {
@@ -54,31 +75,72 @@ FlashCacheFactory::FlashCacheFactory()
     : hits_(/* count */ kDeviceSize / kRegionSize, /* value */ 0) {}
 
 std::unique_ptr<CacheComponent> FlashCacheFactory::create() {
-  auto flashCache = ASSERT_OK(FlashCacheComponent::create(
-      "CacheComponentTest", makeConfig(), makeDevice()));
-  return std::make_unique<FlashCacheComponent>(std::move(flashCache));
+  return ASSERT_OK(createWithPersistence(
+      makeDevice(kCacheSize), // don't need space for metadata
+      FlashCacheComponent::PersistenceConfig::noPersistenceOrRecovery()));
 }
 
-/* static */ std::unique_ptr<navy::Device> FlashCacheFactory::makeDevice() {
-  return navy::createMemoryDevice(kDeviceSize, /* encryptor */ nullptr);
+std::unique_ptr<CacheComponent> FlashCacheFactory::createPersistent() {
+  return ASSERT_OK(createWithPersistence(
+      makeDevice(kDeviceSize),
+      FlashCacheComponent::PersistenceConfig::persistenceButNoRecovery(
+          kMetadataSize)));
+}
+
+void FlashCacheFactory::onShutdown(CacheComponent& component) {
+  savedDevice_ =
+      std::move(static_cast<FlashCacheComponent&>(component).device_);
+}
+
+Result<std::unique_ptr<CacheComponent>> FlashCacheFactory::recover() {
+  auto device =
+      savedDevice_ ? std::move(savedDevice_) : makeDevice(kDeviceSize);
+  return createWithPersistence(
+      std::move(device),
+      FlashCacheComponent::PersistenceConfig::persistenceAndRecovery(
+          kMetadataSize));
+}
+
+Result<std::unique_ptr<CacheComponent>>
+FlashCacheFactory::createWithPersistence(
+    std::unique_ptr<navy::Device> device,
+    FlashCacheComponent::PersistenceConfig pc) {
+  auto result = FlashCacheComponent::create("CacheComponentTest", makeConfig(),
+                                            std::move(device), std::move(pc));
+  if (result.hasError()) {
+    return folly::makeUnexpected(std::move(result).error());
+  }
+  return std::make_unique<FlashCacheComponent>(std::move(result).value());
+}
+
+/* static */ std::unique_ptr<navy::Device> FlashCacheFactory::makeDevice(
+    size_t size) {
+  return navy::createMemoryDevice(size, /* encryptor */ nullptr, kIOAlignSize);
 }
 
 navy::BlockCache::Config FlashCacheFactory::makeConfig() {
   navy::BlockCache::Config config;
   config.regionSize = kRegionSize;
-  config.cacheSize = kDeviceSize;
+  config.cacheSize = kCacheSize;
+  config.indexConfig.setNumSparseMapBuckets(64);
   config.evictionPolicy =
       std::make_unique<::testing::NiceMock<navy::MockPolicy>>(&hits_);
   config.reinsertionConfig.enablePctBased(100);
   return config;
 }
 
-std::unique_ptr<CacheComponent> ConsistentFlashCacheFactory::create() {
-  auto consistentFlashCache = ASSERT_OK(ConsistentFlashCacheComponent::create(
-      "CacheComponentTest", makeConfig(), makeDevice(),
-      std::make_unique<MurmurHash2>(), kShardsPower));
+Result<std::unique_ptr<CacheComponent>>
+ConsistentFlashCacheFactory::createWithPersistence(
+    std::unique_ptr<navy::Device> device,
+    FlashCacheComponent::PersistenceConfig pc) {
+  auto result = ConsistentFlashCacheComponent::create(
+      "CacheComponentTest", makeConfig(), std::move(device),
+      std::make_unique<MurmurHash2>(), kShardsPower, std::move(pc));
+  if (result.hasError()) {
+    return folly::makeUnexpected(std::move(result).error());
+  }
   return std::make_unique<ConsistentFlashCacheComponent>(
-      std::move(consistentFlashCache));
+      std::move(result).value());
 }
 
 } // namespace facebook::cachelib::interface::test

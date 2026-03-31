@@ -17,6 +17,7 @@
 #include <folly/Random.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/testing/TestUtil.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -43,9 +44,9 @@ class CacheComponentTest : public ::testing::Test {
     ASSERT_NE(cache_, nullptr) << "Failed to create cache";
   }
 
-  std::unique_ptr<CacheComponent> cache_;
+  void TearDown() override { EXPECT_OK(cache_->shutdown()); }
 
- private:
+  std::unique_ptr<CacheComponent> cache_;
   std::unique_ptr<FactoryType> factory_;
 };
 
@@ -659,6 +660,90 @@ TYPED_TEST(CacheComponentTest, MultiThreadedOperations) {
   EXPECT_GT(successfulReplacements.load(), 0);
   EXPECT_GT(successfulFinds.load(), 0);
   EXPECT_EQ(dataCorruptions.load(), 0);
+}
+
+// ============================================================================
+// Persist and Recover Tests
+// ============================================================================
+
+CO_TYPED_TEST(CacheComponentTest, PersistAndRecover) {
+  const std::string key = "persist_key";
+  const std::string data = "persist_data";
+
+  {
+    auto cache = this->factory_->createPersistent();
+
+    auto handle = ASSERT_OK(co_await cache->allocate(
+        key, data.size(), util::getCurrentTimeSec(), 3600));
+    std::memcpy(handle->getMemory(), data.c_str(), data.size());
+    EXPECT_OK(co_await cache->insert(std::move(handle)));
+
+    EXPECT_OK(cache->shutdown());
+    this->factory_->onShutdown(*cache);
+  }
+
+  auto result = this->factory_->recover();
+  CO_ASSERT_TRUE(result.hasValue());
+  auto recovered = std::move(result).value();
+
+  auto findResult = ASSERT_OK(co_await recovered->find(key));
+  CO_ASSERT_TRUE(findResult.has_value());
+  std::string retrievedData(
+      findResult.value()->template getMemoryAs<const char>(), data.size());
+  EXPECT_EQ(retrievedData, data);
+}
+
+CO_TYPED_TEST(CacheComponentTest, PersistAndRecoverMultipleItems) {
+  constexpr int kNumItems = 10;
+
+  {
+    auto cache = this->factory_->createPersistent();
+
+    for (int i = 0; i < kNumItems; ++i) {
+      auto key = "key_" + std::to_string(i);
+      auto val = "data_" + std::to_string(i);
+      auto handle = ASSERT_OK(co_await cache->allocate(
+          key, val.size(), util::getCurrentTimeSec(), 3600));
+      std::memcpy(handle->getMemory(), val.c_str(), val.size());
+      EXPECT_OK(co_await cache->insert(std::move(handle)));
+    }
+
+    EXPECT_OK(cache->shutdown());
+    this->factory_->onShutdown(*cache);
+  }
+
+  auto result = this->factory_->recover();
+  CO_ASSERT_TRUE(result.hasValue());
+  auto recovered = std::move(result).value();
+
+  for (int i = 0; i < kNumItems; ++i) {
+    auto key = "key_" + std::to_string(i);
+    auto expectedVal = "data_" + std::to_string(i);
+    auto findResult = ASSERT_OK(co_await recovered->find(key));
+    CO_ASSERT_TRUE(findResult.has_value());
+    std::string retrievedData(
+        findResult.value()->template getMemoryAs<const char>(),
+        expectedVal.size());
+    EXPECT_EQ(retrievedData, expectedVal);
+  }
+  EXPECT_OK(recovered->shutdown());
+}
+
+CO_TYPED_TEST(CacheComponentTest, RecoverWithoutPriorPersist) {
+  // Cache components recover gracefully with an empty cache
+  auto recovered = ASSERT_OK(this->factory_->recover());
+  auto findResult = ASSERT_OK(co_await recovered->find("nonexistent_key"));
+  EXPECT_FALSE(findResult.has_value());
+}
+
+CO_TYPED_TEST(CacheComponentTest, PersistShutdownWithPersistence) {
+  auto cache = this->factory_->createPersistent();
+
+  auto handle = ASSERT_OK(
+      co_await cache->allocate("key", 100, util::getCurrentTimeSec(), 3600));
+  EXPECT_OK(co_await cache->insert(std::move(handle)));
+
+  EXPECT_OK(cache->shutdown());
 }
 
 } // namespace

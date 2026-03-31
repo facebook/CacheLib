@@ -25,6 +25,10 @@ namespace facebook::cachelib::interface {
 class FlashCacheItem;
 class ConsistentFlashCacheItem;
 
+namespace test {
+class FlashCacheFactory;
+}
+
 /**
  * A cache component that uses Cachelib's BlockCache flash cache without RAM
  * cache.
@@ -144,6 +148,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
 
   friend class FlashCacheItem;
   friend class ConsistentFlashCacheItem;
+  friend class test::FlashCacheFactory;
 };
 
 /**
