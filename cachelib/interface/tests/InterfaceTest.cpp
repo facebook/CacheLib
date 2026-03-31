@@ -162,6 +162,8 @@ class TestCacheComponent : public CacheComponent {
     co_return folly::unit;
   }
 
+  UnitResult shutdown() noexcept override { return folly::unit; }
+
   CacheComponentStats getStats() const noexcept override {
     return CacheComponentStats();
   }

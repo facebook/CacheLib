@@ -19,7 +19,6 @@
 #include <gtest/gtest_prod.h>
 
 #include <memory>
-#include <stdexcept>
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"

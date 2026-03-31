@@ -343,6 +343,10 @@ void RAMCacheComponent::release(interface::CacheItem& item, bool inserted) {
   stats_->release_.throughput_.successes_.inc();
 }
 
+UnitResult RAMCacheComponent::shutdown() {
+  return makeError(Error::Code::UNIMPLEMENTED, "not implemented");
+}
+
 CacheComponentStats RAMCacheComponent::getStats() const noexcept {
   CacheComponentStats stats(*stats_);
 

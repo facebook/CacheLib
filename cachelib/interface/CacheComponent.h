@@ -120,6 +120,15 @@ class CacheComponent {
   virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
 
   /**
+   * Shut down the cache component. Persists state if the component was
+   * configured for persistence and stops all background workers. The component
+   * is no longer usable after calling shutdown().
+   *
+   * @return folly::unit on success or an error result otherwise
+   */
+  virtual UnitResult shutdown() = 0;
+
+  /**
    * Get stats for the cache component.
    * @return stats for the cache component
    */

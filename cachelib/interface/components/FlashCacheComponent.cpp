@@ -20,6 +20,7 @@
 
 #include "cachelib/common/Time.h"
 #include "cachelib/interface/utils/CoroFiberAdapter.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 
 using namespace facebook::cachelib::navy;
 
@@ -154,7 +155,10 @@ static_assert(sizeof(FlashCacheItem) <= Handle::kInlineBufSize,
               "FlashCacheItem must fit in Handle's inline buffer");
 
 namespace {
-UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
+UnitResult initConfig(
+    navy::BlockCache::Config& config,
+    navy::Device* device,
+    const FlashCacheComponent::PersistenceConfig& persistenceConfig) {
   constexpr auto expireCheck = [](navy::BufferView v) -> bool {
     return util::isExpired(FlashCacheItem::getExpiryTime(v));
   };
@@ -170,10 +174,19 @@ UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "device set in BlockCache::Config is not the same as "
                      "the device passed to create()");
+  } else if (config.cacheBaseOffset != 0 &&
+             config.cacheBaseOffset !=
+                 device->getIOAlignedSize(persistenceConfig.metadataSize())) {
+    return makeError(Error::Code::INVALID_CONFIG,
+                     "cacheBaseOffset set in BlockCache::Config but "
+                     "component is going to set it");
   }
 
   config.device = device;
   config.checkExpired = expireCheck;
+  // TODO for now we're assuming we're the only cache on this flash device
+  config.cacheBaseOffset =
+      device->getIOAlignedSize(persistenceConfig.metadataSize());
   return folly::unit;
 }
 } // namespace
@@ -182,16 +195,41 @@ UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
 // FlashCacheComponent
 // ============================================================================
 
+/* static */ FlashCacheComponent::PersistenceConfig
+FlashCacheComponent::PersistenceConfig::noPersistenceOrRecovery() {
+  return PersistenceConfig(/* persist */ false, /* recover */ false,
+                           /* metadataSize */ 0);
+}
+
+/* static */ FlashCacheComponent::PersistenceConfig
+FlashCacheComponent::PersistenceConfig::persistenceAndRecovery(
+    size_t metadataSize) {
+  return PersistenceConfig(/* persist */ true, /* recover */ true,
+                           metadataSize);
+}
+
+/* static */ FlashCacheComponent::PersistenceConfig
+FlashCacheComponent::PersistenceConfig::persistenceButNoRecovery(
+    size_t metadataSize) {
+  return PersistenceConfig(/* persist */ true, /* recover */ false,
+                           metadataSize);
+}
+
 /* static */ Result<FlashCacheComponent> FlashCacheComponent::create(
     std::string name,
     navy::BlockCache::Config&& config,
-    std::unique_ptr<navy::Device> device) noexcept {
+    std::unique_ptr<navy::Device> device,
+    PersistenceConfig persistenceConfig) noexcept {
   try {
-    if (auto result = initConfig(config, device.get()); result.hasError()) {
+    if (auto result = initConfig(config, device.get(), persistenceConfig);
+        result.hasError()) {
       return folly::makeUnexpected(std::move(result).error());
     }
-    return FlashCacheComponent(std::move(name), std::move(config),
-                               std::move(device));
+    auto component =
+        FlashCacheComponent(std::move(name), std::move(config),
+                            std::move(device), std::move(persistenceConfig));
+    component.tryRecover();
+    return component;
   } catch (const std::invalid_argument& ia) {
     return makeError(Error::Code::INVALID_CONFIG, ia.what());
   }
@@ -478,11 +516,39 @@ folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
 
 FlashCacheComponent::FlashCacheComponent(std::string&& name,
                                          navy::BlockCache::Config&& config,
-                                         std::unique_ptr<Device> device)
+                                         std::unique_ptr<Device> device,
+                                         PersistenceConfig persistenceConfig)
     : name_(std::move(name)),
       device_(std::move(device)),
       cache_(std::make_unique<navy::BlockCache>(std::move(config))),
+      persistenceConfig_(std::move(persistenceConfig)),
       coroToFiberLatency_(std::make_unique<util::PercentileStats>()) {}
+
+void FlashCacheComponent::tryRecover() {
+  if (persistenceConfig_.recover()) {
+    bool recovered = false;
+    try {
+      auto metadataSize = persistenceConfig_.metadataSize();
+      auto rr = navy::createMetadataRecordReader(*device_, metadataSize);
+      XDCHECK(rr) << "failed to create metadata reader";
+      if (!rr->isEnd() && cache_->recover(*rr)) {
+        // If recovery is successful, invalidate the metadata
+        auto rw = createMetadataRecordWriter(*device_, metadataSize);
+        XDCHECK(rw) << "failed to create metadata writer";
+        recovered = rw->invalidate();
+      }
+    } catch (const std::exception& e) {
+      XLOG(WARN) << "Exception while recovering flash cache: " << e.what();
+      recovered = false;
+    }
+
+    if (!recovered) {
+      cache_->reset();
+      XLOG(WARN) << "Failed to recover flash cache from device, creating a "
+                    "new empty cache";
+    }
+  }
+}
 
 bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
   auto& fccItem = static_cast<FlashCacheItem&>(item);
@@ -524,6 +590,22 @@ void FlashCacheComponent::release(CacheItem& item, bool inserted) {
   // Item is stored inline in the Handle's buffer; destroy without deallocating
   item.~CacheItem();
   stats_->release_.throughput_.successes_.inc();
+}
+
+UnitResult FlashCacheComponent::shutdown() {
+  try {
+    cache_->drain();
+    cache_->flush();
+    if (persistenceConfig_.persist()) {
+      auto rw = navy::createMetadataRecordWriter(
+          *device_, persistenceConfig_.metadataSize());
+      XDCHECK(rw) << "failed to create metadata writer";
+      cache_->persist(*rw);
+    }
+    return folly::unit;
+  } catch (const std::exception& e) {
+    return makeError(Error::Code::SHUTDOWN_FAILED, e.what());
+  }
 }
 
 CacheComponentStats FlashCacheComponent::getStats() const noexcept {
@@ -576,18 +658,23 @@ static_assert(sizeof(ConsistentFlashCacheItem) <= Handle::kInlineBufSize,
               "ConsistentFlashCacheItem must fit in Handle's inline buffer");
 
 /* static */ Result<ConsistentFlashCacheComponent>
-ConsistentFlashCacheComponent::create(std::string name,
-                                      navy::BlockCache::Config&& config,
-                                      std::unique_ptr<Device> device,
-                                      std::unique_ptr<Hash> hasher,
-                                      uint8_t shardsPower) noexcept {
+ConsistentFlashCacheComponent::create(
+    std::string name,
+    navy::BlockCache::Config&& config,
+    std::unique_ptr<Device> device,
+    std::unique_ptr<Hash> hasher,
+    uint8_t shardsPower,
+    FlashCacheComponent::PersistenceConfig persistenceConfig) noexcept {
   try {
-    if (auto result = initConfig(config, device.get()); result.hasError()) {
+    if (auto result = initConfig(config, device.get(), persistenceConfig);
+        result.hasError()) {
       return folly::makeUnexpected(std::move(result).error());
     }
-    return ConsistentFlashCacheComponent(std::move(name), std::move(config),
-                                         std::move(device), std::move(hasher),
-                                         shardsPower);
+    auto component = ConsistentFlashCacheComponent(
+        std::move(name), std::move(config), std::move(device),
+        std::move(persistenceConfig), std::move(hasher), shardsPower);
+    component.tryRecover();
+    return component;
   } catch (const std::invalid_argument& ia) {
     return makeError(Error::Code::INVALID_CONFIG, ia.what());
   }
@@ -673,10 +760,13 @@ ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
     std::string&& name,
     navy::BlockCache::Config&& config,
     std::unique_ptr<Device> device,
+    FlashCacheComponent::PersistenceConfig persistenceConfig,
     std::unique_ptr<Hash> hasher,
     uint8_t shardsPower)
-    : FlashCacheComponent(
-          std::move(name), std::move(config), std::move(device)),
+    : FlashCacheComponent(std::move(name),
+                          std::move(config),
+                          std::move(device),
+                          std::move(persistenceConfig)),
       serializer_(std::move(hasher), shardsPower) {}
 
 folly::coro::Task<utils::ShardedSerializer::WriteLock>

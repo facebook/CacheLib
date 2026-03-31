@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/utils/Persistence.h"
 #include "cachelib/interface/utils/ShardedSerializer.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 
@@ -37,23 +38,46 @@ class ConsistentFlashCacheItem;
  */
 class FlashCacheComponent : public CacheComponentWithStats {
  public:
+  class PersistenceConfig : public utils::PersistenceConfigBase {
+   public:
+    static PersistenceConfig noPersistenceOrRecovery();
+    static PersistenceConfig persistenceAndRecovery(size_t metadataSize);
+    static PersistenceConfig persistenceButNoRecovery(size_t metadataSize);
+
+    FOLLY_ALWAYS_INLINE size_t metadataSize() const noexcept {
+      return metadataSize_;
+    }
+
+   private:
+    // Space reserved on the device for persistence and recovery. A good default
+    // is 0.5% of the cache size.
+    size_t metadataSize_;
+
+    PersistenceConfig(bool persist, bool recover, size_t metadataSize)
+        : PersistenceConfigBase(persist, recover),
+          metadataSize_(metadataSize) {}
+  };
+
   /**
    * Factory method to create a new FlashCacheComponent, i.e., wrapper around
    * BlockCache.  Validates the config before actually creating the cache.
    *
-   * Note: don't set config.device or config.checkExpired - create() will set
-   * them internally
+   * Note: don't set config.device, config.checkExpired or
+   * config.cacheBaseOffset - create() will set them internally
    *
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
    * @param device the device to use for the cache
+   * @param persistenceConfig persistence/recovery configuration
    * @return FlashCacheComponent if the flash cache could be initialized, an
    * error otherwise.
    */
   static Result<FlashCacheComponent> create(
       std::string name,
       navy::BlockCache::Config&& config,
-      std::unique_ptr<navy::Device> device) noexcept;
+      std::unique_ptr<navy::Device> device,
+      PersistenceConfig persistenceConfig =
+          PersistenceConfig::noPersistenceOrRecovery()) noexcept;
 
   // ------------------------------ Interface ------------------------------ //
 
@@ -68,12 +92,17 @@ class FlashCacheComponent : public CacheComponentWithStats {
       Key key) override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
+  UnitResult shutdown() override;
   CacheComponentStats getStats() const noexcept override;
 
  protected:
   FlashCacheComponent(std::string&& name,
                       navy::BlockCache::Config&& config,
-                      std::unique_ptr<navy::Device> device);
+                      std::unique_ptr<navy::Device> device,
+                      PersistenceConfig persistenceConfig);
+
+  // Try to recover cache from persistent storage
+  void tryRecover();
 
   // Helpers in which the returned cache item is templatized so we can share the
   // implementation with child classes
@@ -89,6 +118,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   // Note: device_ must be declared before cache_ so that it outlives it
   std::unique_ptr<navy::Device> device_;
   std::unique_ptr<navy::BlockCache> cache_;
+  PersistenceConfig persistenceConfig_;
   mutable std::unique_ptr<util::PercentileStats> coroToFiberLatency_;
 
   // Runs func() on a RegionManager worker fiber. Should not be called from an
@@ -151,8 +181,8 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
    * Factory method to create a new ConsistentFlashCacheComponent.  Validates
    * the config before actually creating the cache.
    *
-   * Note: don't set config.device or config.checkExpired - create() will set
-   * them internally
+   * Note: don't set config.device, config.checkExpired or
+   * config.cacheBaseOffset - create() will set them internally
    *
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
@@ -168,7 +198,9 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
       navy::BlockCache::Config&& config,
       std::unique_ptr<navy::Device> device,
       std::unique_ptr<Hash> hasher,
-      uint8_t shardsPower) noexcept;
+      uint8_t shardsPower,
+      PersistenceConfig persistenceConfig =
+          PersistenceConfig::noPersistenceOrRecovery()) noexcept;
 
   // ------------------------------ Interface ------------------------------ //
 
@@ -222,11 +254,13 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
   std::unique_ptr<LockLatencyCounters> lockLatency_{
       std::make_unique<LockLatencyCounters>()};
 
-  ConsistentFlashCacheComponent(std::string&& name,
-                                navy::BlockCache::Config&& config,
-                                std::unique_ptr<navy::Device> device,
-                                std::unique_ptr<Hash> hasher,
-                                uint8_t shardsPower);
+  ConsistentFlashCacheComponent(
+      std::string&& name,
+      navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device,
+      FlashCacheComponent::PersistenceConfig persistenceConfig,
+      std::unique_ptr<Hash> hasher,
+      uint8_t shardsPower);
 
   // Helpers to time lock acquisition latency
   folly::coro::Task<utils::ShardedSerializer::WriteLock> timedWlock(
