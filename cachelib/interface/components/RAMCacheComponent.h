@@ -20,6 +20,7 @@
 
 #include "cachelib/allocator/MMLru.h"
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/utils/Persistence.h"
 
 namespace facebook::cachelib {
 // Forward declare so we don't have to include headers
@@ -45,6 +46,37 @@ class RAMCacheComponent : public CacheComponentWithStats {
  public:
   using LatencySamplingConfig =
       CacheComponentStatsCollector::LatencySamplingConfig;
+
+  /**
+   * Configuration for cache persistence. If provided, the cache will use shared
+   * memory so that state can be persisted across shutdown/recovery cycles.
+   */
+  class PersistenceConfig : public utils::PersistenceConfigBase {
+   public:
+    static PersistenceConfig noPersistenceOrRecovery();
+    static PersistenceConfig persistenceAndRecovery(std::string cacheDir,
+                                                    void* baseAddr = nullptr);
+    static PersistenceConfig persistenceButNoRecovery(std::string cacheDir,
+                                                      void* baseAddr = nullptr);
+
+    // Note: make return val non-const so we can move cacheDir out
+    FOLLY_ALWAYS_INLINE std::string& cacheDir() const noexcept {
+      return cacheDir_;
+    }
+    FOLLY_ALWAYS_INLINE void* baseAddr() const noexcept { return baseAddr_; }
+
+   private:
+    mutable std::string cacheDir_;
+    void* baseAddr_;
+
+    PersistenceConfig(bool persist,
+                      bool recover,
+                      std::string&& cacheDir,
+                      void* baseAddr)
+        : PersistenceConfigBase(persist, recover),
+          cacheDir_(std::move(cacheDir)),
+          baseAddr_(baseAddr) {}
+  };
 
   /**
    * Pool configuration. RAMCacheComponent includes only 1 pool - to add more
@@ -76,6 +108,8 @@ class RAMCacheComponent : public CacheComponentWithStats {
   static Result<RAMCacheComponent> create(
       LruAllocatorConfig&& allocConfig,
       PoolConfig&& poolConfig,
+      PersistenceConfig persistenceConfig =
+          PersistenceConfig::noPersistenceOrRecovery(),
       const LatencySamplingConfig& latencySamplingConfig = {
           .find_ = 100, .findToWrite_ = 100}) noexcept;
 
@@ -105,12 +139,13 @@ class RAMCacheComponent : public CacheComponentWithStats {
 
  private:
   std::unique_ptr<LruAllocator> cache_;
-  mutable std::chrono::steady_clock::time_point lastStatsCollectionTime_;
   PoolId defaultPool_;
+  bool persist_;
+  mutable std::chrono::steady_clock::time_point lastStatsCollectionTime_;
 
-  explicit RAMCacheComponent(
-      LruAllocatorConfig&& config,
-      const LatencySamplingConfig& latencySamplingConfig);
+  RAMCacheComponent(LruAllocatorConfig&& config,
+                    const PersistenceConfig& persistenceConfig,
+                    const LatencySamplingConfig& latencySamplingConfig);
 
   // ------------------------------ Interface ------------------------------ //
 
