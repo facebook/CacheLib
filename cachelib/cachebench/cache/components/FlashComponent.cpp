@@ -18,6 +18,7 @@
 
 #include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/interface/components/FlashCacheComponent.h"
+#include "cachelib/interface/utils/CoroFiberAdapter.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 
 using namespace facebook::cachelib::interface;
@@ -167,19 +168,27 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   //  regionManagerFlushAsync
   //  indexConfig
 
+  utils::CoroFiberAdapter::Config executorConfig{
+      .numThreads = config.fccCoroFiberAdapterNumThreads,
+      .fibersPerThread = config.fccCoroFiberAdapterFibersPerThread,
+      .stackSize =
+          static_cast<uint32_t>(config.fccCoroFiberAdapterStackSizeKB * KB),
+  };
+
   if (config.allocator.starts_with("consistent")) {
     auto hasher = std::make_unique<MurmurHash2>();
     auto cache = ConsistentFlashCacheComponent::create(
         "cachebench_consistent_flash", std::move(bcConfig), std::move(device),
-        std::move(hasher),
-        static_cast<uint8_t>(config.navyReqOrderShardsPower));
+        std::move(hasher), static_cast<uint8_t>(config.navyReqOrderShardsPower),
+        executorConfig);
     XCHECK(cache.hasValue())
         << "Error creating ConsistentFlashCacheComponent: " << cache.error();
     return std::make_unique<ConsistentFlashCacheComponent>(
         std::move(cache).value());
   } else {
-    auto cache = FlashCacheComponent::create(
-        "cachebench_flash", std::move(bcConfig), std::move(device));
+    auto cache =
+        FlashCacheComponent::create("cachebench_flash", std::move(bcConfig),
+                                    std::move(device), executorConfig);
     XCHECK(cache.hasValue())
         << "Error creating FlashCacheComponent: " << cache.error();
     return std::make_unique<FlashCacheComponent>(std::move(cache).value());

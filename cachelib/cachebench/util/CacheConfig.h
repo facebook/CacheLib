@@ -292,6 +292,15 @@ struct CacheConfig : public JSONConfig {
   // eviction-age is more than this threshold. 0 means no threshold
   uint32_t nvmAdmissionRetentionTimeThreshold{0};
 
+  // CoroFiberAdapter config for FlashCacheComponent run via
+  // CacheComponentStressor.
+  // Number of worker threads for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterNumThreads{32};
+  // Number of fibers per thread for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterFibersPerThread{4};
+  // Stack size in KB for CoroFiberAdapter fibers
+  uint32_t fccCoroFiberAdapterStackSizeKB{32};
+
   //
   // Options below are not to be populated with JSON
   //
