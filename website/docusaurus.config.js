@@ -108,6 +108,11 @@ module.exports = {
           label: 'Learn More',
           position: 'right',
         },
+        {
+          to: 'blog',
+          label: 'Blog',
+          position: 'right',
+        },
         // Please keep GitHub link to the right for consistency.
         {
           href: 'https://github.com/facebook/CacheLib',
@@ -141,7 +146,6 @@ module.exports = {
             },
           ],
         },
-	  /*
         {
           title: 'More',
           items: [
@@ -151,11 +155,10 @@ module.exports = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/facebook/CacheLib',
             },
           ],
         },
-*/
         {
           title: 'Legal',
           // Please do not remove the privacy and terms, it's a legal requirement.
