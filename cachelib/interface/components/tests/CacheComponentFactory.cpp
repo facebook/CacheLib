@@ -21,6 +21,14 @@
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 
 namespace facebook::cachelib::interface::test {
+namespace {
+const utils::CoroFiberAdapter::Config kExecutorConfig{
+    .threadName = "flash_cache_test",
+    .numThreads = 2,
+    .fibersPerThread = 2,
+    .stackSize = 32 * 1024,
+};
+}
 
 std::unique_ptr<CacheComponent> RAMCacheFactory::create() {
   auto ramCache = ASSERT_OK(createWithPersistence(
@@ -106,7 +114,8 @@ FlashCacheFactory::createWithPersistence(
     std::unique_ptr<navy::Device> device,
     FlashCacheComponent::PersistenceConfig pc) {
   auto result = FlashCacheComponent::create("CacheComponentTest", makeConfig(),
-                                            std::move(device), std::move(pc));
+                                            std::move(device), kExecutorConfig,
+                                            std::move(pc));
   if (result.hasError()) {
     return folly::makeUnexpected(std::move(result).error());
   }
@@ -135,7 +144,8 @@ ConsistentFlashCacheFactory::createWithPersistence(
     FlashCacheComponent::PersistenceConfig pc) {
   auto result = ConsistentFlashCacheComponent::create(
       "CacheComponentTest", makeConfig(), std::move(device),
-      std::make_unique<MurmurHash2>(), kShardsPower, std::move(pc));
+      std::make_unique<MurmurHash2>(), kShardsPower, kExecutorConfig,
+      std::move(pc));
   if (result.hasError()) {
     return folly::makeUnexpected(std::move(result).error());
   }

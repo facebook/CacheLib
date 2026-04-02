@@ -19,8 +19,6 @@
 #include <variant>
 
 #include "cachelib/common/Time.h"
-#include "cachelib/interface/utils/CoroFiberAdapter.h"
-#include "cachelib/navy/serialization/RecordIO.h"
 
 using namespace facebook::cachelib::navy;
 
@@ -219,15 +217,16 @@ FlashCacheComponent::PersistenceConfig::persistenceButNoRecovery(
     std::string name,
     navy::BlockCache::Config&& config,
     std::unique_ptr<navy::Device> device,
+    const utils::CoroFiberAdapter::Config& executorConfig,
     PersistenceConfig persistenceConfig) noexcept {
   try {
     if (auto result = initConfig(config, device.get(), persistenceConfig);
         result.hasError()) {
       return folly::makeUnexpected(std::move(result).error());
     }
-    auto component =
-        FlashCacheComponent(std::move(name), std::move(config),
-                            std::move(device), std::move(persistenceConfig));
+    auto component = FlashCacheComponent(std::move(name), std::move(config),
+                                         std::move(device), executorConfig,
+                                         std::move(persistenceConfig));
     component.tryRecover();
     return component;
   } catch (const std::invalid_argument& ia) {
@@ -240,18 +239,14 @@ folly::coro::Task<ReturnT> FlashCacheComponent::onWorkerThread(
     FuncT&& func, CleanupFuncT&& cleanup) {
   using namespace std::chrono;
 
-  XDCHECK(!cache_->regionManager_.isOnWorker())
-      << "Calling public APIs from a worker thread is unsupported";
   auto start = steady_clock::now();
   auto wrappedFunc = [this, start, f = std::forward<FuncT>(func)]() mutable {
     coroToFiberLatency_->trackValue(static_cast<double>(
         (duration_cast<nanoseconds>(steady_clock::now() - start)).count()));
     return f();
   };
-  co_return co_await utils::onWorkerThread(
-      cache_->regionManager_.getNextWorker(),
-      std::move(wrappedFunc),
-      std::forward<CleanupFuncT>(cleanup));
+  co_return co_await fiberWorkers_->onWorkerThread(
+      std::move(wrappedFunc), std::forward<CleanupFuncT>(cleanup));
 }
 
 const std::string& FlashCacheComponent::getName() const noexcept {
@@ -514,13 +509,16 @@ folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
   co_return folly::unit;
 }
 
-FlashCacheComponent::FlashCacheComponent(std::string&& name,
-                                         navy::BlockCache::Config&& config,
-                                         std::unique_ptr<Device> device,
-                                         PersistenceConfig persistenceConfig)
+FlashCacheComponent::FlashCacheComponent(
+    std::string&& name,
+    navy::BlockCache::Config&& config,
+    std::unique_ptr<Device> device,
+    const utils::CoroFiberAdapter::Config& executorConfig,
+    PersistenceConfig persistenceConfig)
     : name_(std::move(name)),
       device_(std::move(device)),
       cache_(std::make_unique<navy::BlockCache>(std::move(config))),
+      fiberWorkers_(std::make_unique<utils::CoroFiberAdapter>(executorConfig)),
       persistenceConfig_(std::move(persistenceConfig)),
       coroToFiberLatency_(std::make_unique<util::PercentileStats>()) {}
 
@@ -664,6 +662,7 @@ ConsistentFlashCacheComponent::create(
     std::unique_ptr<Device> device,
     std::unique_ptr<Hash> hasher,
     uint8_t shardsPower,
+    const utils::CoroFiberAdapter::Config& executorConfig,
     FlashCacheComponent::PersistenceConfig persistenceConfig) noexcept {
   try {
     if (auto result = initConfig(config, device.get(), persistenceConfig);
@@ -671,7 +670,7 @@ ConsistentFlashCacheComponent::create(
       return folly::makeUnexpected(std::move(result).error());
     }
     auto component = ConsistentFlashCacheComponent(
-        std::move(name), std::move(config), std::move(device),
+        std::move(name), std::move(config), std::move(device), executorConfig,
         std::move(persistenceConfig), std::move(hasher), shardsPower);
     component.tryRecover();
     return component;
@@ -760,12 +759,14 @@ ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
     std::string&& name,
     navy::BlockCache::Config&& config,
     std::unique_ptr<Device> device,
+    const utils::CoroFiberAdapter::Config& executorConfig,
     FlashCacheComponent::PersistenceConfig persistenceConfig,
     std::unique_ptr<Hash> hasher,
     uint8_t shardsPower)
     : FlashCacheComponent(std::move(name),
                           std::move(config),
                           std::move(device),
+                          executorConfig,
                           std::move(persistenceConfig)),
       serializer_(std::move(hasher), shardsPower) {}
 

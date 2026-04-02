@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/utils/CoroFiberAdapter.h"
 #include "cachelib/interface/utils/Persistence.h"
 #include "cachelib/interface/utils/ShardedSerializer.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
@@ -72,6 +73,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
    * @param device the device to use for the cache
+   * @param executorConfig the config for the fiber worker executor
    * @param persistenceConfig persistence/recovery configuration
    * @return FlashCacheComponent if the flash cache could be initialized, an
    * error otherwise.
@@ -80,6 +82,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
       std::string name,
       navy::BlockCache::Config&& config,
       std::unique_ptr<navy::Device> device,
+      const utils::CoroFiberAdapter::Config& executorConfig = {},
       PersistenceConfig persistenceConfig =
           PersistenceConfig::noPersistenceOrRecovery()) noexcept;
 
@@ -103,6 +106,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   FlashCacheComponent(std::string&& name,
                       navy::BlockCache::Config&& config,
                       std::unique_ptr<navy::Device> device,
+                      const utils::CoroFiberAdapter::Config& executorConfig,
                       PersistenceConfig persistenceConfig);
 
   // Try to recover cache from persistent storage
@@ -122,11 +126,11 @@ class FlashCacheComponent : public CacheComponentWithStats {
   // Note: device_ must be declared before cache_ so that it outlives it
   std::unique_ptr<navy::Device> device_;
   std::unique_ptr<navy::BlockCache> cache_;
+  std::unique_ptr<utils::CoroFiberAdapter> fiberWorkers_;
   PersistenceConfig persistenceConfig_;
   mutable std::unique_ptr<util::PercentileStats> coroToFiberLatency_;
 
-  // Runs func() on a RegionManager worker fiber. Should not be called from an
-  // existing region manager worker fiber!
+  // Runs func() on a worker fiber
   template <typename FuncT,
             typename ReturnT = std::invoke_result_t<FuncT>,
             typename CleanupFuncT = std::function<void(ReturnT)>>
@@ -195,6 +199,8 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
    * @param hasher the hasher to use for sharding
    * @param shardsPower the number of shards to use (2^shardsPower) when
    * serializing operations, max is ShardedSerializer::kMaxShardsPower
+   * @param executorConfig the config for the fiber worker executor
+   * @param persistenceConfig persistence/recovery configuration
    * @return ConsistentFlashCacheComponent if the flash cache could be
    * initialized, an error otherwise.
    */
@@ -204,6 +210,7 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
       std::unique_ptr<navy::Device> device,
       std::unique_ptr<Hash> hasher,
       uint8_t shardsPower,
+      const utils::CoroFiberAdapter::Config& executorConfig = {},
       PersistenceConfig persistenceConfig =
           PersistenceConfig::noPersistenceOrRecovery()) noexcept;
 
@@ -263,6 +270,7 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
       std::string&& name,
       navy::BlockCache::Config&& config,
       std::unique_ptr<navy::Device> device,
+      const utils::CoroFiberAdapter::Config& executorConfig,
       FlashCacheComponent::PersistenceConfig persistenceConfig,
       std::unique_ptr<Hash> hasher,
       uint8_t shardsPower);
