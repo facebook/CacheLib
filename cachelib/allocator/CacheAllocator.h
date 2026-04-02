@@ -2031,6 +2031,10 @@ class CacheAllocator : public CacheBase {
   // returns true if nvmcache is enabled and we should write this item.
   bool shouldWriteToNvmCacheExclusive(const Item& item);
 
+  // Returns true if the item has an unmodified copy in BlockCache whose
+  // access time should be updated in the Access Time Map on eviction.
+  bool shouldUpdateAccessTimeMap(const Item& item) const;
+
   // Serialize the metadata for the cache into an IOBUf. The caller can now
   // use this to serialize into a serializer by estimating the size and
   // calling writeToBuffer.
@@ -3954,8 +3958,7 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
     // When this item has an unmodified copy still present in BlockCache
     // (large items only), record its latest DRAM access time in the Access
     // Time Map as the value in the copy in BlockCache can be stale.
-    if (nvmCache_ && candidate->isNvmClean() && !candidate->isNvmEvicted() &&
-        candidate->isNvmLargeItem()) {
+    if (shouldUpdateAccessTimeMap(*candidate)) {
       HashedKey hk{candidate->getKey()};
       nvmCache_->updateAccessTime(hk, candidate->getLastAccessTime());
     }
@@ -4049,6 +4052,13 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
   }
 
   return true;
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::shouldUpdateAccessTimeMap(
+    const Item& item) const {
+  return nvmCache_ && item.isNvmClean() && !item.isNvmEvicted() &&
+         item.isNvmLargeItem();
 }
 
 template <typename CacheTrait>
@@ -5318,6 +5328,9 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(Item& item) {
 
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*evicted)) {
     nvmCache_->put(*evicted, std::move(token));
+  } else if (shouldUpdateAccessTimeMap(*evicted)) {
+    HashedKey hk{evicted->getKey()};
+    nvmCache_->updateAccessTime(hk, evicted->getLastAccessTime());
   }
 
   const auto allocInfo =
