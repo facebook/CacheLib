@@ -423,6 +423,9 @@ UnitResult RAMCacheComponent::shutdown() {
 CacheComponentStats RAMCacheComponent::getStats() const noexcept {
   CacheComponentStats stats(*stats_);
 
+  // Populate numItems from pool stats
+  stats.numItems = cache_->getPoolStats(defaultPool_).numItems();
+
   // Populate removeByKey throughput from CacheAllocator's counters
   auto& allocatorStats = cache_->stats();
   stats.removeByKey_.throughput_.calls_ = allocatorStats.numCacheRemoves.get();

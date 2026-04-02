@@ -768,6 +768,8 @@ class ComponentStats : public StatsBase {
     addOpCounters(stats_.writeBack_, other.stats_.writeBack_);
     addOpCounters(stats_.release_, other.stats_.release_);
 
+    stats_.numItems += other.stats_.numItems;
+
     return *this;
   }
 
@@ -776,8 +778,10 @@ class ComponentStats : public StatsBase {
     auto hitRates = getHitRatios(prevStats);
     uint64_t totalOps = getTotalCalls();
     return folly::sformat(
+        "{} items in cache. "
         "{:>5} total cache operations (including support ops, e.g., "
         "writeBack()). Hit Ratio {:6.2f}%.",
+        stats_.numItems,
         prettyPrintOps(totalOps),
         hitRates["overall"]);
   }
@@ -845,6 +849,7 @@ class ComponentStats : public StatsBase {
                  stats_.findToWrite_.throughput_.calls_;
     counters["hit_rate"] =
         calls > 0 ? static_cast<int64_t>(hits * 10000 / calls) : 0;
+    counters["num_items"] = static_cast<int64_t>(stats_.numItems);
   }
 
   std::map<std::string, double> getHitRatios(

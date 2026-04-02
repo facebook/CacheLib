@@ -619,6 +619,12 @@ CacheComponentStats FlashCacheComponent::getStats() const noexcept {
       stats.extraStats_.createCountVisitor(), "coro_to_fiber_hop_latency_ns");
   cache_->getCounters(stats.extraStats_.createCountVisitor());
 
+  // Populate numItems from BlockCache's index
+  auto it = stats.extraStats_.getCounts().find("navy_bc_items");
+  if (it != stats.extraStats_.getCounts().end()) {
+    stats.numItems = static_cast<size_t>(it->second);
+  }
+
   return stats;
 }
 

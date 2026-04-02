@@ -114,6 +114,7 @@ namespace std {
 std::ostream& operator<<(
     std::ostream& os,
     const facebook::cachelib::interface::CacheComponentStats& stats) {
+  os << "numItems: " << stats.numItems << std::endl;
   printOpCounters(os, "allocate", stats.allocate_);
   printOpCounters(os, "insert", stats.insert_);
   printOpCounters(os, "insertOrReplace", stats.insertOrReplace_);

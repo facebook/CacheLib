@@ -224,6 +224,7 @@ struct CacheComponentStats : public detail::ReportStats {
   template <typename U>
   explicit CacheComponentStats(const U& other) : detail::ReportStats(other) {}
 
+  size_t numItems{0};
   util::StatsMap extraStats_;
 };
 
