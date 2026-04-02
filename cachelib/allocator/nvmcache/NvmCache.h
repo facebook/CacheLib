@@ -908,7 +908,6 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
   return hdl;
 }
 
-// invalidate any inflight lookup that is on flight since we are evicting it.
 template <typename C>
 void NvmCache<C>::evictCB(HashedKey hk,
                           navy::BufferView value,
