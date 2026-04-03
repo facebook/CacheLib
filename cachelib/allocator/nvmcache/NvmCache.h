@@ -1393,6 +1393,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (latestLastAccessTimeSecs > 0) {
     auto ttaSecs = util::getCurrentTimeSec() - latestLastAccessTimeSecs;
     stats().nvmHitTTASecs_.trackValue(ttaSecs);
+    it.setTTASecs(static_cast<uint32_t>(ttaSecs));
   }
 
   // by the time we filled from navy, another thread inserted in RAM. We

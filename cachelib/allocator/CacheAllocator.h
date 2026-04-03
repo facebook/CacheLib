@@ -4361,6 +4361,10 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
   if (needToBumpStats) {
     recordEvent(event, key, AllocatorApiResult::FOUND, handle);
   }
+  auto lastAccess = handle->getLastAccessTime();
+  if (lastAccess > 0) {
+    handle.setTTASecs(util::getCurrentTimeSec() - lastAccess);
+  }
   return handle;
 }
 
