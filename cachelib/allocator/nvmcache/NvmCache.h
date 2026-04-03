@@ -618,6 +618,10 @@ class NvmCache {
   // 0 means BigHash is not configured and all items go to BlockCache.
   const uint64_t smallItemMaxSize_;
 
+  // Non-owning pointer to the ShmManager used for ATM persistence.
+  // nullptr if shm persistence is not available.
+  ShmManager* shmManager_{nullptr};
+
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
   friend class tests::NvmCacheTest;
@@ -1103,7 +1107,10 @@ NvmCache<C>::NvmCache(C& c,
               : nullptr),
       smallItemMaxSize_(config_.navyConfig.isBigHashEnabled()
                             ? config_.navyConfig.bigHash().getSmallItemMaxSize()
-                            : 0) {
+                            : 0),
+      shmManager_(navyPersistParams.shmManager.has_value()
+                      ? &navyPersistParams.shmManager.value().get()
+                      : nullptr) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
       checkExpired_,
@@ -1114,6 +1121,14 @@ NvmCache<C>::NvmCache(C& c,
       std::move(config.deviceEncryptor),
       itemDestructor_ ? true : false,
       navyPersistParams);
+
+  if (accessTimeMap_ && shmManager_) {
+    try {
+      accessTimeMap_->recover(*shmManager_);
+    } catch (const std::exception& e) {
+      XLOGF(ERR, "Failed to recover AccessTimeMap: {}", e.what());
+    }
+  }
 }
 
 template <typename C>
@@ -1683,6 +1698,16 @@ bool NvmCache<C>::shutDown() {
   navyEnabled_ = false;
   try {
     this->flushPendingOps();
+
+    // Persist ATM to shared memory before persisting navy cache
+    if (accessTimeMap_ && shmManager_) {
+      try {
+        accessTimeMap_->persist(*shmManager_);
+      } catch (const std::exception& e) {
+        XLOGF(ERR, "Failed to persist AccessTimeMap: {}", e.what());
+      }
+    }
+
     navyCache_->persist();
   } catch (const std::exception& e) {
     XLOG(ERR) << "Got error persisting cache: " << e.what();
