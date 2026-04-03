@@ -112,3 +112,10 @@ struct FixedSizeIndexConfig {
   3: byte numBucketsPerChunkPower = 0;
   4: i64 numBucketsPerShard = 0;
 }
+
+struct AccessTimeMapConfig {
+  1: i32 version = 0;
+  2: i64 numShards = 0;
+  3: i64 maxSize = 0;
+  4: i64 entryCount = 0;
+}
