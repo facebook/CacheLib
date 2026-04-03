@@ -1,1 +1,0 @@
-"use strict";(globalThis.webpackChunkcachelib=globalThis.webpackChunkcachelib||[]).push([[9267],{50670(a){a.exports=JSON.parse('[{"label":"cachelib","permalink":"/blog/tags/cachelib","count":1},{"label":"announcement","permalink":"/blog/tags/announcement","count":1}]')}}]);
