@@ -17,6 +17,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <climits>
 #include <set>
 #include <thread>
@@ -3101,6 +3102,97 @@ TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedOnRegularEviction) {
   // Non-NvmClean evictions should NOT populate the AccessTimeMap.
   EXPECT_EQ(0, atm->size());
 }
+
+TEST_F(NvmCacheTest, AccessTimeMapCleanupTest) {
+  // Verify ATM entries are cleaned up when items leave NVM via:
+  //   Group 0: remove() while only in NVM (Removed)
+  //   Group 1: promote to DRAM, then remove() (Removed)
+  //   Group 2: promote to DRAM, then insertOrReplace() (Removed)
+  //   Group 3: NVM eviction via region reclaim (Recycled)
+  auto& config = getConfig();
+  config.setRemoveCallback({});
+  config.setItemDestructor([](const DestructedData&) {});
+  this->makeCache();
+
+  const int nKeys = 16;
+  const uint32_t allocSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("atm_cl", allocSize, nKeys, allocSize);
+
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+  EXPECT_EQ(std::nullopt, atm->get(HashedKey{"atm_cl"}.keyHash()));
+
+  auto expectAtmCleared = [&](const std::vector<std::string>& keys,
+                              const char* desc) {
+    for (const auto& key : keys) {
+      HashedKey hk{key};
+      EXPECT_EQ(std::nullopt, atm->get(hk.keyHash())) << desc << " " << key;
+    }
+  };
+
+  // Collect keys that have ATM entries after DRAM eviction.
+  // Split into four groups by index % 4.
+  constexpr int kNumGroups = 4;
+  std::array<std::vector<std::string>, kNumGroups> groups;
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("atm_cl_{}", i);
+    HashedKey hk{key};
+    if (atm->get(hk.keyHash()) != std::nullopt) {
+      groups[i % kNumGroups].push_back(key);
+    }
+  }
+  size_t totalKeys = 0;
+  for (const auto& g : groups) {
+    totalKeys += g.size();
+  }
+  ASSERT_GT(totalKeys, 0);
+
+  // Group 0: remove items while they're only in NVM.
+  for (const auto& key : groups[0]) {
+    nvm.remove(key);
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[0], "NVM-only removed item");
+
+  // Group 1: promote back to DRAM, then remove.
+  for (const auto& key : groups[1]) {
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    nvm.remove(key);
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[1], "DRAM removed item");
+
+  // Group 2: promote back to DRAM, then replace via insertOrReplace.
+  for (const auto& key : groups[2]) {
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    this->insertOrReplace(it);
+  }
+  expectAtmCleared(groups[2], "Replaced item");
+
+  // Group 3: trigger NVM eviction by filling NVM with new items until
+  // BlockCache reclaims regions containing the group-3 items.
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+  for (int i = 0; i < 2048; i++) {
+    auto key = folly::sformat("nvm_evictor_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[3], "NVM-evicted item");
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

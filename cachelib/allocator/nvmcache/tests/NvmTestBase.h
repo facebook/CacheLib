@@ -177,7 +177,7 @@ class NvmCacheTest : public testing::Test {
 
     const uint32_t numKeysPerRegion =
         config_.blockCache().getRegionSize() / fillerAllocSize;
-    auto evictBefore = evictionCount();
+    auto evictBefore = getStats().numEvictions;
     for (int i = 0; i < 1024; i++) {
       auto key = folly::sformat("filler_{}", i);
       auto it = nvm.allocate(pid, key, fillerAllocSize);
@@ -188,7 +188,7 @@ class NvmCacheTest : public testing::Test {
       }
     }
     nvm.flushNvmCache();
-    ASSERT_GT(evictionCount(), evictBefore);
+    ASSERT_GT(getStats().numEvictions, evictBefore);
   }
 
   std::unique_ptr<NvmItem> makeNvmItem(const Item& item) {

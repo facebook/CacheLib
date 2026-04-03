@@ -24,6 +24,7 @@
 #include <folly/json/dynamic.h>
 #include <folly/json/json.h>
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <vector>
@@ -940,6 +941,15 @@ void NvmCache<C>::evictCB(HashedKey hk,
 
     recordEvent(AllocatorApiEvent::NVM_EVICT, hk.key(),
                 AllocatorApiResult::EVICTED, &nvmItem);
+  }
+
+  // Clean up ATM entry since the item is leaving NVM.
+  // PutFailed is excluded because an item going through the put() path
+  // never goes through updateAccessTime(), so no ATM entry exists.
+  if ((event == cachelib::navy::DestructorEvent::Removed ||
+       event == cachelib::navy::DestructorEvent::Recycled) &&
+      accessTimeMap_) {
+    accessTimeMap_->remove(hk.keyHash());
   }
 
   bool needDestructor = true;
