@@ -21,6 +21,7 @@
 
 #include "cachelib/allocator/nvmcache/AccessTimeMap.h"
 #include "cachelib/common/Utils.h"
+#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -269,6 +270,156 @@ TEST(AccessTimeMapTest, CounterTypes) {
   EXPECT_EQ(types["navy_atm_misses"], util::CounterVisitor::CounterType::RATE);
   EXPECT_EQ(types["navy_atm_evictions"],
             util::CounterVisitor::CounterType::RATE);
+}
+
+TEST(AccessTimeMapTest, PersistAndRecover) {
+  const auto shmDir = "/tmp/atm_persist_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+  constexpr size_t kMaxSize = 1000;
+
+  // Populate and persist
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards, kMaxSize);
+
+    m.set(10, 100);
+    m.set(20, 200);
+    m.set(30, 300);
+    m.set(40, 400);
+    ASSERT_EQ(m.size(), 4);
+
+    m.persist(shm);
+    shm.shutDown();
+  }
+
+  // Recover into a new map and verify
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards, kMaxSize);
+    ASSERT_EQ(m.size(), 0);
+
+    m.recover(shm);
+    ASSERT_EQ(m.size(), 4);
+    EXPECT_EQ(m.get(10), 100);
+    EXPECT_EQ(m.get(20), 200);
+    EXPECT_EQ(m.get(30), 300);
+    EXPECT_EQ(m.get(40), 400);
+
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverVersionMismatch) {
+  const auto shmDir = "/tmp/atm_version_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Persist with current version
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+
+    m.set(1, 10);
+    m.persist(shm);
+
+    // Overwrite the info segment with a bad version
+    shm.removeShm(std::string(AccessTimeMap::kShmInfoName));
+    navy::serialization::AccessTimeMapConfig cfg;
+    *cfg.version() = 999;
+    *cfg.numShards() = static_cast<int64_t>(kNumShards);
+    *cfg.maxSize() = 0;
+    *cfg.entryCount() = 1;
+
+    auto ioBuf = Serializer::serializeToIOBuf(cfg);
+    auto infoAddr = shm.createShm(std::string(AccessTimeMap::kShmInfoName),
+                                  ioBuf->length());
+    Serializer serializer(
+        reinterpret_cast<uint8_t*>(infoAddr.addr),
+        reinterpret_cast<uint8_t*>(infoAddr.addr) + ioBuf->length());
+    serializer.writeToBuffer(std::move(ioBuf));
+
+    shm.shutDown();
+  }
+
+  // Recovery should detect version mismatch and start empty
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 0);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverDifferentShardCount) {
+  const auto shmDir = "/tmp/atm_config_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 8;
+
+  // Persist with 8 shards
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+
+    m.set(1, 10);
+    m.set(2, 20);
+    m.persist(shm);
+    shm.shutDown();
+  }
+
+  // Recover with 4 shards — entries should still be recovered
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(4);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 2);
+    EXPECT_EQ(m.get(1), 10);
+    EXPECT_EQ(m.get(2), 20);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, PersistEmptyMap) {
+  const auto shmDir = "/tmp/atm_empty_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Persist an empty map
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    ASSERT_EQ(m.size(), 0);
+    m.persist(shm);
+    shm.shutDown();
+  }
+
+  // Recover should succeed and remain empty
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 0);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverNoShm) {
+  const auto shmDir = "/tmp/atm_noshm_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Recover when no shm segments exist - should start empty
+  ShmManager shm(shmDir, true);
+  AccessTimeMap m(kNumShards);
+  m.recover(shm);
+  EXPECT_EQ(m.size(), 0);
+  shm.shutDown();
+
+  ShmManager::cleanup(shmDir, true);
 }
 
 } // namespace tests
