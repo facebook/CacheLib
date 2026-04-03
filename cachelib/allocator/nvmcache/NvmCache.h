@@ -1381,12 +1381,17 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(), AllocatorApiResult::FOUND,
               nvmItem);
 
-  // Track NVM hit time-to-access for every NVM hit, regardless of whether
-  // the DRAM promotion succeeds (another thread may have already promoted).
-  // TTA = currentTime - lastAccessTimeSecs (how long ago item was last
-  // accessed). Guard > 0 because BigHash doesn't store access time.
-  if (lastAccessTimeSecs > 0) {
-    auto ttaSecs = util::getCurrentTimeSec() - lastAccessTimeSecs;
+  // Get the latest last accessed time if it ATM is enabled and an entry exists.
+  uint32_t latestLastAccessTimeSecs = lastAccessTimeSecs;
+  if (accessTimeMap_ && it->isNvmLargeItem()) {
+    auto atmEntry = accessTimeMap_->get(hk.keyHash());
+    if (atmEntry.has_value()) {
+      latestLastAccessTimeSecs =
+          std::max(latestLastAccessTimeSecs, atmEntry.value());
+    }
+  }
+  if (latestLastAccessTimeSecs > 0) {
+    auto ttaSecs = util::getCurrentTimeSec() - latestLastAccessTimeSecs;
     stats().nvmHitTTASecs_.trackValue(ttaSecs);
   }
 
