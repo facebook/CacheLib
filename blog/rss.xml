@@ -4,40 +4,19 @@
         <title>CacheLib Blog</title>
         <link>https://cachelib.org/blog</link>
         <description>CacheLib Blog</description>
-        <lastBuildDate>Thu, 30 May 2019 00:00:00 GMT</lastBuildDate>
+        <lastBuildDate>Thu, 02 Apr 2026 00:00:00 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <language>en</language>
         <item>
-            <title><![CDATA[Welcome]]></title>
-            <link>https://cachelib.org/blog/welcome</link>
-            <guid>welcome</guid>
-            <pubDate>Thu, 30 May 2019 00:00:00 GMT</pubDate>
-            <description><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></description>
-            <content:encoded><![CDATA[<p>Blog features are powered by the blog plugin. Simply add files to the <code>blog</code> directory. It supports tags as well!</p><p>Delete the whole directory if you don't want the blog features. As simple as that!</p>]]></content:encoded>
-            <category>facebook</category>
-            <category>hello</category>
-            <category>docusaurus</category>
-        </item>
-        <item>
-            <title><![CDATA[Hello]]></title>
-            <link>https://cachelib.org/blog/hello-world</link>
-            <guid>hello-world</guid>
-            <pubDate>Wed, 29 May 2019 00:00:00 GMT</pubDate>
-            <description><![CDATA[Welcome to this blog. This blog is created with Docusaurus 2 alpha.]]></description>
-            <content:encoded><![CDATA[<p>Welcome to this blog. This blog is created with <a href="https://v2.docusaurus.io/" target="_blank" rel="noopener noreferrer"><strong>Docusaurus 2 alpha</strong></a>.</p><p>This is a test post.</p><p>A whole bunch of other information.</p>]]></content:encoded>
-            <category>hello</category>
-            <category>docusaurus</category>
-        </item>
-        <item>
-            <title><![CDATA[Hola]]></title>
-            <link>https://cachelib.org/blog/hola</link>
-            <guid>hola</guid>
-            <pubDate>Tue, 28 May 2019 00:00:00 GMT</pubDate>
-            <description><![CDATA[Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque elementum dignissim ultricies. Fusce rhoncus ipsum tempor eros aliquam consequat. Lorem ipsum dolor sit amet]]></description>
-            <content:encoded><![CDATA[<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque elementum dignissim ultricies. Fusce rhoncus ipsum tempor eros aliquam consequat. Lorem ipsum dolor sit amet</p>]]></content:encoded>
-            <category>hola</category>
-            <category>docusaurus</category>
+            <title><![CDATA[Welcome to the CacheLib Blog]]></title>
+            <link>https://cachelib.org/blog/welcome-to-cachelib-blog</link>
+            <guid>welcome-to-cachelib-blog</guid>
+            <pubDate>Thu, 02 Apr 2026 00:00:00 GMT</pubDate>
+            <description><![CDATA[Welcome to the CacheLib blog! This is where we will share feature announcements, deprecation notices, and any important changes that we want our users to be aware of.]]></description>
+            <content:encoded><![CDATA[<p>Welcome to the CacheLib blog! This is where we will share feature announcements, deprecation notices, and any important changes that we want our users to be aware of.</p><h2 class="anchor anchorWithStickyNavbar_LWe7" id="what-to-expect">What to Expect<a class="hash-link" href="#what-to-expect" title="Direct link to heading">​</a></h2><ul><li><strong>Feature announcements</strong> — Learn about new capabilities as they land in CacheLib.</li><li><strong>Deprecation notices</strong> — Stay informed about APIs or features being phased out, along with migration guidance.</li><li><strong>Design discussions</strong> — Deep dives into the thinking behind CacheLib's architecture and design decisions.</li><li><strong>Reflections</strong> — Lessons learned, performance insights, and observations from running CacheLib at scale.</li></ul><p>Stay tuned for more. In the meantime, check out our <a href="/docs/">User Guide</a> and <a href="/docs/Cache_Library_Architecture_Guide/overview_a_random_walk">Architecture Guide</a> to get started with CacheLib.</p>]]></content:encoded>
+            <category>cachelib</category>
+            <category>announcement</category>
         </item>
     </channel>
 </rss>

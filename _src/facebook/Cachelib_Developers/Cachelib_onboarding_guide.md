@@ -73,7 +73,7 @@ Examples given in the above doc is for T10 machine (a production server, [detail
 ```
 
 ### COGWHEEL — CORRECTNESS TEST
-CogWheel is a python wrapper of CacheBench for correctness test. This test is run when code is committed to cachelib.
+Cogwheel is a python wrapper of CacheBench for correctness test. This test is run when code is committed to cachelib.
 
 Examples:
 ```

@@ -17,7 +17,7 @@ Please contact our oncall if you have a feature request or any ideas to improve 
 
 Cachelib publishes ODS stats via *service data* (which exports to the fb303 port). If you already use Thrift, you should already get the fb303 port free. Otherwise, you need to open a fb303 port in your service. For cachelib stats to show up on ODS, you must set up a monitoring config that registers cachelib’s stats. 
 
-Please reach out to cachelib team on how to add cachelib into your existing monitoring config.
+Please refer to this section on how to add monitoring for ODS: https://staticdocs.internalfb.com/cachelib/docs/facebook/Cache_Monitoring/Add_monitoring_for_cache#export-stats-to-ods
 
 Cachelib ODS stats start with the prefix `cachelib.<your_cache_name>`. Many cachelib stats comes in the accumulative form. For example, `cachelib.<your_cache_name>.items.total` is the accumulative number of items in cache since your service has started. Other stats are offered in rate variants (for example, `cachelib.<your_cache_name>.cache.alloc_attempts.60`). If you think certain stats should be exported but are missing, reach out cachelib oncall for assistance.
 

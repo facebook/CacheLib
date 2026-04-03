@@ -2,52 +2,22 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://cachelib.org/blog</id>
     <title>CacheLib Blog</title>
-    <updated>2019-05-30T00:00:00.000Z</updated>
+    <updated>2026-04-02T00:00:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://cachelib.org/blog"/>
     <subtitle>CacheLib Blog</subtitle>
     <icon>https://cachelib.org/img/favicon.ico</icon>
     <entry>
-        <title type="html"><![CDATA[Welcome]]></title>
-        <id>welcome</id>
-        <link href="https://cachelib.org/blog/welcome"/>
-        <updated>2019-05-30T00:00:00.000Z</updated>
-        <summary type="html"><![CDATA[Blog features are powered by the blog plugin. Simply add files to the blog directory. It supports tags as well!]]></summary>
-        <content type="html"><![CDATA[<p>Blog features are powered by the blog plugin. Simply add files to the <code>blog</code> directory. It supports tags as well!</p><p>Delete the whole directory if you don't want the blog features. As simple as that!</p>]]></content>
+        <title type="html"><![CDATA[Welcome to the CacheLib Blog]]></title>
+        <id>welcome-to-cachelib-blog</id>
+        <link href="https://cachelib.org/blog/welcome-to-cachelib-blog"/>
+        <updated>2026-04-02T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[Welcome to the CacheLib blog! This is where we will share feature announcements, deprecation notices, and any important changes that we want our users to be aware of.]]></summary>
+        <content type="html"><![CDATA[<p>Welcome to the CacheLib blog! This is where we will share feature announcements, deprecation notices, and any important changes that we want our users to be aware of.</p><h2 class="anchor anchorWithStickyNavbar_LWe7" id="what-to-expect">What to Expect<a class="hash-link" href="#what-to-expect" title="Direct link to heading">​</a></h2><ul><li><strong>Feature announcements</strong> — Learn about new capabilities as they land in CacheLib.</li><li><strong>Deprecation notices</strong> — Stay informed about APIs or features being phased out, along with migration guidance.</li><li><strong>Design discussions</strong> — Deep dives into the thinking behind CacheLib's architecture and design decisions.</li><li><strong>Reflections</strong> — Lessons learned, performance insights, and observations from running CacheLib at scale.</li></ul><p>Stay tuned for more. In the meantime, check out our <a href="/docs/">User Guide</a> and <a href="/docs/Cache_Library_Architecture_Guide/overview_a_random_walk">Architecture Guide</a> to get started with CacheLib.</p>]]></content>
         <author>
-            <name>Yangshun Tay</name>
-            <uri>https://github.com/yangshun</uri>
+            <name>CacheLib Team</name>
         </author>
-        <category label="facebook" term="facebook"/>
-        <category label="hello" term="hello"/>
-        <category label="docusaurus" term="docusaurus"/>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hello]]></title>
-        <id>hello-world</id>
-        <link href="https://cachelib.org/blog/hello-world"/>
-        <updated>2019-05-29T00:00:00.000Z</updated>
-        <summary type="html"><![CDATA[Welcome to this blog. This blog is created with Docusaurus 2 alpha.]]></summary>
-        <content type="html"><![CDATA[<p>Welcome to this blog. This blog is created with <a href="https://v2.docusaurus.io/" target="_blank" rel="noopener noreferrer"><strong>Docusaurus 2 alpha</strong></a>.</p><p>This is a test post.</p><p>A whole bunch of other information.</p>]]></content>
-        <author>
-            <name>Endilie Yacop Sucipto</name>
-            <uri>https://github.com/endiliey</uri>
-        </author>
-        <category label="hello" term="hello"/>
-        <category label="docusaurus" term="docusaurus"/>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hola]]></title>
-        <id>hola</id>
-        <link href="https://cachelib.org/blog/hola"/>
-        <updated>2019-05-28T00:00:00.000Z</updated>
-        <summary type="html"><![CDATA[Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque elementum dignissim ultricies. Fusce rhoncus ipsum tempor eros aliquam consequat. Lorem ipsum dolor sit amet]]></summary>
-        <content type="html"><![CDATA[<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Pellentesque elementum dignissim ultricies. Fusce rhoncus ipsum tempor eros aliquam consequat. Lorem ipsum dolor sit amet</p>]]></content>
-        <author>
-            <name>Gao Wei</name>
-            <uri>https://github.com/wgao19</uri>
-        </author>
-        <category label="hola" term="hola"/>
-        <category label="docusaurus" term="docusaurus"/>
+        <category label="cachelib" term="cachelib"/>
+        <category label="announcement" term="announcement"/>
     </entry>
 </feed>

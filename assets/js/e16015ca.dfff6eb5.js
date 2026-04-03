@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcachelib=self.webpackChunkcachelib||[]).push([[1497],{19635:a=>{a.exports=JSON.parse('{"label":"hola","permalink":"/blog/tags/hola","allTagsPath":"/blog/tags","count":1}')}}]);
