@@ -183,24 +183,21 @@ class AllocationClass {
 
     // Prefetch the first kForEachAllocPrefetchOffset items in the slab.
     // Note that the prefetch is for read with no temporal locality.
-    void* prefetchOffsetPtr = reinterpret_cast<void*>(slab);
+    auto* prefetchPtr = reinterpret_cast<uint8_t*>(slab);
     for (unsigned int i = 0; i < kForEachAllocPrefetchOffset; i++) {
-      prefetchOffsetPtr = reinterpret_cast<void*>(
-          reinterpret_cast<uintptr_t>(prefetchOffsetPtr) + allocationSize_);
-      __builtin_prefetch(prefetchOffsetPtr, 0, 0);
+      prefetchPtr += allocationSize_;
+      __builtin_prefetch(prefetchPtr, 0, 0);
     }
-    void* ptr = reinterpret_cast<void*>(slab);
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(slab);
     unsigned int allocsPerSlab = getAllocsPerSlab();
     for (unsigned int i = 0; i < allocsPerSlab; ++i) {
-      prefetchOffsetPtr = reinterpret_cast<void*>(
-          reinterpret_cast<uintptr_t>(prefetchOffsetPtr) + allocationSize_);
+      prefetchPtr += allocationSize_;
       // Prefetch ahead the kForEachAllocPrefetchOffset item.
-      __builtin_prefetch(prefetchOffsetPtr, 0, 0);
+      __builtin_prefetch(prefetchPtr, 0, 0);
       if (!callback(ptr, allocInfo.value())) {
         return SlabIterationStatus::kAbortIteration;
       }
-      ptr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) +
-                                    allocationSize_);
+      ptr += allocationSize_;
     }
     return SlabIterationStatus::kFinishedCurrentSlabAndContinue;
   }
