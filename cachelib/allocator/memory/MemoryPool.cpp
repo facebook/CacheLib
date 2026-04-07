@@ -17,7 +17,7 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 
 #include <algorithm>
-#include <string>
+#include <numeric>
 #include <utility>
 
 #include "cachelib/allocator/memory/AllocationClass.h"

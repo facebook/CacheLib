@@ -400,9 +400,8 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   {
     LockHolder l(lock_);
     if (!advisedSlabs_.empty()) {
-      auto it = advisedSlabs_.begin();
-      slab = *it;
-      advisedSlabs_.erase(it);
+      slab = advisedSlabs_.back();
+      advisedSlabs_.pop_back();
     }
   }
 

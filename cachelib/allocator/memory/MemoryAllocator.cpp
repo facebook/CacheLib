@@ -21,6 +21,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "cachelib/common/Utils.h"
+
 using namespace facebook::cachelib;
 
 namespace {
