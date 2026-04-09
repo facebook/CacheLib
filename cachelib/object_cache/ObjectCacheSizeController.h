@@ -57,7 +57,7 @@ class ObjectCacheSizeController : public PeriodicWorker {
 
  private:
   void work() override final;
-  void expandCacheByEntriesNum(size_t entries);
+  void expandCacheByEntriesNum(size_t entries, size_t currentLimit);
   int64_t getNewNumEntries();
 
   std::pair<size_t, size_t> trackJemallocMemStats() const {
@@ -123,7 +123,8 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       ensureFreeMemoryAboveLowerLimit();
     } else if (freeMemBytes > objCache_.config_.upperLimitBytes) {
       // Only expand cache when free memory is above the upper limit
-      expandCacheByEntriesNum(objCache_.config_.expandCacheBy);
+      expandCacheByEntriesNum(objCache_.config_.expandCacheBy,
+                              getCurrentEntriesLimit());
     }
     // When free memory is between lower and upper limits, do nothing (stable
     // zone)
@@ -241,15 +242,17 @@ void ObjectCacheSizeController<AllocatorT>::work() {
 
   // entriesLimit should never exceed the configured entries limit
   newEntriesLimit = std::min(newEntriesLimit, objCache_.config_.l1EntriesLimit);
-  if (newEntriesLimit < currentEntriesLimit_ &&
+  auto currentEntriesLimit = getCurrentEntriesLimit();
+  if (newEntriesLimit < currentEntriesLimit &&
       currentNumEntries >= newEntriesLimit) {
     // shrink the cache
-    shrinkCacheByEntriesNum(currentEntriesLimit_ - newEntriesLimit);
-  } else if (newEntriesLimit > currentEntriesLimit_ &&
-             currentNumEntries == currentEntriesLimit_) {
+    shrinkCacheByEntriesNum(currentEntriesLimit - newEntriesLimit);
+  } else if (newEntriesLimit > currentEntriesLimit &&
+             currentNumEntries == currentEntriesLimit) {
     // expand cache when getting a higher new limit and current entries num
     // reaches the old limit
-    expandCacheByEntriesNum(newEntriesLimit - currentEntriesLimit_);
+    expandCacheByEntriesNum(newEntriesLimit - currentEntriesLimit,
+                            currentEntriesLimit);
   }
 }
 
@@ -275,31 +278,43 @@ void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
-      "CacheLib size-controller: request to shrink cache by {} entries. "
+      "CacheLib size-controller: request to shrink cache by {} entries "
+      "(actual: {}). "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
-      entries, before, objCache_.getNumPlaceholders(), currentEntriesLimit_);
+      entries, actualShrunk, before, objCache_.getNumPlaceholders(),
+      currentEntriesLimit_);
 }
 
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
-    size_t entries) {
+    size_t entries, size_t currentLimit) {
   expandCacheCalls_.inc();
   util::Throttler t(throttlerConfig_);
   auto before = objCache_.getNumPlaceholders();
   entries = std::min<size_t>(entries, before);
+  // Not all callers cap entries against l1EntriesLimit (e.g. FreeMemoryOnly
+  // mode calls this directly), so enforce the ceiling here.
+  size_t maxExpand = (currentLimit < objCache_.config_.l1EntriesLimit)
+                         ? objCache_.config_.l1EntriesLimit - currentLimit
+                         : 0;
+  entries = std::min(entries, maxExpand);
+  size_t actualExpanded = 0;
   for (size_t i = 0; i < entries; i++) {
     objCache_.placeholders_.pop_back();
     currentEntriesLimit_++;
+    actualExpanded++;
     // throttle to slow down the release speed
     t.throttle();
   }
-  totalEntriesExpanded_.add(entries);
+  totalEntriesExpanded_.add(actualExpanded);
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
-      "CacheLib size-controller: request to expand cache by {} entries. "
+      "CacheLib size-controller: request to expand cache by {} entries "
+      "(actual: {}). "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
-      entries, before, objCache_.getNumPlaceholders(), currentEntriesLimit_);
+      entries, actualExpanded, before, objCache_.getNumPlaceholders(),
+      currentEntriesLimit_);
 }
 
 template <typename AllocatorT>

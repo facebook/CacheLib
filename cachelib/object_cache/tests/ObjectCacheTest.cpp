@@ -2343,7 +2343,7 @@ TEST(ObjectCacheTest, DynamicFreeMemorySizeControlTest) {
   auto lowerLimitBytes = 9 * kMB;
   auto itemSize = 1024;
   uint64_t maxNumEntries = 1024 * 20;
-  uint64_t sizeControlIntervalMs = 50;
+  int sizeControlIntervalMs = 50;
 
   ObjectCache::Config config;
   config.setCacheName("dynamic_free_mem_test");
@@ -2448,5 +2448,71 @@ TEST(ObjectCacheTest, DynamicFreeMemorySizeControlTest) {
   auto entriesAfterExpand = objcache->getCurrentEntriesLimit();
 
   EXPECT_GT(entriesAfterExpand, entriesAfterShrink);
+  EXPECT_LE(entriesAfterExpand, maxNumEntries);
+}
+
+TEST(ObjectCacheTest, ExpandNeverExceedsL1EntriesLimit) {
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;
+  uint64_t maxNumEntries = 1024 * 20;
+  int sizeControlIntervalMs = 50;
+
+  ObjectCache::Config config;
+  config.setCacheName("expand_ceiling_test");
+  config.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+  config.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                          sizeControlIntervalMs);
+  config.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemoryOnly,
+                                     upperLimitBytes, lowerLimitBytes);
+  config.memoryMode = FreeMemoryOnly;
+  // Large expand/shrink to trigger structural placeholder popping
+  config.expandCacheBy = 500;
+  config.shrinkCacheBy = 500;
+
+  static std::atomic<uint64_t> sExpandTestFreeMem{20 * kMB};
+  config.setFreeMemCb([]() { return sExpandTestFreeMem.load(); });
+
+  auto objcache = ObjectCache::create(config);
+
+  // Fill cache
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+  EXPECT_EQ(objcache->getCurrentEntriesLimit(), maxNumEntries);
+
+  // Run 3 shrink->expand cycles
+  for (int cycle = 0; cycle < 3; cycle++) {
+    // Shrink: set free memory below lower limit
+    sExpandTestFreeMem.store(5 * kMB);
+    auto shrunk = test_util::eventuallyTrue(
+        [&]() { return objcache->getCurrentEntriesLimit() < maxNumEntries; },
+        3 /* timeoutSecs */);
+    EXPECT_TRUE(shrunk) << "Shrink failed on cycle " << cycle;
+
+    // Expand: set free memory above upper limit
+    sExpandTestFreeMem.store(20 * kMB);
+    // Wait for expand to settle
+    size_t lastLimit = objcache->getCurrentEntriesLimit();
+    auto settled = test_util::eventuallyTrue(
+        [&]() {
+          auto cur = objcache->getCurrentEntriesLimit();
+          if (cur != lastLimit) {
+            lastLimit = cur;
+            return false;
+          }
+          return true;
+        },
+        3 /* timeoutSecs */);
+    EXPECT_TRUE(settled) << "Expand didn't settle on cycle " << cycle;
+
+    EXPECT_LE(objcache->getCurrentEntriesLimit(), maxNumEntries)
+        << "currentEntriesLimit exceeded l1EntriesLimit on cycle " << cycle;
+  }
 }
 } // namespace facebook::cachelib::objcache2::test
