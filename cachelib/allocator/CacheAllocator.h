@@ -2673,6 +2673,9 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
   }
   initStats();
   initNvmCache(dramCacheAttached);
+  if (config_.eventTrackerConfigFactory) {
+    setEventTracker(config_.eventTrackerConfigFactory());
+  }
 
   if (!config_.delayCacheWorkersStart) {
     initWorkers();
