@@ -18,6 +18,7 @@ add_library (cachelib_cachebench
   ../interface/Stats.cpp
   ../interface/components/FlashCacheComponent.cpp
   ../interface/components/RAMCacheComponent.cpp
+  ../interface/utils/CoroFiberAdapter.cpp
   ./cache/Cache.cpp
   ./cache/components/Components.cpp
   ./cache/components/FlashComponent.cpp
