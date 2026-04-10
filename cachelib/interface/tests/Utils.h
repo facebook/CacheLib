@@ -16,7 +16,9 @@
 
 #pragma once
 
+#include <folly/coro/GtestHelpers.h>
 #include <folly/logging/xlog.h>
+#include <gtest/gtest.h>
 
 #define EXPECT_OK(result)               \
   {                                     \
@@ -28,6 +30,12 @@
     auto&& __result__ = (result);  \
     XCHECK(__result__.hasValue()); \
     std::move(__result__).value(); \
+  })
+#define CO_ASSERT_OK(result)               \
+  ({                                       \
+    auto&& __result__ = (result);          \
+    CO_ASSERT_TRUE(__result__.hasValue()); \
+    std::move(__result__).value();         \
   })
 #define EXPECT_ERROR(result, code)             \
   ({                                           \

@@ -163,7 +163,6 @@ function (generic_add_source_test TEST_PREFIX SOURCE_FILE)
 
   # make tests visible to ctest
   gtest_add_tests(TARGET "${TEST_PREFIX}-${TEST_NAME}"
-                        WORKING_DIRECTORY "${TOP_DIR}"
                         TEST_PREFIX "${TEST_PREFIX}-${TEST_NAME}."
                         TEST_LIST "test_cases")
   # use same timeout as folly

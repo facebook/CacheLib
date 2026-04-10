@@ -50,19 +50,19 @@ CO_TYPED_TEST(FlashCacheComponentTest, ExpirationCallback) {
   constexpr uint32_t kValueSize = 100;
   constexpr uint32_t kTTL = 3600;
 
-  auto valid = ASSERT_OK(co_await this->cache_->allocate(
+  auto valid = CO_ASSERT_OK(co_await this->cache_->allocate(
       "valid_0", kValueSize, currentTime, kTTL));
   EXPECT_OK(co_await this->cache_->insert(std::move(valid)));
 
-  auto valid2 = ASSERT_OK(co_await this->cache_->allocate(
+  auto valid2 = CO_ASSERT_OK(co_await this->cache_->allocate(
       "valid_1", kValueSize, currentTime - kTTL / 2, kTTL));
   EXPECT_OK(co_await this->cache_->insert(std::move(valid2)));
 
-  auto expired = ASSERT_OK(co_await this->cache_->allocate(
+  auto expired = CO_ASSERT_OK(co_await this->cache_->allocate(
       "expired_0", kValueSize, currentTime - 2 * kTTL, kTTL));
   EXPECT_OK(co_await this->cache_->insert(std::move(expired)));
 
-  auto expired2 = ASSERT_OK(co_await this->cache_->allocate(
+  auto expired2 = CO_ASSERT_OK(co_await this->cache_->allocate(
       "expired_1", kValueSize, currentTime - 10 * kTTL, kTTL));
   EXPECT_OK(co_await this->cache_->insert(std::move(expired2)));
 
@@ -88,7 +88,7 @@ CO_TYPED_TEST(FlashCacheComponentTest, ExpirationCallback) {
   // the expired items.
   for (int i = 0; i < 2; ++i) {
     auto key = "valid_" + std::to_string(i);
-    auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+    auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
     EXPECT_EQ(findResult.value()->getKey(), key);
     EXPECT_EQ(findResult.value()->getExpiryTime(),

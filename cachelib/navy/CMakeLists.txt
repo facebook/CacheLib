@@ -82,13 +82,15 @@ if (BUILD_TESTS)
     glog::glog
     gflags
     GTest::gtest
-    GTest::gtest_main
     GTest::gmock
   )
 
 
   function (add_source_test SOURCE_FILE)
      generic_add_source_test("navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}")
+    get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
+    target_sources("navy-test-${TEST_NAME}" PRIVATE
+      "${CACHELIB_HOME}/common/tests/TestMain.cpp")
   endfunction()
 
   add_source_test (common/tests/BufferTest.cpp)

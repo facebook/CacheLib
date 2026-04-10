@@ -74,7 +74,7 @@ CO_TYPED_TEST(CacheComponentTest, AllocateBasic) {
   const uint32_t creationTime = util::getCurrentTimeSec();
   const uint32_t ttlSecs = 3600;
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
 
   EXPECT_EQ(handle->getKey(), key);
@@ -90,7 +90,7 @@ CO_TYPED_TEST(CacheComponentTest, AllocateVariousSizes) {
 
   for (uint32_t size : sizes) {
     const std::string key = "size_test_" + std::to_string(size);
-    auto handle = ASSERT_OK(
+    auto handle = CO_ASSERT_OK(
         co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
     EXPECT_GE(handle->getMemorySize(), size);
   }
@@ -102,7 +102,7 @@ CO_TYPED_TEST(CacheComponentTest, AllocateZeroTTL) {
   const uint32_t creationTime = util::getCurrentTimeSec();
   const uint32_t ttlSecs = 0;
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
   // zero TTL = infinite TTL
   EXPECT_EQ(handle->getExpiryTime(), 0);
@@ -120,7 +120,7 @@ CO_TYPED_TEST(CacheComponentTest, AllocateEmptyKey) {
 
 CO_TYPED_TEST(CacheComponentTest, InsertBasic) {
   const std::string key = "insert_basic";
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 }
@@ -129,12 +129,12 @@ CO_TYPED_TEST(CacheComponentTest, InsertWithData) {
   const std::string key = "insert_data";
   const std::string data = "test_data_content";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle->getMemory(), data.c_str(), data.size());
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
   std::string retrievedData(
@@ -145,11 +145,11 @@ CO_TYPED_TEST(CacheComponentTest, InsertWithData) {
 CO_TYPED_TEST(CacheComponentTest, InsertDuplicateKey) {
   const std::string key = "duplicate";
 
-  auto handle1 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle1 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle1)));
 
-  auto handle2 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle2 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_ERROR(co_await this->cache_->insert(std::move(handle2)),
                Error::Code::ALREADY_INSERTED);
@@ -161,10 +161,10 @@ CO_TYPED_TEST(CacheComponentTest, InsertDuplicateKey) {
 
 CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceNewItem) {
   const std::string key = "replace_new";
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   auto result =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle)));
 
   EXPECT_FALSE(result.has_value());
 }
@@ -174,18 +174,18 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceExistingItem) {
   const std::string data1 = "original_data";
   const std::string data2 = "replaced_data";
 
-  auto handle1 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle1 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data1.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle1->getMemory(), data1.c_str(), data1.size());
   auto result1 =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle1)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle1)));
   EXPECT_FALSE(result1.has_value());
 
-  auto handle2 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle2 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data2.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle2->getMemory(), data2.c_str(), data2.size());
   auto result2 =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
 
   // Some implementations may not return the old data -- and that's ok!
   if (result2.has_value()) {
@@ -197,7 +197,7 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceExistingItem) {
     EXPECT_EQ(replacedData, data1);
   }
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
   std::string currentData(
       findResult.value()->template getMemoryAs<const char>(), data2.size());
@@ -208,11 +208,11 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceMultipleTimes) {
   const std::string key = "replace_multiple";
 
   for (int i = 0; i < 5; ++i) {
-    auto handle = ASSERT_OK(co_await this->cache_->allocate(
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
         key, 100, util::getCurrentTimeSec(), 3600));
     *handle->template getMemoryAs<uint32_t>() = i;
     auto result =
-        ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle)));
+        CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle)));
 
     if (i == 0) {
       EXPECT_FALSE(result.has_value());
@@ -228,19 +228,19 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   const std::string largeData = "this_is_a_much_larger_data_string";
 
   // Insert small item first
-  auto handle1 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle1 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, smallData.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle1->getMemory(), smallData.c_str(), smallData.size());
   auto result1 =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle1)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle1)));
   EXPECT_FALSE(result1.has_value());
 
   // Replace with larger item
-  auto handle2 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle2 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, largeData.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle2->getMemory(), largeData.c_str(), largeData.size());
   auto result2 =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
 
   if (result2.has_value()) {
     auto& replacedSmallHandle = result2.value();
@@ -253,7 +253,7 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   }
 
   // Verify large data is now in cache
-  auto findResult1 = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult1 = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult1.has_value());
   EXPECT_GE(findResult1.value()->getMemorySize(), largeData.size());
   std::string retrievedLarge1(
@@ -262,11 +262,11 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   EXPECT_EQ(retrievedLarge1, largeData);
 
   // Replace large item with smaller item
-  auto handle3 = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle3 = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, smallData.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle3->getMemory(), smallData.c_str(), smallData.size());
   auto result3 =
-      ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle3)));
+      CO_ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle3)));
 
   if (result3.has_value()) {
     auto& replacedLargeHandle = result3.value();
@@ -279,7 +279,7 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   }
 
   // Verify small data is now in cache
-  auto findResult2 = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult2 = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult2.has_value());
   EXPECT_GE(findResult2.value()->getMemorySize(), smallData.size());
   std::string retrievedSmall2(
@@ -296,12 +296,12 @@ CO_TYPED_TEST(CacheComponentTest, FindExistingItem) {
   const std::string key = "find_existing";
   const std::string data = "find_test_data";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), util::getCurrentTimeSec(), 3600));
   std::memcpy(handle->getMemory(), data.c_str(), data.size());
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
   auto& foundHandle = findResult.value();
@@ -313,7 +313,7 @@ CO_TYPED_TEST(CacheComponentTest, FindExistingItem) {
 }
 
 CO_TYPED_TEST(CacheComponentTest, FindNonExistentItem) {
-  auto findResult = ASSERT_OK(co_await this->cache_->find("nonexistent"));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find("nonexistent"));
   EXPECT_FALSE(findResult.has_value());
 }
 
@@ -324,13 +324,13 @@ CO_TYPED_TEST(CacheComponentTest, FindMultipleItems) {
 
   for (int i = 0; i < numItems; ++i) {
     auto& key = keys.emplace_back("multi_" + std::to_string(i));
-    auto handle = ASSERT_OK(co_await this->cache_->allocate(
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
         key, 100, util::getCurrentTimeSec(), 3600));
     EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
   }
 
   for (const auto& key : keys) {
-    auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+    auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
     EXPECT_EQ(findResult.value()->getKey(), key);
   }
@@ -341,11 +341,11 @@ CO_TYPED_TEST(CacheComponentTest, FindExpiredItem) {
   const uint32_t creationTime = util::getCurrentTimeSec() - 7200;
   const uint32_t ttlSecs = 3600;
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, 100, creationTime, ttlSecs));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   EXPECT_FALSE(findResult.has_value());
 }
 
@@ -355,11 +355,11 @@ CO_TYPED_TEST(CacheComponentTest, FindPropertiesMatch) {
   const uint32_t creationTime = util::getCurrentTimeSec();
   const uint32_t ttlSecs = 7200;
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
   auto& foundHandle = findResult.value();
@@ -377,12 +377,12 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExistingItem) {
   const std::string key = "write_existing";
   const std::string originalData = "original";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   std::memcpy(handle->getMemory(), originalData.c_str(), originalData.size());
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto writeResult = ASSERT_OK(co_await this->cache_->findToWrite(key));
+  auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
   CO_ASSERT_TRUE(writeResult.has_value());
 
   auto& writeHandle = writeResult.value();
@@ -391,7 +391,7 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExistingItem) {
 
 CO_TYPED_TEST(CacheComponentTest, FindToWriteNonExistentItem) {
   auto writeResult =
-      ASSERT_OK(co_await this->cache_->findToWrite("nonexistent_write"));
+      CO_ASSERT_OK(co_await this->cache_->findToWrite("nonexistent_write"));
   EXPECT_FALSE(writeResult.has_value());
 }
 
@@ -400,14 +400,14 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteAndModify) {
   const std::string originalData = "original";
   const std::string modifiedData = "modified";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, std::max(originalData.size(), modifiedData.size()),
       util::getCurrentTimeSec(), 3600));
   std::memcpy(handle->getMemory(), originalData.c_str(), originalData.size());
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
   {
-    auto writeResult = ASSERT_OK(co_await this->cache_->findToWrite(key));
+    auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
     CO_ASSERT_TRUE(writeResult.has_value());
     auto& writeHandle = writeResult.value();
     std::memcpy(writeHandle->getMemory(), modifiedData.c_str(),
@@ -415,7 +415,7 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteAndModify) {
     writeHandle.markDirty();
   }
 
-  auto readResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto readResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(readResult.has_value());
   std::string retrievedData(
       readResult.value()->template getMemoryAs<const char>(),
@@ -428,11 +428,11 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExpiredItem) {
   const uint32_t creationTime = util::getCurrentTimeSec() - 7200;
   const uint32_t ttlSecs = 3600;
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, 100, creationTime, ttlSecs));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto writeResult = ASSERT_OK(co_await this->cache_->findToWrite(key));
+  auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
   EXPECT_FALSE(writeResult.has_value());
 }
 
@@ -443,34 +443,34 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExpiredItem) {
 CO_TYPED_TEST(CacheComponentTest, RemoveByKeyExistingItem) {
   const std::string key = "remove_key";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto removeResult = ASSERT_OK(co_await this->cache_->remove(key));
+  auto removeResult = CO_ASSERT_OK(co_await this->cache_->remove(key));
   EXPECT_TRUE(removeResult);
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   EXPECT_FALSE(findResult.has_value());
 }
 
 CO_TYPED_TEST(CacheComponentTest, RemoveByKeyNonExistentItem) {
   auto removeResult =
-      ASSERT_OK(co_await this->cache_->remove("nonexistent_remove"));
+      CO_ASSERT_OK(co_await this->cache_->remove("nonexistent_remove"));
   EXPECT_FALSE(removeResult);
 }
 
 CO_TYPED_TEST(CacheComponentTest, RemoveByKeyTwice) {
   const std::string key = "remove_twice";
 
-  auto handle = ASSERT_OK(co_await this->cache_->allocate(
+  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
 
-  auto removeResult1 = ASSERT_OK(co_await this->cache_->remove(key));
+  auto removeResult1 = CO_ASSERT_OK(co_await this->cache_->remove(key));
   EXPECT_TRUE(removeResult1);
 
-  auto removeResult2 = ASSERT_OK(co_await this->cache_->remove(key));
+  auto removeResult2 = CO_ASSERT_OK(co_await this->cache_->remove(key));
   EXPECT_FALSE(removeResult2);
 }
 
@@ -481,18 +481,18 @@ CO_TYPED_TEST(CacheComponentTest, RemoveMultipleItemsByKey) {
 
   for (int i = 0; i < numItems; ++i) {
     auto& key = keys.emplace_back("remove_multi_" + std::to_string(i));
-    auto handle = ASSERT_OK(co_await this->cache_->allocate(
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
         key, 100, util::getCurrentTimeSec(), 3600));
     EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
   }
 
   for (const auto& key : keys) {
-    auto removeResult = ASSERT_OK(co_await this->cache_->remove(key));
+    auto removeResult = CO_ASSERT_OK(co_await this->cache_->remove(key));
     EXPECT_TRUE(removeResult);
   }
 
   for (const auto& key : keys) {
-    auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+    auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
     EXPECT_FALSE(findResult.has_value());
   }
 }
@@ -504,15 +504,15 @@ CO_TYPED_TEST(CacheComponentTest, RemoveMultipleItemsByKey) {
 CO_TYPED_TEST(CacheComponentTest, RemoveByHandle) {
   const std::string key = "remove_handle";
 
-  auto allocHandle = ASSERT_OK(co_await this->cache_->allocate(
+  auto allocHandle = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await this->cache_->insert(std::move(allocHandle)));
 
-  auto findResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
   EXPECT_OK(co_await this->cache_->remove(std::move(findResult.value())));
 
-  auto findAgainResult = ASSERT_OK(co_await this->cache_->find(key));
+  auto findAgainResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   EXPECT_FALSE(findAgainResult.has_value());
 }
 
@@ -673,7 +673,7 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecover) {
   {
     auto cache = this->factory_->createPersistent();
 
-    auto handle = ASSERT_OK(co_await cache->allocate(
+    auto handle = CO_ASSERT_OK(co_await cache->allocate(
         key, data.size(), util::getCurrentTimeSec(), 3600));
     std::memcpy(handle->getMemory(), data.c_str(), data.size());
     EXPECT_OK(co_await cache->insert(std::move(handle)));
@@ -686,7 +686,7 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecover) {
   CO_ASSERT_TRUE(result.hasValue());
   auto recovered = std::move(result).value();
 
-  auto findResult = ASSERT_OK(co_await recovered->find(key));
+  auto findResult = CO_ASSERT_OK(co_await recovered->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
   std::string retrievedData(
       findResult.value()->template getMemoryAs<const char>(), data.size());
@@ -702,7 +702,7 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecoverMultipleItems) {
     for (int i = 0; i < kNumItems; ++i) {
       auto key = "key_" + std::to_string(i);
       auto val = "data_" + std::to_string(i);
-      auto handle = ASSERT_OK(co_await cache->allocate(
+      auto handle = CO_ASSERT_OK(co_await cache->allocate(
           key, val.size(), util::getCurrentTimeSec(), 3600));
       std::memcpy(handle->getMemory(), val.c_str(), val.size());
       EXPECT_OK(co_await cache->insert(std::move(handle)));
@@ -719,7 +719,7 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecoverMultipleItems) {
   for (int i = 0; i < kNumItems; ++i) {
     auto key = "key_" + std::to_string(i);
     auto expectedVal = "data_" + std::to_string(i);
-    auto findResult = ASSERT_OK(co_await recovered->find(key));
+    auto findResult = CO_ASSERT_OK(co_await recovered->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
     std::string retrievedData(
         findResult.value()->template getMemoryAs<const char>(),
@@ -731,15 +731,15 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecoverMultipleItems) {
 
 CO_TYPED_TEST(CacheComponentTest, RecoverWithoutPriorPersist) {
   // Cache components recover gracefully with an empty cache
-  auto recovered = ASSERT_OK(this->factory_->recover());
-  auto findResult = ASSERT_OK(co_await recovered->find("nonexistent_key"));
+  auto recovered = CO_ASSERT_OK(this->factory_->recover());
+  auto findResult = CO_ASSERT_OK(co_await recovered->find("nonexistent_key"));
   EXPECT_FALSE(findResult.has_value());
 }
 
 CO_TYPED_TEST(CacheComponentTest, PersistShutdownWithPersistence) {
   auto cache = this->factory_->createPersistent();
 
-  auto handle = ASSERT_OK(
+  auto handle = CO_ASSERT_OK(
       co_await cache->allocate("key", 100, util::getCurrentTimeSec(), 3600));
   EXPECT_OK(co_await cache->insert(std::move(handle)));
 

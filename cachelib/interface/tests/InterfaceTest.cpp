@@ -210,7 +210,7 @@ class InterfaceTest : public ::testing::Test {
   }
 
   folly::coro::Task<void> allocateAndInsertItem() {
-    auto allocHandle = ASSERT_OK(co_await cache_.allocate(
+    auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
         key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
     memcpy(allocHandle->getMemory(), data_, sizeof(data_));
     EXPECT_OK(co_await cache_.insert(std::move(allocHandle)));
@@ -294,19 +294,19 @@ TYPED_TEST(HandleTest, move) {
 CO_TEST_F(InterfaceTest, basic) {
   co_await allocateAndInsertItem();
 
-  auto readHandle = ASSERT_OK(co_await cache_.find(key_));
+  auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
   CO_ASSERT_TRUE(readHandle.has_value());
   checkItemFields(readHandle.value());
 
   {
-    auto writeHandle = ASSERT_OK(co_await cache_.findToWrite(key_));
+    auto writeHandle = CO_ASSERT_OK(co_await cache_.findToWrite(key_));
     CO_ASSERT_TRUE(writeHandle.has_value());
     checkItemFields(writeHandle.value());
     writeHandle->markDirty();
   }
   EXPECT_EQ(cache_.writeBacks_, 1);
 
-  auto removed = ASSERT_OK(co_await cache_.remove(key_));
+  auto removed = CO_ASSERT_OK(co_await cache_.remove(key_));
   EXPECT_TRUE(removed);
   EXPECT_FALSE(this->cache_.cachedItems_.contains(this->key_));
 }
@@ -314,36 +314,36 @@ CO_TEST_F(InterfaceTest, basic) {
 CO_TEST_F(InterfaceTest, replace) {
   co_await allocateAndInsertItem();
 
-  auto allocHandle = ASSERT_OK(co_await cache_.allocate(
+  auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
   const char data2[]{"my test data 2"};
   memcpy(allocHandle->getMemory(), data2, sizeof(data2));
   auto oldHandleOpt =
-      ASSERT_OK(co_await cache_.insertOrReplace(std::move(allocHandle)));
+      CO_ASSERT_OK(co_await cache_.insertOrReplace(std::move(allocHandle)));
 
   CO_ASSERT_TRUE(oldHandleOpt.has_value());
   const auto& oldHandle = oldHandleOpt.value();
   checkItemFields(oldHandle);
   EXPECT_NE(this->cache_.cachedItems_[this->key_], oldHandle.get());
 
-  auto readHandleOpt = ASSERT_OK(co_await cache_.find(key_));
+  auto readHandleOpt = CO_ASSERT_OK(co_await cache_.find(key_));
   CO_ASSERT_TRUE(readHandleOpt.has_value());
   auto& readHandle = readHandleOpt.value();
   EXPECT_EQ(std::memcmp(readHandle->getMemory(), data2, sizeof(data2)), 0);
 
-  ASSERT_OK(co_await cache_.remove(std::move(readHandle)));
+  CO_ASSERT_OK(co_await cache_.remove(std::move(readHandle)));
 }
 
 CO_TEST_F(InterfaceTest, removeHandle) {
   co_await allocateAndInsertItem();
-  auto readHandle = ASSERT_OK(co_await cache_.find(key_));
-  ASSERT_OK(co_await cache_.remove(std::move(readHandle.value())));
+  auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
+  CO_ASSERT_OK(co_await cache_.remove(std::move(readHandle.value())));
   EXPECT_FALSE(this->cache_.cachedItems_.contains(this->key_));
 }
 
 CO_TEST_F(InterfaceTest, duplicate) {
   co_await allocateAndInsertItem();
-  auto allocHandle = ASSERT_OK(co_await cache_.allocate(
+  auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
   EXPECT_ERROR(co_await cache_.insert(std::move(allocHandle)),
                Error::Code::ALREADY_INSERTED);

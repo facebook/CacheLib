@@ -50,22 +50,24 @@ if (BUILD_TESTS)
     glog::glog
     gflags
     GTest::gtest
-    GTest::gtest_main
     GTest::gmock
   )
 
   function (add_source_test SOURCE_FILE)
     generic_add_source_test("interface-test" "${SOURCE_FILE}"
                      interface_test_support "${ARGN}")
+    get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
+    target_sources("interface-test-${TEST_NAME}" PRIVATE
+      "${CACHELIB_HOME}/common/tests/TestMain.cpp")
   endfunction()
 
   # GCC ICE in gimplify_var_or_parm_decl with coroutine test macros
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_source_test (tests/InterfaceTest.cpp)
     add_source_test (components/tests/CacheComponentTest.cpp)
+    add_source_test (components/tests/FlashCacheComponentTest.cpp)
   endif()
   add_source_test (tests/ResultTest.cpp)
-  add_source_test (components/tests/FlashCacheComponentTest.cpp)
   add_source_test (utils/tests/CoroFiberAdapterTest.cpp)
   add_source_test (utils/tests/ShardedSerializerTest.cpp)
 endif()
