@@ -422,6 +422,202 @@ TEST(AccessTimeMapTest, RecoverNoShm) {
   ShmManager::cleanup(shmDir, true);
 }
 
+TEST(AccessTimeMapTest, RecoverMissingDataSegment) {
+  const auto shmDir =
+      "/tmp/atm_missing_data_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Populate and persist, then remove the data segment
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+
+    m.set(10, 100);
+    m.set(20, 200);
+    m.persist(shm);
+
+    // Remove only the data segment, leaving the info segment intact
+    shm.removeShm(std::string(AccessTimeMap::kShmDataName));
+    shm.shutDown();
+  }
+
+  // Recovery should detect missing data segment and start empty
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 0);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverDataSegmentTooSmall) {
+  const auto shmDir = "/tmp/atm_small_data_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Populate and persist, then overwrite the info segment to claim more
+  // entries than the data segment can hold. The data segment created by
+  // persist() for 3 entries is page-aligned to 4096 bytes. Setting
+  // entryCount to 500 makes expectedSize = 500 * sizeof(ShmEntry) = 6000,
+  // which exceeds the 4096-byte data segment.
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+
+    m.set(10, 100);
+    m.set(20, 200);
+    m.set(30, 300);
+    m.persist(shm);
+
+    // Overwrite the info segment with an inflated entryCount
+    shm.removeShm(std::string(AccessTimeMap::kShmInfoName));
+    navy::serialization::AccessTimeMapConfig cfg;
+    *cfg.version() = static_cast<int32_t>(AccessTimeMap::kVersion);
+    *cfg.numShards() = static_cast<int64_t>(kNumShards);
+    *cfg.maxSize() = 0;
+    *cfg.entryCount() = 500; // data segment is only 4096 bytes
+
+    auto ioBuf = Serializer::serializeToIOBuf(cfg);
+    auto infoAddr = shm.createShm(std::string(AccessTimeMap::kShmInfoName),
+                                  ioBuf->length());
+    Serializer serializer(
+        reinterpret_cast<uint8_t*>(infoAddr.addr),
+        reinterpret_cast<uint8_t*>(infoAddr.addr) + ioBuf->length());
+    serializer.writeToBuffer(std::move(ioBuf));
+
+    shm.shutDown();
+  }
+
+  // Recovery should detect size mismatch and start empty
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 0);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverCleansUpSegments) {
+  const auto shmDir = "/tmp/atm_cleanup_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+  constexpr size_t kMaxSize = 1000;
+
+  // Populate and persist
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards, kMaxSize);
+
+    m.set(10, 100);
+    m.set(20, 200);
+    m.persist(shm);
+    shm.shutDown();
+  }
+
+  // Recover and verify entries loaded, then check segments are gone
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards, kMaxSize);
+    m.recover(shm);
+    ASSERT_EQ(m.size(), 2);
+    EXPECT_EQ(m.get(10), 100);
+    EXPECT_EQ(m.get(20), 200);
+
+    // Segments should have been removed after successful recovery
+    EXPECT_THROW(shm.attachShm(std::string(AccessTimeMap::kShmInfoName)),
+                 std::invalid_argument);
+    EXPECT_THROW(shm.attachShm(std::string(AccessTimeMap::kShmDataName)),
+                 std::invalid_argument);
+
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, PersistOverwritesPriorSegments) {
+  const auto shmDir = "/tmp/atm_overwrite_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+
+    // First persist with two entries
+    m.set(1, 100);
+    m.set(2, 200);
+    m.persist(shm);
+
+    // Clear the map and add a different entry
+    m.remove(1);
+    m.remove(2);
+    m.set(3, 300);
+    ASSERT_EQ(m.size(), 1);
+
+    // Second persist should replace the prior segments
+    m.persist(shm);
+    shm.shutDown();
+  }
+
+  // Recover should only see the second persist's data
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    ASSERT_EQ(m.size(), 1);
+    EXPECT_EQ(m.get(1), std::nullopt);
+    EXPECT_EQ(m.get(2), std::nullopt);
+    EXPECT_EQ(m.get(3), 300);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
+TEST(AccessTimeMapTest, RecoverZeroEntryCount) {
+  const auto shmDir = "/tmp/atm_zero_count_test_" + std::to_string(::getpid());
+  constexpr size_t kNumShards = 4;
+
+  // Create an info segment with valid version/numShards but entryCount = 0.
+  // This exercises the entryCount == 0 branch in recover(), which is NOT
+  // reached by PersistEmptyMap (persist() returns early for empty maps
+  // without creating segments, so recovery hits the "no shm" path instead).
+  {
+    ShmManager shm(shmDir, true);
+
+    navy::serialization::AccessTimeMapConfig cfg;
+    *cfg.version() = static_cast<int32_t>(AccessTimeMap::kVersion);
+    *cfg.numShards() = static_cast<int64_t>(kNumShards);
+    *cfg.maxSize() = 0;
+    *cfg.entryCount() = 0;
+
+    auto ioBuf = Serializer::serializeToIOBuf(cfg);
+    auto infoAddr = shm.createShm(std::string(AccessTimeMap::kShmInfoName),
+                                  ioBuf->length());
+    Serializer serializer(
+        reinterpret_cast<uint8_t*>(infoAddr.addr),
+        reinterpret_cast<uint8_t*>(infoAddr.addr) + ioBuf->length());
+    serializer.writeToBuffer(std::move(ioBuf));
+
+    shm.shutDown();
+  }
+
+  // Recovery should hit the entryCount == 0 branch and start empty
+  {
+    ShmManager shm(shmDir, true);
+    AccessTimeMap m(kNumShards);
+    m.recover(shm);
+    EXPECT_EQ(m.size(), 0);
+    shm.shutDown();
+  }
+
+  ShmManager::cleanup(shmDir, true);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

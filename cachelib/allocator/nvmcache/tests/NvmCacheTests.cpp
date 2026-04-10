@@ -3193,6 +3193,76 @@ TEST_F(NvmCacheTest, AccessTimeMapCleanupTest) {
   expectAtmCleared(groups[3], "NVM-evicted item");
 }
 
+TEST_F(NvmCacheTest, AccessTimeMapSurvivesWarmRoll) {
+  // Verify that ATM entries persist across a warm restart cycle:
+  //   shutDown() persists ATM → SharedMemAttach recovers ATM
+  this->convertToShmCache();
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  const uint32_t allocSize = 15 * 1024;
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+
+  // Insert a target item and push it to NVM.
+  std::string targetKey = "atm_warm_roll_target";
+  {
+    auto it = nvm.allocate(pid, targetKey, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+  }
+  ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(targetKey));
+  nvm.flushNvmCache();
+  this->removeFromRamForTesting(targetKey);
+
+  // Promote target from NVM (making it NvmClean in DRAM).
+  {
+    auto hdl = this->fetch(targetKey, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    ASSERT_TRUE(hdl->isNvmClean());
+  }
+
+  HashedKey targetHk{targetKey};
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+
+  // ATM should be empty after promotion (entry is created on eviction).
+  EXPECT_EQ(std::nullopt, atm->get(targetHk.keyHash()));
+
+  // Insert filler items to trigger DRAM eviction of the NvmClean target.
+  auto timeBefore = util::getCurrentTimeSec();
+  auto evictBefore = this->evictionCount();
+  for (int i = 0; i < 1024; i++) {
+    auto key = folly::sformat("atm_warm_roll_filler_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  ASSERT_LT(evictBefore, this->evictionCount());
+
+  // The target was NvmClean when evicted, so ATM should have its entry.
+  auto accessTime = atm->get(targetHk.keyHash());
+  ASSERT_NE(std::nullopt, accessTime);
+  EXPECT_GE(*accessTime, timeBefore);
+  auto savedTime = *accessTime;
+
+  // Warm restart: shutDown() persists ATM, SharedMemAttach recovers it.
+  this->warmRoll();
+
+  // Re-acquire the ATM pointer (NvmCache instance is recreated).
+  auto* atmAfter = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atmAfter);
+
+  // Verify the entry survived with the same timestamp.
+  auto recoveredTime = atmAfter->get(targetHk.keyHash());
+  ASSERT_NE(std::nullopt, recoveredTime)
+      << "ATM entry missing after warm restart";
+  EXPECT_EQ(savedTime, *recoveredTime);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
