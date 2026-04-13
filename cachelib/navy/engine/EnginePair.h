@@ -70,6 +70,8 @@ class EnginePair {
   void scheduleInsert(HashedKey hk,
                       BufferView value,
                       InsertCallback cb,
+                      uint8_t poolId = 0,
+                      uint32_t expiryTime = 0,
                       uint32_t lastAccessTimeSecs = 0);
 
   // Perform lookup by keeping retrying until a result (Ok, NotFound, Error) is
@@ -140,6 +142,8 @@ class EnginePair {
   Status insertInternal(HashedKey key,
                         BufferView value,
                         bool& skipInsertion,
+                        uint8_t poolId = 0,
+                        uint32_t expiryTime = 0,
                         uint32_t lastAccessTimeSecs = 0);
 
   // Performa a remove by hashed key in a retry friendly manner.

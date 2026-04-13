@@ -155,6 +155,8 @@ class BlockCache final : public Engine {
   //          Status::Retry on no space available for now.
   Status insert(HashedKey hk,
                 BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
                 uint32_t lastAccessTimeSecs = 0) override;
 
   // Looks up a key in BlockCache.

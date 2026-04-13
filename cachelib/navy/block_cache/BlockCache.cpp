@@ -247,6 +247,8 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
 
 Status BlockCache::insert(HashedKey hk,
                           BufferView value,
+                          uint8_t /* poolId */,
+                          uint32_t /* expiryTime */,
                           uint32_t lastAccessTimeSecs) {
   auto start = getSteadyClock();
   SCOPE_EXIT {

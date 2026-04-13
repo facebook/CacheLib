@@ -192,7 +192,9 @@ class NvmCacheTest : public testing::Test {
   }
 
   std::unique_ptr<NvmItem> makeNvmItem(const Item& item) {
-    return getNvmCache()->makeNvmItem(item);
+    auto poolId =
+        static_cast<uint8_t>(cache().getAllocInfo((void*)(&item)).poolId);
+    return getNvmCache()->makeNvmItem(item, poolId);
   }
 
   std::unique_ptr<folly::IOBuf> createItemAsIOBuf(folly::StringPiece key,

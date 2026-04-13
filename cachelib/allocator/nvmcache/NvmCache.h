@@ -410,7 +410,7 @@ class NvmCache {
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(HashedKey hk);
 
-  std::unique_ptr<NvmItem> makeNvmItem(const Item& item);
+  std::unique_ptr<NvmItem> makeNvmItem(const Item& item, uint8_t poolId);
 
   // wrap an item into a blob for writing into navy.
   Blob makeBlob(const Item& it);
@@ -1149,9 +1149,8 @@ uint32_t NvmCache<C>::getStorageSizeInNvm(const Item& it) {
 }
 
 template <typename C>
-std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item) {
-  auto poolId = cache_.getAllocInfo((void*)(&item)).poolId;
-
+std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item,
+                                                  uint8_t poolId) {
   if (item.isChainedItem()) {
     throw std::invalid_argument(folly::sformat(
         "Chained item can not be flushed separately {}", item.toString()));
@@ -1244,7 +1243,10 @@ void NvmCache<C>::put(Item& item, PutToken token) {
     return;
   }
 
-  auto nvmItem = makeNvmItem(item);
+  auto poolId =
+      static_cast<uint8_t>(cache_.getAllocInfo((void*)(&item)).poolId);
+  auto expiryTime = item.getExpiryTime();
+  auto nvmItem = makeNvmItem(item, poolId);
   if (!nvmItem) {
     stats().numNvmPutEncodeFailure.inc();
     recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
@@ -1292,7 +1294,7 @@ void NvmCache<C>::put(Item& item, PutToken token) {
           recordEvent(AllocatorApiEvent::NVM_INSERT, key.key(), eventRes);
           putCleanup();
         },
-        item.getLastAccessTime());
+        poolId, expiryTime, item.getLastAccessTime());
 
     if (status == navy::Status::Ok) {
       guard.dismiss();

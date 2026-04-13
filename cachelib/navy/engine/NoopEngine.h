@@ -27,6 +27,8 @@ class NoopEngine final : public Engine {
   uint64_t getSize() const override { return 0; }
   Status insert(HashedKey /* hk */,
                 BufferView /* value */,
+                uint8_t /* poolId */,
+                uint32_t /* expiryTime */,
                 uint32_t /* lastAccessTimeSecs */ = 0) override {
     return Status::Rejected;
   }

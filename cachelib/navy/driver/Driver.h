@@ -81,22 +81,33 @@ class Driver final : public AbstractCache {
   bool couldExist(HashedKey key) override;
 
   // insert a key and value into the cache
-  // @param key    the item key
-  // @param value  the item value
+  // @param key                 the item key
+  // @param value               the item value
+  // @param poolId              the DRAM cache pool this item belongs to
+  // @param expiryTime          expiry time in seconds (0 means no expiry)
+  // @param lastAccessTimeSecs  last access time in seconds
   // @return a status indicates success or failure, and the reason for failure
   Status insert(HashedKey key,
                 BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
                 uint32_t lastAccessTimeSecs = 0) override;
 
   // insert a key and value into the cache asynchronously.
-  // @param key    the item key
-  // @param value  the item value
-  // @param cb     a callback function be triggered when the insertion complete
+  // @param key                 the item key
+  // @param value               the item value
+  // @param cb                  a callback function be triggered when the
+  //                            insertion complete
+  // @param poolId              the DRAM cache pool this item belongs to
+  // @param expiryTime          expiry time in seconds (0 means no expiry)
+  // @param lastAccessTimeSecs  last access time in seconds
   // @return       a status indicates success or failure enqueued, and the
   //               reason for failure
   Status insertAsync(HashedKey key,
                      BufferView value,
                      InsertCallback cb,
+                     uint8_t poolId = 0,
+                     uint32_t expiryTime = 0,
                      uint32_t lastAccessTimeSecs = 0) override;
 
   // lookup a key in the cache.

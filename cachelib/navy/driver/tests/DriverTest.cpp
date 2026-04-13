@@ -54,17 +54,19 @@ class MockEngine : public Engine {
               }
             }},
         itemMaxSize_(itemMaxSize) {
-    ON_CALL(*this, insert(_, _, _))
-        .WillByDefault(Invoke([this](HashedKey hk, BufferView value,
-                                     uint32_t /* lastAccessTimeSecs */) {
-          auto keybuffer = Buffer{makeView(hk.key())};
-          auto valbuffer = Buffer{value};
-          auto entry =
-              std::make_pair(std::move(keybuffer), std::move(valbuffer));
-          auto entryHK = makeHK(entry.first); // Capture before std::move
-          cache_[entryHK] = std::move(entry);
-          return Status::Ok;
-        }));
+    ON_CALL(*this, insert(_, _, _, _, _))
+        .WillByDefault(
+            Invoke([this](HashedKey hk, BufferView value, uint8_t /* poolId */,
+                          uint32_t /* expiryTime */,
+                          uint32_t /* lastAccessTimeSecs */) {
+              auto keybuffer = Buffer{makeView(hk.key())};
+              auto valbuffer = Buffer{value};
+              auto entry =
+                  std::make_pair(std::move(keybuffer), std::move(valbuffer));
+              auto entryHK = makeHK(entry.first); // Capture before std::move
+              cache_[entryHK] = std::move(entry);
+              return Status::Ok;
+            }));
     ON_CALL(*this, lookup(_, _, _))
         .WillByDefault([this](HashedKey hk, Buffer& value,
                               uint32_t& /* lastAccessTimeSecs */) {
@@ -96,9 +98,11 @@ class MockEngine : public Engine {
 
   uint64_t getSize() const override { return UINT32_MAX; }
 
-  MOCK_METHOD3(insert,
+  MOCK_METHOD5(insert,
                Status(HashedKey hk,
                       BufferView value,
+                      uint8_t poolId,
+                      uint32_t expiryTime,
                       uint32_t lastAccessTimeSecs));
   MOCK_METHOD3(lookup,
                Status(HashedKey hk,
@@ -247,7 +251,8 @@ void testCouldExistWithOneEngine(bool small) {
   // Test async insert for small item cache
   auto valCopy = Buffer{value.view()};
   auto valView = valCopy.view();
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), valView));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), valView, 0 /* poolId */,
+                                       0 /* expiryTime */));
   exPtr->finish();
   EXPECT_TRUE(driver->couldExist(makeHK("key")));
   Buffer valueLookup;
@@ -291,7 +296,7 @@ TEST(Driver, SmallItem) {
     // before checking large item engine.
     EXPECT_CALL(*si, couldExist(makeHK("key")));
     EXPECT_CALL(*bc, couldExist(makeHK("key")));
-    EXPECT_CALL(*si, insert(makeHK("key"), value.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), value.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
@@ -312,10 +317,10 @@ TEST(Driver, SmallItem) {
   auto valView = valCopy.view();
   EXPECT_EQ(Status::Ok,
             driver->insertAsync(
-                makeHK("key"),
-                valView,
+                makeHK("key"), valView,
                 [&cbInsert, v = std::move(valCopy)](
-                    Status status, HashedKey k) { cbInsert.call(status, k); }));
+                    Status status, HashedKey k) { cbInsert.call(status, k); },
+                0 /* poolId */, 0 /* expiryTime */));
   exPtr->finish();
 
   Buffer valueLookup;
@@ -332,7 +337,7 @@ TEST(Driver, LargeItem) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*bc, insert(makeHK("key"), value.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), value.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
   }
@@ -350,10 +355,10 @@ TEST(Driver, LargeItem) {
   auto valView = valCopy.view();
   EXPECT_EQ(Status::Ok,
             driver->insertAsync(
-                makeHK("key"),
-                valView,
+                makeHK("key"), valView,
                 [&cbInsert, v = std::move(valCopy)](
-                    Status status, HashedKey k) { cbInsert.call(status, k); }));
+                    Status status, HashedKey k) { cbInsert.call(status, k); },
+                0 /* poolId */, 0 /* expiryTime */));
   exPtr->finish();
 
   Buffer valueLookup;
@@ -371,9 +376,9 @@ TEST(Driver, SmallAndLargeItem) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
@@ -383,8 +388,10 @@ TEST(Driver, SmallAndLargeItem) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer valueLookup;
   uint32_t lat = 0;
@@ -403,9 +410,9 @@ TEST(Driver, InsertFailed) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _))
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _))
         .WillOnce(Return(Status::DeviceError));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
@@ -415,9 +422,11 @@ TEST(Driver, InsertFailed) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
   EXPECT_EQ(Status::DeviceError,
-            driver->insert(makeHK("key"), largeValue.view()));
+            driver->insert(makeHK("key"), largeValue.view(), 0 /* poolId */,
+                           0 /* expiryTime */));
 
   Buffer valueLookup;
   uint32_t lat = 0;
@@ -436,9 +445,9 @@ TEST(Driver, InsertFailedRemoveOther) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")))
         .WillOnce(Return(Status::DeviceError));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
@@ -448,8 +457,11 @@ TEST(Driver, InsertFailedRemoveOther) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
-  EXPECT_EQ(Status::BadState, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::BadState,
+            driver->insert(makeHK("key"), largeValue.view(), 0 /* poolId */,
+                           0 /* expiryTime */));
 
   // We don't provide any guarantees what is available. But in our test we
   // can check what is visible.
@@ -471,10 +483,10 @@ TEST(Driver, InsertRetryRemoveOther) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
 
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")))
         .WillOnce(Return(Status::Retry))
         .WillRepeatedly(testing::DoDefault());
@@ -489,7 +501,8 @@ TEST(Driver, InsertRetryRemoveOther) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   // Flush the scheduler first
   exPtr->finish();
@@ -498,7 +511,8 @@ TEST(Driver, InsertRetryRemoveOther) {
 
   // The returned status code is Ok because it's not rejected by admission test.
   // Under the hood, the schedule went through one reschedule and one succeed.
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   // Flush the scheduler first
   exPtr->finish();
@@ -522,9 +536,9 @@ TEST(Driver, Remove) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
@@ -543,8 +557,10 @@ TEST(Driver, Remove) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer valueLookup;
   uint32_t lat = 0;
@@ -586,9 +602,9 @@ TEST(Driver, EvictBlockCache) {
 
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
@@ -599,8 +615,10 @@ TEST(Driver, EvictBlockCache) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer valueLookup;
   uint32_t lat = 0;
@@ -634,9 +652,9 @@ TEST(Driver, EvictSmallItemCache) {
 
   {
     testing::InSequence inSeq;
-    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _, _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
-    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _, _, _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
@@ -648,8 +666,10 @@ TEST(Driver, EvictSmallItemCache) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer valueLookup;
   uint32_t lat = 0;
@@ -710,13 +730,13 @@ TEST(Driver, ConcurrentInserts) {
   sp.setName(2, "inserts finished");
 
   auto bc = std::make_unique<MockEngine>();
-  EXPECT_CALL(*bc, insert(makeHK("1"), makeView("v1"), _))
+  EXPECT_CALL(*bc, insert(makeHK("1"), makeView("v1"), _, _, _))
       .WillOnce(testing::InvokeWithoutArgs([&sp] {
         sp.reached(0);
         sp.wait(2);
         return Status::Ok;
       }));
-  EXPECT_CALL(*bc, insert(makeHK("2"), makeView("v2"), _))
+  EXPECT_CALL(*bc, insert(makeHK("2"), makeView("v2"), _, _, _))
       .WillOnce(testing::InvokeWithoutArgs([&sp] {
         sp.reached(1);
         sp.wait(2);
@@ -728,13 +748,18 @@ TEST(Driver, ConcurrentInserts) {
   config.maxConcurrentInserts = 2;
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("1"), makeView("v1"), {}));
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("2"), makeView("v2"), {}));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(makeHK("1"), makeView("v1"), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(makeHK("2"), makeView("v2"), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
 
   sp.wait(0);
   sp.wait(1);
   EXPECT_EQ(Status::Rejected,
-            driver->insertAsync(makeHK("3"), makeView("v3"), {}));
+            driver->insertAsync(makeHK("3"), makeView("v3"), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
   sp.reached(2);
 
   uint32_t statRejected = 0;
@@ -756,39 +781,45 @@ TEST(Driver, ParcelMemory) {
   auto v2 = bg.gen(1500);
   auto v3 = bg.gen(500); // Even 500 wouldn't find because of keys
   auto bc = std::make_unique<MockEngine>();
-  EXPECT_CALL(*bc, insert(makeHK("1"), v1.view(), _))
+  EXPECT_CALL(*bc, insert(makeHK("1"), v1.view(), _, _, _))
       .WillOnce(testing::InvokeWithoutArgs([&sp] {
         sp.reached(0);
         sp.wait(2);
         return Status::Ok;
       }));
-  EXPECT_CALL(*bc, insert(makeHK("2"), v2.view(), _))
+  EXPECT_CALL(*bc, insert(makeHK("2"), v2.view(), _, _, _))
       .WillOnce(testing::InvokeWithoutArgs([&sp] {
         sp.reached(1);
         sp.wait(3);
         return Status::Ok;
       }));
-  EXPECT_CALL(*bc, insert(makeHK("3"), v3.view(), _));
+  EXPECT_CALL(*bc, insert(makeHK("3"), v3.view(), _, _, _));
 
   auto ex = std::make_unique<ThreadPoolJobScheduler>(1, 10);
   auto config = makeDriverConfig(std::move(bc), nullptr, std::move(ex));
   config.maxParcelMemory = 3000;
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("1"), v1.view(), {}));
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("2"), v2.view(), {}));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(makeHK("1"), v1.view(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(makeHK("2"), v2.view(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
   sp.wait(0);
   sp.wait(1);
 
-  EXPECT_EQ(Status::Rejected, driver->insertAsync(makeHK("3"), v3.view(), {}));
+  EXPECT_EQ(Status::Rejected,
+            driver->insertAsync(makeHK("3"), v3.view(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
 
   sp.reached(2);
   // There is some gap between we unblock callback and counters go down. Keep
   // counting rejects.
   uint32_t rejects = 1;
   Status st;
-  while ((st = driver->insertAsync(makeHK("3"), v3.view(), {})) ==
-         Status::Rejected) {
+  while ((st = driver->insertAsync(makeHK("3"), v3.view(), {}, 0 /* poolId */,
+                                   0 /* expiryTime */)) == Status::Rejected) {
     rejects++;
     std::this_thread::yield();
   }
@@ -906,24 +937,24 @@ TEST(Driver, EnginePairCombinations) {
     {
       testing::InSequence inSeq;
       // Insert to small 1, found at bh 1.
-      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _, _, _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
       EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
-      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _, _, _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bh 0.
-      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _, _, _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
       EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
-      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _, _, _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
@@ -980,21 +1011,21 @@ TEST(Driver, EnginePairCombinations) {
     {
       testing::InSequence inSeq;
       // Insert to small 1, found at bh 1.
-      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _, _, _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
       EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
-      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _, _, _));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bc 0.
-      EXPECT_CALL(*bc0, insert(makeHK(key0), smallValue0.view(), _));
+      EXPECT_CALL(*bc0, insert(makeHK(key0), smallValue0.view(), _, _, _));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
-      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _, _, _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
@@ -1052,23 +1083,23 @@ TEST(Driver, EnginePairCombinations) {
     {
       testing::InSequence inSeq;
       // Insert to small 1, found at bc 1.
-      EXPECT_CALL(*bc1, insert(makeHK(key1), smallValue1.view(), _));
+      EXPECT_CALL(*bc1, insert(makeHK(key1), smallValue1.view(), _, _, _));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
-      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _, _, _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bh 0.
-      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _, _, _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
       EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       bc1->evict(makeHK(key1));
       // Insert to large 1, found at bc 1.
-      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _, _, _));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
     auto config =
@@ -1131,34 +1162,34 @@ TEST(Driver, EnginePairCombinations) {
     {
       testing::InSequence inSeq;
       // Insert to small 1, found at bh 1.
-      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _, _, _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
       EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
-      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _, _, _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert large 2, found at bc 2.
-      EXPECT_CALL(*bc2, insert(makeHK(key2), largeValue2.view(), _));
+      EXPECT_CALL(*bc2, insert(makeHK(key2), largeValue2.view(), _, _, _));
       EXPECT_CALL(*bh2, remove(makeHK(key2)));
       EXPECT_CALL(*bc2, lookup(makeHK(key2), _, _));
 
       // Insert small 0, found at bh 0.
-      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _, _, _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
       EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
       EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
-      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _, _, _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
       EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
 
       // Insert small 2, found at bh 2.
-      EXPECT_CALL(*bh2, insert(makeHK(key2), smallValue2.view(), _));
+      EXPECT_CALL(*bh2, insert(makeHK(key2), smallValue2.view(), _, _, _));
       EXPECT_CALL(*bc2, remove(makeHK(key2)));
       EXPECT_CALL(*bc2, lookup(makeHK(key2), _, _));
       EXPECT_CALL(*bh2, lookup(makeHK(key2), _, _));

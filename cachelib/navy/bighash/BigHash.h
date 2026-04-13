@@ -122,6 +122,8 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
   // key if found. If it failed to write, it will return DeviceError.
   Status insert(HashedKey hk,
                 BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
                 uint32_t lastAccessTimeSecs = 0) override;
 
   // Removes an entry from BigHash if found. Ok on success, NotFound on miss,

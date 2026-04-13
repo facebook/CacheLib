@@ -294,6 +294,8 @@ bool BigHash::recover(RecordReader& rr) {
 
 Status BigHash::insert(HashedKey hk,
                        BufferView value,
+                       uint8_t /* poolId */,
+                       uint32_t /* expiryTime */,
                        uint32_t /* lastAccessTimeSecs */) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();

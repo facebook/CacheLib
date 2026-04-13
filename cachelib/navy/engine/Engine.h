@@ -60,6 +60,8 @@ class Engine {
   // ItemMetadata as a param.
   virtual Status insert(HashedKey hk,
                         BufferView value,
+                        uint8_t poolId = 0,
+                        uint32_t expiryTime = 0,
                         uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Looks up a key in the engine.
