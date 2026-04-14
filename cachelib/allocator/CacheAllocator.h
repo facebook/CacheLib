@@ -1908,6 +1908,7 @@ class CacheAllocator : public CacheBase {
                                   .poolId = allocInfo.poolId});
   }
 
+ public:
   // Releases a slab from a pool into its corresponding memory pool
   // or back to the slab allocator, depending on SlabReleaseMode.
   //  SlabReleaseMode::kRebalance -> back to the pool
@@ -1959,6 +1960,7 @@ class CacheAllocator : public CacheBase {
                    SlabReleaseMode mode,
                    const void* hint = nullptr) final;
 
+ private:
   // @param releaseContext  slab release context
   void releaseSlabImpl(const SlabReleaseContext& releaseContext);
 
