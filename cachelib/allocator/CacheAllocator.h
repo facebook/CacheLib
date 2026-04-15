@@ -5432,6 +5432,31 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     });
   };
 
+  // Snapshot the item string under processAllocForRelease() protection.
+  // Reading alloc directly here races with concurrent free(), while doing it
+  // after abortSlabRelease() can race with the slab being advised away.
+  auto captureItemStringForAbort = [&]() {
+    std::string itemStr = "item <already freed before abort>";
+    try {
+      allocator_->processAllocForRelease(ctx, alloc, [&](void* memory) {
+        itemStr = static_cast<Item*>(memory)->toString();
+      });
+    } catch (const std::exception& e) {
+      itemStr =
+          folly::sformat("<failed to capture item for abort: {}>", e.what());
+    }
+    return itemStr;
+  };
+
+  auto abortWithMessage = [&](const std::string& reason) {
+    auto itemStr = captureItemStringForAbort();
+    allocator_->abortSlabRelease(ctx);
+    throw exception::SlabReleaseAborted(
+        folly::sformat("Slab Release aborted {} while still trying to mark"
+                       " as moving for Item: {}. Pool: {}, Class: {}.",
+                       reason, itemStr, ctx.getPoolId(), ctx.getClassId()));
+  };
+
   auto startTime = util::getCurrentTimeMs();
   while (true) {
     allocator_->processAllocForRelease(ctx, alloc, fn);
@@ -5449,25 +5474,14 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     itemFreed = true;
 
     if (isShutdownInProgress()) {
-      allocator_->abortSlabRelease(ctx);
-      throw exception::SlabReleaseAborted(
-          folly::sformat("Slab Release aborted while still trying to mark"
-                         " as moving for Item: {}. Pool: {}, Class: {}.",
-                         static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
-                         ctx.getClassId()));
+      abortWithMessage("due to shutdown");
     }
 
     if (config_.slabRebalanceTimeout.count() > 0) {
       auto elapsedTime = util::getCurrentTimeMs() - startTime;
       if (elapsedTime >
           static_cast<uint64_t>(config_.slabRebalanceTimeout.count())) {
-        allocator_->abortSlabRelease(ctx);
-        throw exception::SlabReleaseAborted(
-            folly::sformat("Slab Release aborted after {} ms while still"
-                           " trying to mark as moving for Item: {}. Pool: {},"
-                           " Class: {}.",
-                           elapsedTime, static_cast<Item*>(alloc)->toString(),
-                           ctx.getPoolId(), ctx.getClassId()));
+        abortWithMessage(folly::sformat("after {} ms", elapsedTime));
       }
     }
 
