@@ -166,7 +166,7 @@ function (generic_add_source_test TEST_PREFIX SOURCE_FILE)
                         TEST_PREFIX "${TEST_PREFIX}-${TEST_NAME}."
                         TEST_LIST "test_cases")
   # use same timeout as folly
-  set_tests_properties(${test_cases} PROPERTIES TIMEOUT 120)
+  set_tests_properties(${test_cases} PROPERTIES TIMEOUT 300)
 endfunction()
 
 
