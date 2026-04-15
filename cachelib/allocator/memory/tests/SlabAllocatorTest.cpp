@@ -20,7 +20,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <memory>
 #include <random>
 #include <vector>
 
@@ -835,11 +834,11 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
 }
 
 namespace {
-auto expectAllAllocSizesValid = [](const std::set<uint32_t>& allocSizes) {
+void expectAllAllocSizesValid(const std::set<uint32_t>& allocSizes) {
   for (auto allocSize : allocSizes) {
     EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
   }
-};
+}
 } // namespace
 
 TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {
