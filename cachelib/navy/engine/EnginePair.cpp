@@ -353,10 +353,10 @@ void EnginePair::updateEvictionStats(HashedKey hk,
   }
 }
 
-void EnginePair::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+void EnginePair::setEventTracker(EventTracker* tracker) {
   // Not setting in BigHash for now since we do not log anything there yet.
   if (largeItemCache_) {
-    largeItemCache_->setEventTracker(std::move(tracker));
+    largeItemCache_->setEventTracker(tracker);
   }
 }
 

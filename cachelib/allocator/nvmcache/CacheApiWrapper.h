@@ -143,7 +143,7 @@ class CacheAPIWrapperForNvm {
     return cache.getLegacyEventTracker();
   }
 
-  static std::shared_ptr<EventTracker> getEventTracker(C& cache) {
+  static EventTracker* getEventTracker(C& cache) {
     return cache.getEventTracker();
   }
 

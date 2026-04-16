@@ -1246,7 +1246,7 @@ class CacheAllocator : public CacheBase {
   folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     folly::F14FastMap<std::string, uint64_t> eventTrackerStats;
-    if (auto eventTracker = getEventTracker()) {
+    if (auto* eventTracker = getEventTracker()) {
       eventTracker->getStats(eventTrackerStats);
     }
     return eventTrackerStats;
@@ -1261,8 +1261,8 @@ class CacheAllocator : public CacheBase {
 
     // If NVM cache is enabled, also set the event tracker there
     if (nvmCache_ && nvmCache_->isEnabled()) {
-      if (auto eventTracker = getEventTracker()) {
-        nvmCache_->setEventTracker(eventTracker);
+      if (auto* et = getEventTracker()) {
+        nvmCache_->setEventTracker(et);
       }
     }
   }
@@ -1840,7 +1840,7 @@ class CacheAllocator : public CacheBase {
                    Key key,
                    AllocatorApiResult result,
                    EventRecordParams params = {}) const {
-    if (auto eventTracker = getEventTracker()) {
+    if (auto* eventTracker = getEventTracker()) {
       if (eventTracker->sampleKey(key)) {
         EventInfo eventInfo;
         eventInfo.eventTimestamp = util::getCurrentTimeSec();
@@ -2719,9 +2719,9 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
                                           config_.itemDestructor, persistParam);
 
   // Set EventTracker dynamically after NvmCache creation
-  if (auto eventTracker = getEventTracker()) {
+  if (auto* et = getEventTracker()) {
     XLOG(INFO) << "Setting event tracker in NVM cache engines.";
-    nvmCache_->setEventTracker(eventTracker);
+    nvmCache_->setEventTracker(et);
   }
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();

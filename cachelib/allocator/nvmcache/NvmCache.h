@@ -274,9 +274,9 @@ class NvmCache {
   }
 
   // Set the EventTracker for all underlying NVM engines
-  void setEventTracker(std::shared_ptr<EventTracker> tracker) {
+  void setEventTracker(EventTracker* tracker) {
     if (navyCache_) {
-      navyCache_->setEventTracker(std::move(tracker));
+      navyCache_->setEventTracker(tracker);
     }
   }
 

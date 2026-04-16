@@ -395,7 +395,7 @@ void Driver::updateEvictionStats(HashedKey key,
   enginePairs_[selectEnginePair(key)].updateEvictionStats(key, value, lifetime);
 }
 
-void Driver::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+void Driver::setEventTracker(EventTracker* tracker) {
   for (auto& enginePair : enginePairs_) {
     enginePair.setEventTracker(tracker);
   }

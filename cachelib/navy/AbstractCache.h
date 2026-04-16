@@ -51,8 +51,8 @@ class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
 
-  // Set the EventTracker for all underlying engines
-  virtual void setEventTracker(std::shared_ptr<EventTracker> tracker) = 0;
+  // Set the EventTracker for all underlying engines (non-owning pointer)
+  virtual void setEventTracker(EventTracker* tracker) = 0;
 
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as

@@ -119,8 +119,8 @@ class EnginePair {
   // Update any stats needed to be updated when eviction is done
   void updateEvictionStats(HashedKey hk, BufferView value, uint32_t lifetime);
 
-  // Set the EventTracker for both engines in the pair
-  void setEventTracker(std::shared_ptr<EventTracker> tracker);
+  // Set the EventTracker for BlockCache not available for BigHash
+  void setEventTracker(EventTracker* tracker);
 
  private:
   // Update statistics for lookup
