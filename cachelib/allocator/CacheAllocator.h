@@ -1865,7 +1865,7 @@ class CacheAllocator : public CacheBase {
           eventInfo.poolId = *params.poolId;
         }
 
-        eventTracker->record(eventInfo);
+        eventTracker->recordWithoutSampling(eventInfo);
       }
     } else if (auto legacyEventTracker = getLegacyEventTracker()) {
       folly::Optional<uint32_t> size =

@@ -1032,7 +1032,7 @@ void BlockCache::recordEvent(folly::StringPiece key,
       }
     }
 
-    eventTracker->record(eventInfo);
+    eventTracker->recordWithoutSampling(eventInfo);
   } else if (legacyEventTracker_.has_value()) {
     legacyEventTracker_->get().record(event, key, result, size);
   }
