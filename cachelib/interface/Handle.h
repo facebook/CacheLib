@@ -72,10 +72,6 @@ class Handle {
    * Note: the caller is responsible for incrementing the item's refcount after
    * allocating it in the inline buffer
    *
-   * Note: the Handle move constructor relocates inline items via memcpy. This
-   * is safe only if the item type has no self-referential pointers (i.e.,
-   * members that point to other members or to `this`).
-   *
    * @param cache the cache component that owns the cache item
    * @param inserted whether the cache item has been inserted into cache
    */

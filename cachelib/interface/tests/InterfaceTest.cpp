@@ -55,6 +55,10 @@ class TestCacheItem : public CacheItem {
   std::string key_;
   std::vector<uint8_t> memory_;
   std::atomic_size_t refCount_;
+
+  void move(void* /* dest */) noexcept override {
+    XLOG(FATAL) << "Should not use TestCacheItem::move()";
+  }
 };
 
 class TestCacheComponent : public CacheComponent {

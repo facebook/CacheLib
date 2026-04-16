@@ -91,6 +91,11 @@ class RAMCacheItem : public interface::CacheItem {
   LruCacheItem* item_;
 
   explicit RAMCacheItem(LruCacheItem* item) : item_(item) {}
+
+  void move(void* /* dest */) noexcept override {
+    // We don't use the inline Handle buffer, move() should never be called
+    XLOG(FATAL) << "Should not use RAMCacheItem::move()";
+  }
 };
 // RAMCacheItem should only contain vtable and LruCacheItem pointers
 static_assert(sizeof(RAMCacheItem) == (2 * sizeof(void*)));

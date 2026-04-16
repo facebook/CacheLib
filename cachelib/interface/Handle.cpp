@@ -18,8 +18,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <cstring>
-
 #include "cachelib/interface/CacheComponent.h"
 
 namespace facebook::cachelib::interface {
@@ -38,7 +36,8 @@ Handle::Handle(Handle&& other) noexcept
     : cache_(other.cache_), inserted_(other.inserted_) {
   XDCHECK_NE(cache_, nullptr) << "Invalid handle";
   if (other.item_ == reinterpret_cast<CacheItem*>(other.buf_)) {
-    std::memcpy(buf_, other.buf_, kInlineBufSize);
+    other.item_->move(buf_);
+    other.item_->~CacheItem();
     item_ = reinterpret_cast<CacheItem*>(buf_);
   } else {
     item_ = other.item_;

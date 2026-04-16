@@ -147,6 +147,10 @@ class FlashCacheItem : public CacheItem {
   // Allocation and findToWrite paths use MutableBufferView (points into region
   // buffer). Find path uses Buffer (owned copy from device read).
   std::variant<Buffer, MutableBufferView> data_;
+
+  void move(void* dest) noexcept override {
+    new (dest) FlashCacheItem(std::move(*this));
+  }
 };
 
 static_assert(sizeof(FlashCacheItem) <= Handle::kInlineBufSize,
@@ -656,6 +660,10 @@ class ConsistentFlashCacheItem : public FlashCacheItem {
 
  private:
   utils::ShardedSerializer::WriteLock lock_;
+
+  void move(void* dest) noexcept override {
+    new (dest) ConsistentFlashCacheItem(std::move(*this));
+  }
 };
 
 static_assert(sizeof(ConsistentFlashCacheItem) <= Handle::kInlineBufSize,

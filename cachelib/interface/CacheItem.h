@@ -30,11 +30,13 @@ class CacheItem {
   CacheItem() = default;
   virtual ~CacheItem() = default;
 
-  // CacheItem is not copyable or movable
+  // CacheItem is not copyable
   CacheItem(const CacheItem&) = delete;
   CacheItem& operator=(const CacheItem&) = delete;
-  CacheItem(CacheItem&&) = delete;
-  CacheItem& operator=(CacheItem&&) = delete;
+
+  // CacheItem is movable
+  CacheItem(CacheItem&&) noexcept = default;
+  CacheItem& operator=(CacheItem&&) noexcept = default;
 
   // ------------------------------ Interface ------------------------------ //
 
@@ -102,6 +104,11 @@ class CacheItem {
    * @return total size of cache item
    */
   virtual uint32_t getTotalSize() const noexcept = 0;
+
+ private:
+  virtual void move(void* dest) noexcept = 0;
+
+  friend class Handle;
 };
 
 } // namespace facebook::cachelib::interface
