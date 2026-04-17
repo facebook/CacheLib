@@ -2,6 +2,8 @@
   <img width="500" height="140" alt="CacheLib" src="website/static/img/CacheLib-Logo-Large-transp.png">
 </p>
 
+[![linux](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml/badge.svg)](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml)
+
 # CacheLib
 
 Pluggable caching engine to build and scale high performance cache services. See
