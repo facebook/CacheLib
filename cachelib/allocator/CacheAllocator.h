@@ -1447,6 +1447,13 @@ class CacheAllocator : public CacheBase {
   //        creating this item handle.
   WriteHandle acquire(Item* it);
 
+  using TryAcquireResult = typename AccessContainer::TryAcquireResult;
+
+  // Non-blocking variant of acquire. Returns a handle and a TryAcquireResult
+  // indicating success, eviction, or moving.
+  // Safe to call while holding hash table bucket locks.
+  std::pair<WriteHandle, TryAcquireResult> tryAcquire(Item* it);
+
   // creates an item handle with wait context.
   WriteHandle createNvmCacheFillHandle() { return WriteHandle{*this}; }
 
@@ -3489,6 +3496,24 @@ CacheAllocator<CacheTrait>::acquire(Item* it) {
       }
     }
   }
+}
+
+template <typename CacheTrait>
+std::pair<typename CacheAllocator<CacheTrait>::WriteHandle,
+          typename CacheAllocator<CacheTrait>::TryAcquireResult>
+CacheAllocator<CacheTrait>::tryAcquire(Item* it) {
+  XDCHECK(it);
+
+  SCOPE_FAIL { stats_.numRefcountOverflow.inc(); };
+
+  auto incRes = incRef(*it);
+  if (LIKELY(incRes == RefcountWithFlags::IncResult::kIncOk)) {
+    return {WriteHandle{it, *this}, TryAcquireResult::kSuccess};
+  }
+  if (incRes == RefcountWithFlags::IncResult::kIncFailedMoving) {
+    return {WriteHandle{}, TryAcquireResult::kMoving};
+  }
+  return {WriteHandle{}, TryAcquireResult::kSkip};
 }
 
 template <typename CacheTrait>

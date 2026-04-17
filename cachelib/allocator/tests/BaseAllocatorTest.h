@@ -751,6 +751,59 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testTryAcquireSuccess() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+
+    auto res = alloc.tryAcquire(itemHandle.get());
+    ASSERT_EQ(TryAcquireResult::kSuccess, res.second);
+    ASSERT_NE(nullptr, res.first);
+    ASSERT_EQ(itemHandle.get(), res.first.get());
+  }
+
+  void testTryAcquireMoving() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+    auto* item = itemHandle.get();
+    itemHandle.reset();
+
+    ASSERT_TRUE(item->markMoving());
+
+    auto res = alloc.tryAcquire(item);
+    ASSERT_EQ(TryAcquireResult::kMoving, res.second);
+    ASSERT_EQ(nullptr, res.first);
+    item->unmarkMoving();
+    ASSERT_FALSE(item->isMoving());
+  }
+
   // make some allocations without evictions and ensure that we are able to
   // fetch them.
   void testFind() {

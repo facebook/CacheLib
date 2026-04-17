@@ -524,6 +524,13 @@ class ChainedHashTable {
       return config_.getBucketsPower();
     }
 
+    // Result of a non-blocking handle acquisition attempt.
+    enum class TryAcquireResult : uint8_t {
+      kSuccess, // handle acquired
+      kSkip,    // handle not acquirable (evicted, removed, etc.); skip
+      kMoving,  // item being moved, retry via find()
+    };
+
     // Iterator interface for the hashtable. Iterates over the hashtable
     // bucket by bucket and takes a snapshot of the bucket to iterate over. It
     // guarantees that all keys that were present when the iteration started
