@@ -713,7 +713,6 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
     return WriteHandle{};
   }
 
-  util::LatencyTracker tracker(stats().nvmLookupLatency_);
   stats().numNvmGets.inc();
 
   auto shard = getShardForKey(hk);
@@ -815,7 +814,9 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
       return hdl;
     }
 
-    // create a context
+    // create a context — start latency tracking here so bloom filter
+    // fast-path misses and coalesced lookups are excluded
+    util::LatencyTracker tracker(stats().nvmLookupLatency_);
     auto newCtx = std::make_unique<GetCtx>(
         *this, hk.key(), std::move(waitContext), std::move(tracker));
     auto res =
@@ -1210,7 +1211,6 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item,
 
 template <typename C>
 void NvmCache<C>::put(Item& item, PutToken token) {
-  util::LatencyTracker tracker(stats().nvmInsertLatency_);
   HashedKey hk{item.getKey()};
 
   // for regular items that can only write to nvmcache upon eviction, we
@@ -1263,6 +1263,9 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
   auto shard = getShardForKey(hk);
+  // start latency tracking here so early-exit paths (disabled, expired,
+  // tombstone, encode failure) are excluded from the latency stats
+  util::LatencyTracker tracker(stats().nvmInsertLatency_);
   auto& putContexts = putContexts_[shard];
   auto& ctx = putContexts.createContext(item.getKey(), std::move(iobuf),
                                         std::move(tracker));
