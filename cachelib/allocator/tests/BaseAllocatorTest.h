@@ -2081,6 +2081,35 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  // Verify that LockGroupAccessIterator visits every accessible item exactly
+  // once. Exercises CacheAllocator::beginLockGroup() / endLockGroup() and the
+  // tryHandleMaker / findByKey wiring inside CacheAllocator.
+  void testIterateLockGroup() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    std::set<uint32_t> allocSizes{1024};
+    auto poolId = alloc.addPool("foobar", numBytes, allocSizes);
+
+    const unsigned int numItems = 100;
+    const uint32_t itemSize = 100;
+    std::set<std::string> expectedKeys;
+    for (unsigned int i = 0; i < numItems; ++i) {
+      const std::string key = "key_" + folly::to<std::string>(i);
+      auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
+      ASSERT_NE(nullptr, handle);
+      expectedKeys.insert(key);
+    }
+
+    std::set<std::string> visitedKeys;
+    for (auto it = alloc.beginLockGroup(); it != alloc.endLockGroup(); ++it) {
+      const bool inserted = visitedKeys.insert(it->getKey().str()).second;
+      ASSERT_TRUE(inserted);
+    }
+    ASSERT_EQ(expectedKeys, visitedKeys);
+  }
+
   void testIterateWithEvictions() {
     std::set<std::string> evictedKeys;
     auto removeCb =

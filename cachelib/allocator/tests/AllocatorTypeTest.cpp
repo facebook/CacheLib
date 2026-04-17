@@ -149,6 +149,10 @@ TYPED_TEST(BaseAllocatorTest, IterateAndRemoveWithIter) {
   this->testIterateAndRemoveWithIter();
 }
 
+TYPED_TEST(BaseAllocatorTest, IterateLockGroup) {
+  this->testIterateLockGroup();
+}
+
 TYPED_TEST(BaseAllocatorTest, IterateWithEvictions) {
   this->testIterateWithEvictions();
 }

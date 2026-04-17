@@ -652,6 +652,34 @@ class CacheAllocator : public CacheBase {
 
   AccessIterator end() { return accessContainer_->end(); }
 
+  // Alternative iterator that batches by hash table lock group instead of
+  // per-bucket.
+  //
+  // Differences from AccessIterator:
+  //   - Fewer lock acquisitions: O(numLocks) vs O(numBuckets).
+  //   - Larger pinning window: each lock group covers numBuckets/numLocks
+  //     buckets. All items across those buckets are snapshotted as Handles
+  //     at once, blocking eviction until the caller advances past them.
+  //     AccessIterator snapshots one bucket at a time.
+  using LockGroupAccessIterator = typename AccessContainer::LockGroupIterator;
+
+  LockGroupAccessIterator beginLockGroup() {
+    return accessContainer_->beginLockGroup(
+        [this](Item* it) { return tryAcquire(it); },
+        [this](Key key) -> WriteHandle { return findInternal(key); });
+  }
+
+  LockGroupAccessIterator beginLockGroup(util::Throttler::Config config) {
+    return accessContainer_->beginLockGroup(
+        [this](Item* it) { return tryAcquire(it); },
+        [this](Key key) -> WriteHandle { return findInternal(key); },
+        config);
+  }
+
+  LockGroupAccessIterator endLockGroup() {
+    return accessContainer_->endLockGroup();
+  }
+
   enum class RemoveRes : uint8_t {
     kSuccess,
     kNotFoundInRam,

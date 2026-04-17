@@ -272,6 +272,253 @@ TEST_F(ChainedHashTest, IteratorWithThrottler) {
   ASSERT_EQ(existingKeys, visitedKeys);
   ASSERT_TRUE((time1 > time2 * 5));
 }
+// Helper to create a TryHandleMakerFn for tests. All acquisitions succeed.
+auto makeTryHandleMaker() {
+  using Node = ChainedHashTest::Node;
+  using Handle = Node::Handle;
+  using Container = ChainedHashTest::Container;
+  using TryAcquireResult = Container::TryAcquireResult;
+  return [](Node* n) -> std::pair<Handle, TryAcquireResult> {
+    if (!n) {
+      return {Handle{nullptr}, TryAcquireResult::kSkip};
+    }
+    n->incRef();
+    return {Handle{n}, TryAcquireResult::kSuccess};
+  };
+}
+
+// Helper to create a FindByKeyFn for tests.
+auto makeFindByKey(ChainedHashTest::Container& c) {
+  using Node = ChainedHashTest::Node;
+  using Handle = Node::Handle;
+  return [&c](folly::StringPiece key) -> Handle { return c.find(key); };
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorEmpty) {
+  Container c;
+  auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+  ASSERT_EQ(it, c.endLockGroup());
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorBasic) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  std::set<std::string> existingKeys;
+  for (const auto& node : nodes) {
+    existingKeys.insert(node->getKey().str());
+  }
+
+  // All keys should be visited.
+  std::set<std::string> visitedKeys;
+  for (auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+       it != c.endLockGroup();
+       ++it) {
+    visitedKeys.insert(it->getKey().str());
+  }
+  ASSERT_EQ(existingKeys, visitedKeys);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorRefCount) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  // Each item should have refcount 1 while the iterator holds it.
+  for (auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+       it != c.endLockGroup();
+       ++it) {
+    ASSERT_EQ(1, it->getRefCount());
+  }
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorAsHandle) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  // asHandle() should return a valid handle.
+  auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+  ASSERT_NE(it, c.endLockGroup());
+  const auto& handle = it.asHandle();
+  ASSERT_NE(handle, nullptr);
+  ASSERT_EQ(handle->getKey(), it->getKey());
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorReset) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+
+  // Advance partway through.
+  for (size_t i = 0; i < nodes.size() / 2 && it != c.endLockGroup(); ++i) {
+    ++it;
+  }
+
+  // Reset and iterate fully.
+  it.reset();
+  std::set<std::string> afterReset;
+  for (; it != c.endLockGroup(); ++it) {
+    afterReset.insert(it->getKey().str());
+  }
+
+  // After reset, should visit all keys.
+  std::set<std::string> existingKeys;
+  for (const auto& node : nodes) {
+    existingKeys.insert(node->getKey().str());
+  }
+  ASSERT_EQ(existingKeys, afterReset);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorMatchesIterator) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  // Both iterators should visit exactly the same set of keys.
+  std::set<std::string> iterKeys;
+  for (auto it = c.begin(); it != c.end(); ++it) {
+    iterKeys.insert(it->getKey().str());
+  }
+
+  std::set<std::string> lockGroupKeys;
+  for (auto it = c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c));
+       it != c.endLockGroup();
+       ++it) {
+    lockGroupKeys.insert(it->getKey().str());
+  }
+
+  ASSERT_EQ(iterKeys, lockGroupKeys);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorRetriesMovingItem) {
+  using Handle = Node::Handle;
+  using TryAcquireResult = Container::TryAcquireResult;
+  using HashConfig = ChainedHashTable::Config;
+
+  HashConfig config{0, 0};
+  Container c{config, typename Node::PtrCompressor()};
+
+  Node movingNode(std::string{"moving"});
+  Node stableNode(std::string{"stable"});
+  ASSERT_TRUE(c.insert(movingNode));
+  ASSERT_TRUE(c.insert(stableNode));
+
+  size_t numMovingRetries{0};
+  auto tryHandleMaker = [&movingNode, &numMovingRetries](
+                            Node* n) -> std::pair<Handle, TryAcquireResult> {
+    if (!n) {
+      return {Handle{nullptr}, TryAcquireResult::kSkip};
+    }
+    if (n == &movingNode) {
+      ++numMovingRetries;
+      return {Handle{nullptr}, TryAcquireResult::kMoving};
+    }
+    n->incRef();
+    return {Handle{n}, TryAcquireResult::kSuccess};
+  };
+
+  size_t numFindRetries{0};
+  auto findByKey = [&c, &numFindRetries](folly::StringPiece key) -> Handle {
+    ++numFindRetries;
+    return c.find(key);
+  };
+
+  std::set<std::string> visitedKeys;
+  for (auto it = c.beginLockGroup(tryHandleMaker, findByKey);
+       it != c.endLockGroup();
+       ++it) {
+    visitedKeys.insert(it->getKey().str());
+  }
+
+  const std::set<std::string> expectedKeys{"moving", "stable"};
+  ASSERT_EQ(expectedKeys, visitedKeys);
+  ASSERT_EQ(1u, numMovingRetries);
+  ASSERT_EQ(1u, numFindRetries);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorSkipsTryHandleMakerExceptions) {
+  using Handle = Node::Handle;
+  using TryAcquireResult = Container::TryAcquireResult;
+  using HashConfig = ChainedHashTable::Config;
+
+  HashConfig config{0, 0};
+  Container c{config, typename Node::PtrCompressor()};
+
+  Node throwingNode(std::string{"throwing"});
+  Node stableNode(std::string{"stable"});
+  ASSERT_TRUE(c.insert(throwingNode));
+  ASSERT_TRUE(c.insert(stableNode));
+
+  auto tryHandleMaker =
+      [&throwingNode](Node* n) -> std::pair<Handle, TryAcquireResult> {
+    if (!n) {
+      return {Handle{nullptr}, TryAcquireResult::kSkip};
+    }
+    if (n == &throwingNode) {
+      throw exception::RefcountOverflow("");
+    }
+    n->incRef();
+    return {Handle{n}, TryAcquireResult::kSuccess};
+  };
+
+  std::set<std::string> visitedKeys;
+  EXPECT_NO_THROW({
+    for (auto it = c.beginLockGroup(tryHandleMaker, makeFindByKey(c));
+         it != c.endLockGroup();
+         ++it) {
+      visitedKeys.insert(it->getKey().str());
+    }
+  });
+
+  const std::set<std::string> expectedKeys{"stable"};
+  ASSERT_EQ(expectedKeys, visitedKeys);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorSkipsFindByKeyExceptions) {
+  using Handle = Node::Handle;
+  using TryAcquireResult = Container::TryAcquireResult;
+  using HashConfig = ChainedHashTable::Config;
+
+  HashConfig config{0, 0};
+  Container c{config, typename Node::PtrCompressor()};
+
+  Node movingNode(std::string{"moving"});
+  Node stableNode(std::string{"stable"});
+  ASSERT_TRUE(c.insert(movingNode));
+  ASSERT_TRUE(c.insert(stableNode));
+
+  auto tryHandleMaker =
+      [&movingNode](Node* n) -> std::pair<Handle, TryAcquireResult> {
+    if (!n) {
+      return {Handle{nullptr}, TryAcquireResult::kSkip};
+    }
+    if (n == &movingNode) {
+      return {Handle{nullptr}, TryAcquireResult::kMoving};
+    }
+    n->incRef();
+    return {Handle{n}, TryAcquireResult::kSuccess};
+  };
+
+  const auto movingKey = movingNode.getKey().str();
+  auto findByKey = [&c, &movingKey](folly::StringPiece key) -> Handle {
+    if (key == movingKey) {
+      throw exception::RefcountOverflow("");
+    }
+    return c.find(key);
+  };
+
+  std::set<std::string> visitedKeys;
+  EXPECT_NO_THROW({
+    for (auto it = c.beginLockGroup(tryHandleMaker, findByKey);
+         it != c.endLockGroup();
+         ++it) {
+      visitedKeys.insert(it->getKey().str());
+    }
+  });
+
+  const std::set<std::string> expectedKeys{"stable"};
+  ASSERT_EQ(expectedKeys, visitedKeys);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
