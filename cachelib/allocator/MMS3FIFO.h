@@ -409,6 +409,7 @@ void MMS3FIFO::Container<T, HookPtr>::lazyPromoteSmallTailLocked()
   auto& smallList = lru_.getList(LruType::Small);
 
   // Only process Small when it exceeds target size.
+  // At stable state, this op is constant time.
   while (smallList.size() > targetSmallSize) {
     auto* tail = smallList.getTail();
     if (!tail) {
@@ -430,20 +431,24 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::lazyReinsertMainTailLocked()
     const noexcept {
   auto& mainList = lru_.getList(LruType::Main);
-  // Cap at mainList.size() to guarantee termination — after one full
-  // pass all access bits are cleared.
-  size_t maxReinsertions = mainList.size();
-  size_t reinserted = 0;
-  while (reinserted < maxReinsertions) {
-    auto* tail = mainList.getTail();
-    if (!tail || !isAccessed(*tail)) {
-      break;
-    }
-    mainList.remove(*tail);
-    mainList.linkAtHead(*tail);
-    unmarkAccessed(*tail);
-    ++reinserted;
+  auto* tail = mainList.getTail();
+  if (tail == nullptr || !isAccessed(*tail)) {
+    return;
   }
+
+  auto* cur = tail;
+  auto* first = tail;
+
+  // Find the contiguous accessed suffix at Main tail and clear access bits.
+  while (cur && isAccessed(*cur)) {
+    unmarkAccessed(*cur);
+    first = cur;
+    cur = mainList.getPrev(*cur);
+  }
+
+  // Move that entire suffix to head in one splice.
+  // Reinsertion is expensive in a workload with high hit ratio.
+  mainList.moveSuffixToHead(*first);
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
