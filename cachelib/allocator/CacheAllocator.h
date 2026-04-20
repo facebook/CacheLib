@@ -4247,7 +4247,8 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
   HashedKey hk{it->getKey()};
   auto tombstone =
       nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : DeleteTombStoneGuard{};
-  return removeImpl(hk, *it, std::move(tombstone));
+  return removeImpl(hk, *it, std::move(tombstone), true /* removeFromNvm */,
+                    false /* recordApiEvent */);
 }
 
 template <typename CacheTrait>
