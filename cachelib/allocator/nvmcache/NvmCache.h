@@ -321,6 +321,8 @@ class NvmCache {
                    folly::StringPiece key,
                    AllocatorApiResult result,
                    const NvmItem* nvmItem = nullptr) {
+    // Sample the key once here. Use recordEventWithoutSampling() downstream
+    // to avoid double/triple-sampling through CacheAllocator::recordEvent().
     if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
       if (!eventTracker->sampleKey(key)) {
         return;
@@ -330,7 +332,8 @@ class NvmCache {
     }
 
     if (!nvmItem) {
-      CacheAPIWrapperForNvm<C>::recordEvent(cache_, event, key, result);
+      CacheAPIWrapperForNvm<C>::recordEventWithoutSampling(cache_, event, key,
+                                                           result);
       return;
     }
 
@@ -343,7 +346,7 @@ class NvmCache {
       ttlSecs = expiryTime - nvmItem->getCreationTime();
     }
 
-    CacheAPIWrapperForNvm<C>::recordEvent(
+    CacheAPIWrapperForNvm<C>::recordEventWithoutSampling(
         cache_, event, key, result,
         typename C::EventRecordParams{.size = itemSize,
                                       .ttlSecs = ttlSecs,

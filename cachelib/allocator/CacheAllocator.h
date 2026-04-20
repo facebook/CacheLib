@@ -1876,32 +1876,45 @@ class CacheAllocator : public CacheBase {
                    AllocatorApiResult result,
                    EventRecordParams params = {}) const {
     if (auto* eventTracker = getEventTracker()) {
-      if (eventTracker->sampleKey(key)) {
-        EventInfo eventInfo;
-        eventInfo.eventTimestamp = util::getCurrentTimeSec();
-        eventInfo.event = event;
-        eventInfo.result = result;
-        eventInfo.key = key;
-        if (params.size) {
-          eventInfo.size = *params.size;
-        }
-        if (params.expiryTime) {
-          eventInfo.expiryTime = *params.expiryTime;
-          eventInfo.timeToExpire = calculateTimeToExpire(
-              *params.expiryTime, eventInfo.eventTimestamp);
-        }
-        if (params.ttlSecs && *params.ttlSecs > 0) {
-          eventInfo.ttlSecs = *params.ttlSecs;
-        }
-        if (params.allocSize) {
-          eventInfo.allocSize = *params.allocSize;
-        }
-        if (params.poolId) {
-          eventInfo.poolId = *params.poolId;
-        }
-
-        eventTracker->recordWithoutSampling(eventInfo);
+      if (!eventTracker->sampleKey(key)) {
+        return;
       }
+    }
+    recordEventWithoutSampling(event, key, result, std::move(params));
+  }
+
+  // Record event without calling sampleKey(). Use when the caller has already
+  // determined that the key should be sampled (e.g., NvmCache::recordEvent()
+  // calls sampleKey() once and then uses this to avoid double-sampling).
+  void recordEventWithoutSampling(AllocatorApiEvent event,
+                                  Key key,
+                                  AllocatorApiResult result,
+                                  EventRecordParams params = {}) const {
+    if (auto* eventTracker = getEventTracker()) {
+      EventInfo eventInfo;
+      eventInfo.eventTimestamp = util::getCurrentTimeSec();
+      eventInfo.event = event;
+      eventInfo.result = result;
+      eventInfo.key = key;
+      if (params.size) {
+        eventInfo.size = *params.size;
+      }
+      if (params.expiryTime) {
+        eventInfo.expiryTime = *params.expiryTime;
+        eventInfo.timeToExpire =
+            calculateTimeToExpire(*params.expiryTime, eventInfo.eventTimestamp);
+      }
+      if (params.ttlSecs && *params.ttlSecs > 0) {
+        eventInfo.ttlSecs = *params.ttlSecs;
+      }
+      if (params.allocSize) {
+        eventInfo.allocSize = *params.allocSize;
+      }
+      if (params.poolId) {
+        eventInfo.poolId = *params.poolId;
+      }
+
+      eventTracker->recordWithoutSampling(eventInfo);
     } else if (auto legacyEventTracker = getLegacyEventTracker()) {
       folly::Optional<uint32_t> size =
           params.size

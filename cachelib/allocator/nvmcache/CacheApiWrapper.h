@@ -172,6 +172,17 @@ class CacheAPIWrapperForNvm {
                           typename C::EventRecordParams params = {}) {
     cache.recordEvent(event, key, result, params);
   }
+
+  // Record event without sampling. Use when the caller has already called
+  // sampleKey() and determined the key should be sampled.
+  static void recordEventWithoutSampling(
+      C& cache,
+      AllocatorApiEvent event,
+      Key key,
+      AllocatorApiResult result,
+      typename C::EventRecordParams params = {}) {
+    cache.recordEventWithoutSampling(event, key, result, std::move(params));
+  }
 };
 
 } // namespace cachelib
