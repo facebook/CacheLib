@@ -661,18 +661,24 @@ class CacheAllocator : public CacheBase {
   //     buckets. All items across those buckets are snapshotted as Handles
   //     at once, blocking eviction until the caller advances past them.
   //     AccessIterator snapshots one bucket at a time.
+  // Optional key filter is applied under the lock before handle creation,
+  // avoiding handle overhead for items that don't match.
   using LockGroupAccessIterator = typename AccessContainer::LockGroupIterator;
+  using LockGroupFilterFn = typename LockGroupAccessIterator::FilterFn;
 
-  LockGroupAccessIterator beginLockGroup() {
-    return accessContainer_->beginLockGroup(
-        [this](Item* it) { return tryAcquire(it); },
-        [this](Key key) -> WriteHandle { return findInternal(key); });
-  }
-
-  LockGroupAccessIterator beginLockGroup(util::Throttler::Config config) {
+  LockGroupAccessIterator beginLockGroup(LockGroupFilterFn filter = {}) {
     return accessContainer_->beginLockGroup(
         [this](Item* it) { return tryAcquire(it); },
         [this](Key key) -> WriteHandle { return findInternal(key); },
+        std::move(filter));
+  }
+
+  LockGroupAccessIterator beginLockGroup(util::Throttler::Config config,
+                                         LockGroupFilterFn filter = {}) {
+    return accessContainer_->beginLockGroup(
+        [this](Item* it) { return tryAcquire(it); },
+        [this](Key key) -> WriteHandle { return findInternal(key); },
+        std::move(filter),
         config);
   }
 

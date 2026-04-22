@@ -638,11 +638,13 @@ class ChainedHashTable {
       using TryHandleMakerFn =
           std::function<std::pair<Handle, TryAcquireResult>(T*)>;
       using FindByKeyFn = std::function<Handle(folly::StringPiece)>;
+      using FilterFn = std::function<bool(folly::StringPiece)>;
 
       struct ScanStats {
         uint64_t visited{0}; // total items scanned
-        uint64_t skipped{0}; // items skipped (handle not acquirable)
-        uint64_t retried{0}; // items retried via findByKey
+        uint64_t matched{0}; // items where key filter returned true
+        uint64_t skipped{0}; // matched items skipped (handle not acquirable)
+        uint64_t retried{0}; // matched items retried via findByKey
       };
 
       ~LockGroupIterator() {
@@ -686,6 +688,7 @@ class ChainedHashTable {
       explicit LockGroupIterator(C& ht,
                                  TryHandleMakerFn tryHandleMaker,
                                  FindByKeyFn findByKey,
+                                 FilterFn filter,
                                  folly::Optional<util::Throttler::Config>
                                      throttlerConfig = folly::none);
 
@@ -694,6 +697,7 @@ class ChainedHashTable {
       mutable C* container_;
       TryHandleMakerFn tryHandleMaker_;
       FindByKeyFn findByKey_;
+      FilterFn filter_;
 
       // current lock group that the iterator is pointing to.
       mutable size_t currLock_{0};
@@ -726,13 +730,15 @@ class ChainedHashTable {
     LockGroupIterator beginLockGroup(
         typename LockGroupIterator::TryHandleMakerFn tryHandleMaker,
         typename LockGroupIterator::FindByKeyFn findByKey,
+        typename LockGroupIterator::FilterFn filter,
         folly::Optional<util::Throttler::Config> throttlerConfig);
 
     LockGroupIterator beginLockGroup(
         typename LockGroupIterator::TryHandleMakerFn tryHandleMaker,
-        typename LockGroupIterator::FindByKeyFn findByKey) {
+        typename LockGroupIterator::FindByKeyFn findByKey,
+        typename LockGroupIterator::FilterFn filter = {}) {
       return LockGroupIterator(*this, std::move(tryHandleMaker),
-                               std::move(findByKey));
+                               std::move(findByKey), std::move(filter));
     }
 
     LockGroupIterator endLockGroup() {
@@ -1454,6 +1460,10 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
               bucket, [this, &elems, &retryKeys](T* elem) {
                 ++stats_.visited;
                 try {
+                  if (filter_ && !filter_(elem->getKey())) {
+                    return;
+                  }
+                  ++stats_.matched;
                   auto [h, tryRes] = tryHandleMaker_(elem);
                   if (tryRes == TryAcquireResult::kSuccess) {
                     elems.emplace_back(std::move(h));
@@ -1555,10 +1565,12 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
     LockGroupIterator(Container<T, HookPtr, LockT>& container,
                       TryHandleMakerFn tryHandleMaker,
                       FindByKeyFn findByKey,
+                      FilterFn filter,
                       folly::Optional<util::Throttler::Config> throttlerConfig)
     : container_(&container),
       tryHandleMaker_(std::move(tryHandleMaker)),
-      findByKey_(std::move(findByKey)) {
+      findByKey_(std::move(findByKey)),
+      filter_(std::move(filter)) {
   if (throttlerConfig) {
     throttler_.assign(util::Throttler(*throttlerConfig));
   }
@@ -1586,6 +1598,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
     : container_{other.container_},
       tryHandleMaker_(std::move(other.tryHandleMaker_)),
       findByKey_(std::move(other.findByKey_)),
+      filter_(std::move(other.filter_)),
       currLock_{other.currLock_},
       cursor_{other.cursor_},
       lockGroupElems_(std::move(other.lockGroupElems_)),
@@ -1614,9 +1627,11 @@ typename ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator
 ChainedHashTable::Container<T, HookPtr, LockT>::beginLockGroup(
     typename LockGroupIterator::TryHandleMakerFn tryHandleMaker,
     typename LockGroupIterator::FindByKeyFn findByKey,
+    typename LockGroupIterator::FilterFn filter,
     folly::Optional<util::Throttler::Config> throttlerConfig) {
   return LockGroupIterator(*this, std::move(tryHandleMaker),
-                           std::move(findByKey), throttlerConfig);
+                           std::move(findByKey), std::move(filter),
+                           throttlerConfig);
 }
 
 template <typename T,

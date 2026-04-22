@@ -558,6 +558,39 @@ TEST_F(ChainedHashTest, LockGroupIteratorSkipsFindByKeyExceptions) {
   ASSERT_EQ(expectedKeys, visitedKeys);
 }
 
+TEST_F(ChainedHashTest, LockGroupIteratorFilter) {
+  Container c;
+  auto nodes = createSimpleContainer(c);
+
+  // Pick a character that some keys contain — use the first char of the
+  // first key so we're guaranteed at least one match.
+  const char target = nodes.front()->getKey().data()[0];
+
+  auto filter = [target](folly::StringPiece key) {
+    return key.size() > 0 && key.data()[0] == target;
+  };
+
+  // Collect expected keys by scanning all nodes with the same predicate.
+  std::set<std::string> expectedKeys;
+  for (const auto& node : nodes) {
+    if (filter(node->getKey())) {
+      expectedKeys.insert(node->getKey().str());
+    }
+  }
+  ASSERT_FALSE(expectedKeys.empty());
+
+  // Iterate with the filter — only matching items should appear.
+  std::set<std::string> filteredKeys;
+  for (auto it =
+           c.beginLockGroup(makeTryHandleMaker(), makeFindByKey(c), filter);
+       it != c.endLockGroup();
+       ++it) {
+    filteredKeys.insert(it->getKey().str());
+  }
+
+  ASSERT_EQ(expectedKeys, filteredKeys);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
