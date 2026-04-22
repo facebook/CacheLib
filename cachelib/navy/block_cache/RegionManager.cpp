@@ -36,7 +36,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint16_t inMemBufFlushRetryLimit,
                              bool workerFlushAsync,
                              bool allowReadDuringReclaim,
-                             bool cleanRegionFastPath)
+                             bool cleanRegionFastPath,
+                             bool recoverEvictionPolicy)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -49,6 +50,7 @@ RegionManager::RegionManager(uint32_t numRegions,
       workerFlushAsync_{workerFlushAsync},
       allowReadDuringReclaim_(allowReadDuringReclaim),
       cleanRegionFastPath_{cleanRegionFastPath},
+      recoverEvictionPolicy_{recoverEvictionPolicy},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
@@ -521,6 +523,17 @@ void RegionManager::persist(RecordWriter& rw) const {
     regionProto.priority() = regions_[i]->getPriority();
     *regionProto.numItems() = regions_[i]->getNumItems();
   }
+
+  if (recoverEvictionPolicy_) {
+    try {
+      serialization::EvictionPolicyData policyData;
+      policy_->persist(policyData);
+      regionData.evictionPolicyData() = std::move(policyData);
+    } catch (const std::exception& e) {
+      XLOGF(WARN, "Eviction policy does not support persistence: {}", e.what());
+    }
+  }
+
   serializeProto(regionData, rw);
 }
 
@@ -550,20 +563,93 @@ void RegionManager::recover(RecordReader& rr) {
         std::make_unique<Region>(regionProto, *regionData.regionSize());
   }
 
-  // Reset policy and reinitialize it per the recovered state
-  resetEvictionPolicy();
+  // Try to recover eviction policy from persisted data, or fall back to
+  // rebuilding in region-ID order (the old behavior).
+  bool policyRecovered = false;
+  if (recoverEvictionPolicy_ && regionData.evictionPolicyData().has_value()) {
+    try {
+      // Clear any stale entries from the earlier resetEvictionPolicy() call
+      // during initializeBlockCache(). FifoPolicy::recover() also clears the
+      // queue internally, but we don't depend on that implementation detail.
+      policy_->reset();
+      policy_->recover(*regionData.evictionPolicyData());
+      // Restore any regions that aren't in the recovered policy queue
+      // (e.g., the cleanRegions_ pool at persist time). Without this,
+      // those regions would be permanently leaked. Also validates region
+      // IDs from the persisted policy data.
+      restoreUntrackedRegions(*regionData.evictionPolicyData());
+      policyRecovered = true;
+      recomputeFragmentation();
+      XLOG(INFO, "Eviction policy recovered successfully");
+    } catch (const std::exception& e) {
+      XLOGF(WARN,
+            "Eviction policy recovery failed: {}. Falling back to reset.",
+            e.what());
+    }
+  } else if (recoverEvictionPolicy_) {
+    XLOG(INFO,
+         "recoverEvictionPolicy enabled but no persisted policy data found. "
+         "Falling back to resetEvictionPolicy() (forward-compat path).");
+  }
+
+  if (!policyRecovered) {
+    resetEvictionPolicy();
+  }
+}
+
+void RegionManager::restoreUntrackedRegions(
+    const serialization::EvictionPolicyData& data) {
+  // Build the set of region IDs known to the recovered policy queue. Today
+  // only FifoPolicy supports persistence; adding a new persistable policy
+  // requires extending this dispatch (and the EvictionPolicyData union).
+  std::vector<bool> tracked(numRegions_, false);
+  if (data.getType() == serialization::EvictionPolicyData::Type::fifo) {
+    for (const auto& node : data.fifo_ref()->queue().value()) {
+      auto idx = static_cast<uint32_t>(node.idx().value());
+      if (idx >= numRegions_) {
+        throw std::invalid_argument(
+            "Persisted policy contains out-of-bounds region id");
+      }
+      tracked[idx] = true;
+    }
+  }
+
+  // Any region not in the recovered queue would otherwise be leaked
+  // (in neither cleanRegions_ nor the policy queue). Empty regions go to
+  // cleanRegions_ up to the pool capacity (these are typically the regions
+  // that were in the pool at persist time). Anything beyond capacity, or
+  // any non-empty untracked region (defensive: shouldn't happen), is
+  // tracked into the policy so it remains evictable.
+  std::lock_guard lock{cleanRegionsMutex_};
+  for (uint32_t i = 0; i < numRegions_; i++) {
+    if (tracked[i]) {
+      continue;
+    }
+    if (regions_[i]->getNumItems() == 0 &&
+        cleanRegions_.size() < numCleanRegions_) {
+      cleanRegions_.push_back(RegionId{i});
+    } else {
+      track(RegionId{i});
+    }
+  }
+}
+
+void RegionManager::recomputeFragmentation() {
+  uint64_t fragmentation = 0;
+  for (uint32_t i = 0; i < numRegions_; i++) {
+    fragmentation += regions_[i]->getFragmentationSize();
+  }
+  externalFragmentation_.set(fragmentation);
 }
 
 void RegionManager::resetEvictionPolicy() {
   XDCHECK_GT(numRegions_, 0u);
 
   policy_->reset();
-  externalFragmentation_.set(0);
+  recomputeFragmentation();
 
-  // Go through all the regions, restore fragmentation size, and track all empty
-  // regions
+  // Track all empty regions first
   for (uint32_t i = 0; i < numRegions_; i++) {
-    externalFragmentation_.add(regions_[i]->getFragmentationSize());
     if (regions_[i]->getNumItems() == 0) {
       track(RegionId{i});
     }

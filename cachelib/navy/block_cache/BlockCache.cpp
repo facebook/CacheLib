@@ -215,7 +215,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.inMemBufFlushRetryLimit,
                      config.regionManagerFlushAsync,
                      true /* allowReadDuringReclaim */,
-                     config.cleanRegionFastPath},
+                     config.cleanRegionFastPath,
+                     config.recoverEvictionPolicy},
       allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
@@ -1211,7 +1212,7 @@ folly::Expected<BlockCache::AllocData, Status> BlockCache::allocateForInsert(
   switch (std::get<0>(retVal).status()) {
   case OpenStatus::Ready:
     insertCount_.inc();
-    return std::move(retVal);
+    return retVal;
   case OpenStatus::Error:
     allocErrorCount_.inc();
     insertCount_.inc();

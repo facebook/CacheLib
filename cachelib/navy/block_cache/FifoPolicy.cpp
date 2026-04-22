@@ -56,7 +56,8 @@ void FifoPolicy::reset() {
   queue_.clear();
 }
 
-void FifoPolicy::persist(RecordWriter& rw) const {
+void FifoPolicy::persist(serialization::EvictionPolicyData& out) const {
+  std::lock_guard lock{mutex_};
   serialization::FifoPolicyData fifoPolicyData;
   fifoPolicyData.queue()->resize(queue_.size());
 
@@ -66,14 +67,18 @@ void FifoPolicy::persist(RecordWriter& rw) const {
     proto.trackTime() = queue_[i].trackTime.count();
   }
 
-  serializeProto(fifoPolicyData, rw);
+  out.fifo_ref() = std::move(fifoPolicyData);
 }
 
-void FifoPolicy::recover(RecordReader& rr) {
-  auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
+void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {
+  std::lock_guard lock{mutex_};
+  if (in.getType() != serialization::EvictionPolicyData::Type::fifo) {
+    throw std::invalid_argument(
+        "FifoPolicy::recover called with non-FIFO EvictionPolicyData variant");
+  }
+  const auto& fifoPolicyData = *in.fifo_ref();
   queue_.clear();
-  for (uint32_t i = 0; i < fifoPolicyData.queue().value().size(); i++) {
-    const auto& proto = fifoPolicyData.queue().value()[i];
+  for (const auto& proto : fifoPolicyData.queue().value()) {
     queue_.push_back(
         detail::Node{RegionId{static_cast<uint32_t>(proto.idx().value())},
                      std::chrono::seconds{proto.trackTime().value()}});
@@ -179,16 +184,6 @@ void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
       segment.empty() ? 0 : segment.front().secondsSinceTracking().count());
     idx++;
   }
-}
-
-void SegmentedFifoPolicy::persist(RecordWriter& rw) const {
-  std::ignore = rw;
-  throw std::runtime_error("Not Implemented.");
-}
-
-void SegmentedFifoPolicy::recover(RecordReader& rr) {
-  std::ignore = rr;
-  throw std::runtime_error("Not Implemented");
 }
 
 } // namespace facebook::cachelib::navy

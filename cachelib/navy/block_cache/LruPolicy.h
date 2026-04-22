@@ -61,12 +61,6 @@ class LruPolicy final : public EvictionPolicy {
   // Exports LRU policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
 
-  // Persists metadata associated with LRU policy.
-  void persist(RecordWriter& rw) const override;
-
-  // Recovers from previously persisted metadata associated with LRU policy.
-  void recover(RecordReader& rr) override;
-
  private:
   static constexpr uint32_t kInvalidIndex = 0xffffffffu;
 

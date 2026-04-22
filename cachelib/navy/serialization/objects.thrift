@@ -46,6 +46,9 @@ struct Region {
 struct RegionData {
   1: list<Region> regions;
   2: i32 regionSize = 0;
+  // Serialized eviction policy state (e.g., FIFO queue order).
+  // Used to preserve eviction ordering across restarts.
+  3: optional EvictionPolicyData evictionPolicyData;
 }
 
 struct FifoPolicyNodeData {
@@ -55,6 +58,12 @@ struct FifoPolicyNodeData {
 
 struct FifoPolicyData {
   1: list<FifoPolicyNodeData> queue;
+}
+
+// Variant type for eviction policy persistence. Add a new union member when
+// a new EvictionPolicy implementation gains persist/recover support.
+union EvictionPolicyData {
+  1: FifoPolicyData fifo;
 }
 
 struct AccessStats {

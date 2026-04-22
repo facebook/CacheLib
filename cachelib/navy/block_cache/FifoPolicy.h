@@ -68,10 +68,10 @@ class FifoPolicy final : public EvictionPolicy {
   void getCounters(const CounterVisitor& v) const override;
 
   // Persists metadata associated with FIFO policy.
-  void persist(RecordWriter& rw) const override;
+  void persist(serialization::EvictionPolicyData& out) const override;
 
   // Recovers from previously persisted metadata associated with FIFO policy.
-  void recover(RecordReader& rr) override;
+  void recover(const serialization::EvictionPolicyData& in) override;
 
  private:
   std::deque<detail::Node> queue_;
@@ -135,13 +135,6 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
 
   // Exports Segmented FIFO policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
-
-  // Persists metadata associated with segmented FIFO policy.
-  void persist(RecordWriter& rw) const override;
-
-  // Recovers from previously persisted metadata associated with segmented FIFO
-  // policy.
-  void recover(RecordReader& rr) override;
 
  private:
   void rebalanceLocked();

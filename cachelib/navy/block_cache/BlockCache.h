@@ -100,6 +100,16 @@ class BlockCache final : public Engine {
     // items)
     bool useCombinedEntryBlock{false};
 
+    // Whether to persist and recover eviction policy ordering across restarts.
+    // When enabled, the FIFO queue order is preserved, avoiding the hit rate
+    // regression caused by resetting the write position on restart.
+    //
+    // NOTE: Only FifoPolicy currently supports persistence. LruPolicy and
+    // SegmentedFifoPolicy gracefully fall back to resetEvictionPolicy() on
+    // recover (a WARN is logged); enabling this flag with those policies has
+    // no effect on eviction ordering.
+    bool recoverEvictionPolicy{false};
+
     // name of this BC instance
     std::string name{};
 

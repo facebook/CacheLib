@@ -584,4 +584,411 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
     }
   }});
 }
+
+// Tests for eviction policy persist/recover (recoverEvictionPolicy flag)
+
+TEST(RegionManager, EvictionPolicyRecoverPreservesFifoOrder) {
+  // Verify that when recoverEvictionPolicy=true, the FIFO eviction order is
+  // preserved across persist/recover rather than being rebuilt in region-ID
+  // order.
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: Create regions in a specific order and persist
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    // Populate regions 1 and 2 with items so they're non-empty
+    rm->getRegion(RegionId{1})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    rm->getRegion(RegionId{2})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    for (int i = 0; i < 5; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{1}).openAndAllocate(101);
+      rm->getRegion(RegionId{1}).close(std::move(desc));
+    }
+    for (int i = 0; i < 3; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{2}).openAndAllocate(101);
+      rm->getRegion(RegionId{2}).close(std::move(desc));
+    }
+
+    // At constructor time all regions are empty, so FIFO queue is [0,1,2,3].
+    // Evict region 0 so the persisted FIFO order is [1, 2, 3].
+    auto evicted = rm->evict();
+    EXPECT_EQ(RegionId{0}, evicted);
+
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: Recover with recoverEvictionPolicy=true
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    rm->recover(*rr);
+
+    // INVARIANT: This test relies on the persisted FIFO order [1, 2, 3]
+    // being distinguishable from what resetEvictionPolicy() would produce.
+    // With recoverEvictionPolicy=false, the queue would be [0, 3, 1, 2]
+    // (empty regions 0,3 first, then non-empty 1,2 in ID order). If a
+    // future change to resetEvictionPolicy() makes it produce [1, 2, 3]
+    // by coincidence, this test will pass even when recovery is broken —
+    // update the setup to maintain the distinguishability.
+    EXPECT_EQ(RegionId{1}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+  }
+}
+
+TEST(RegionManager, EvictionPolicyRecoverDisabledFallsBack) {
+  // Verify that when recoverEvictionPolicy=false (default), recovery falls
+  // back to resetEvictionPolicy() even when policy data is present.
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: Persist with recoverEvictionPolicy=true (writes policy data)
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    // Populate region 2 so it's non-empty
+    rm->getRegion(RegionId{2})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    for (int i = 0; i < 5; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{2}).openAndAllocate(101);
+      rm->getRegion(RegionId{2}).close(std::move(desc));
+    }
+
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: Recover with recoverEvictionPolicy=false (default)
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, false /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    rm->recover(*rr);
+
+    // With flag disabled, resetEvictionPolicy() runs: empty regions first
+    // (0, 1, 3 in ID order), then non-empty (2).
+    EXPECT_EQ(RegionId{0}, rm->evict());
+    EXPECT_EQ(RegionId{1}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+  }
+}
+
+TEST(RegionManager, EvictionPolicyRecoverForwardCompat) {
+  // Verify that new code reading old data (no policy data) gracefully falls
+  // back to resetEvictionPolicy().
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: Persist with recoverEvictionPolicy=false (no policy data written)
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
+
+    // Populate region 1
+    rm->getRegion(RegionId{1})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    for (int i = 0; i < 5; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{1}).openAndAllocate(101);
+      rm->getRegion(RegionId{1}).close(std::move(desc));
+    }
+
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: Recover with recoverEvictionPolicy=true but no policy data exists
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    rm->recover(*rr);
+
+    // No policy data present => falls back to resetEvictionPolicy()
+    // Empty regions first (0, 2, 3), then non-empty (1)
+    EXPECT_EQ(RegionId{0}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+    EXPECT_EQ(RegionId{1}, rm->evict());
+  }
+}
+
+TEST(RegionManager, EvictionPolicyRecoverUnsupportedPolicyFallsBack) {
+  // Verify that when the eviction policy doesn't support persistence
+  // (LruPolicy throws), persist writes no policy data and recover falls back.
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: Persist with LruPolicy (which throws on persist)
+  {
+    auto policy = std::make_unique<LruPolicy>(kNumRegions);
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    // Populate region 0
+    rm->getRegion(RegionId{0})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    for (int i = 0; i < 5; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{0}).openAndAllocate(101);
+      rm->getRegion(RegionId{0}).close(std::move(desc));
+    }
+
+    // Should not throw — persist catches the exception from LruPolicy
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: Recover with LruPolicy — should fall back gracefully
+  {
+    auto policy = std::make_unique<LruPolicy>(kNumRegions);
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    // Should not throw — falls back to resetEvictionPolicy()
+    rm->recover(*rr);
+
+    // LRU without touch behaves like FIFO: empty first (1, 2, 3), then
+    // non-empty (0)
+    EXPECT_EQ(RegionId{1}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+    EXPECT_EQ(RegionId{0}, rm->evict());
+  }
+}
+
+TEST(RegionManager,
+     EvictionPolicyRecoverUnsupportedPolicySegmentedFifoFallsBack) {
+  // Same as the LruPolicy variant but using SegmentedFifoPolicy.
+  // Both persist and recover throw "Not Implemented", so the code should
+  // gracefully fall back to resetEvictionPolicy().
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: Persist with SegmentedFifoPolicy (throws on persist, caught)
+  {
+    auto policy =
+        std::make_unique<SegmentedFifoPolicy>(std::vector<unsigned int>{1, 1});
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 2 /* numPriorities */,
+        kFlushRetryLimit, true /* workerFlushAsync */,
+        false /* allowReadDuringReclaim */, false /* cleanRegionFastPath */,
+        true /* recoverEvictionPolicy */);
+
+    // Populate region 0 (mirror the LRU fallback test)
+    rm->getRegion(RegionId{0})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    for (int i = 0; i < 5; i++) {
+      auto [desc, allocOk, view] =
+          rm->getRegion(RegionId{0}).openAndAllocate(101);
+      rm->getRegion(RegionId{0}).close(std::move(desc));
+    }
+
+    // Should not throw — persist catches the exception from
+    // SegmentedFifoPolicy
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: Recover with SegmentedFifoPolicy — should fall back gracefully
+  {
+    auto policy =
+        std::make_unique<SegmentedFifoPolicy>(std::vector<unsigned int>{1, 1});
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 2 /* numPriorities */,
+        kFlushRetryLimit, true /* workerFlushAsync */,
+        false /* allowReadDuringReclaim */, false /* cleanRegionFastPath */,
+        true /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    // Should not throw — falls back to resetEvictionPolicy()
+    EXPECT_NO_THROW(rm->recover(*rr));
+
+    // SFIFO with all regions at default priority 0: empty regions tracked
+    // first (1, 2, 3), then non-empty (0). All go into the lowest-priority
+    // segment; with {1,1} ratio, no rebalancing moves them up. Same order
+    // as the LruPolicy fallback test.
+    EXPECT_EQ(RegionId{1}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+    EXPECT_EQ(RegionId{0}, rm->evict());
+  }
+}
+
+TEST(RegionManager, EvictionPolicyRecoverRestoresCleanRegions) {
+  // Verifies that regions in cleanRegions_ at persist time are restored to
+  // the pool on recovery (not leaked into the void). Without restoration,
+  // those regions would end up in NEITHER cleanRegions_ NOR the policy
+  // queue, permanently leaking ~cleanRegionsPool worth of capacity per
+  // restart.
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  constexpr uint32_t kCleanRegionsPool = 2;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+
+  // Phase 1: drain 2 regions into cleanRegions_ via reclaim, then persist
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device,
+        kCleanRegionsPool /* numCleanRegions */, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    ENABLE_INJECT_PAUSE_IN_SCOPE();
+    injectPauseSet("pause_reclaim_done");
+
+    // FIFO at construction tracks all regions in ID order: [0, 1, 2, 3].
+    // Reclaim two: cleanRegions_ becomes [0, 1] and policy becomes [2, 3].
+    rm->startReclaim();
+    EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+    rm->startReclaim();
+    EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+
+    // Sanity: cleanRegions_ has 2 entries via the published counter.
+    size_t cleanCount = 0;
+    rm->getCounters({[&](folly::StringPiece name, double count,
+                         CounterVisitor::CounterType) {
+      if (name == "navy_bc_num_clean_regions") {
+        cleanCount = static_cast<size_t>(count);
+      }
+    }});
+    ASSERT_EQ(2u, cleanCount);
+
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  // Phase 2: recover and verify that the previously-clean regions are
+  // restored to cleanRegions_ rather than leaked.
+  {
+    auto policy = std::make_unique<FifoPolicy>();
+    RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+    RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device,
+        kCleanRegionsPool /* numCleanRegions */, 1, 0, std::move(evictCb),
+        std::move(cleanupCb), std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
+        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+
+    auto rr = createMemoryRecordReader(ioq);
+    rm->recover(*rr);
+
+    // Without restoration, cleanRegions_ would be 0 (regions 0, 1 leaked).
+    // With restoration, both should be back in cleanRegions_.
+    size_t cleanCount = 0;
+    rm->getCounters({[&](folly::StringPiece name, double count,
+                         CounterVisitor::CounterType) {
+      if (name == "navy_bc_num_clean_regions") {
+        cleanCount = static_cast<size_t>(count);
+      }
+    }});
+    EXPECT_EQ(2u, cleanCount);
+  }
+}
 } // namespace facebook::cachelib::navy::tests
