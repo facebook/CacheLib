@@ -63,7 +63,7 @@ TEST_F(ChainedHashTest, Chaining) {
   const unsigned int locksPower = 3;
   HashConfig config{bucketsPower, locksPower};
 
-  Container c{std::move(config), typename Node::PtrCompressor()};
+  Container c{config, typename Node::PtrCompressor()};
   std::vector<std::unique_ptr<Node>> nodes;
 
   // try to insert elements far more than the number of buckets.
@@ -111,7 +111,7 @@ TEST_F(ChainedHashTest, InsertOrReplaceDeadlock) {
     return Handle{n};
   };
 
-  Container c{std::move(config), typename Node::PtrCompressor(), failReplace};
+  Container c{config, typename Node::PtrCompressor(), failReplace};
   std::vector<std::unique_ptr<Node>> nodes;
   nodes.reserve(3);
 
@@ -161,7 +161,7 @@ TEST_F(ChainedHashTest, Stats) {
   const unsigned int locksPower = 3;
   HashConfig config{bucketsPower, locksPower};
 
-  Container c{std::move(config), typename Node::PtrCompressor()};
+  Container c{config, typename Node::PtrCompressor()};
   std::vector<std::unique_ptr<Node>> nodes;
 
   // try to insert elements far more than the number of buckets.
@@ -433,6 +433,45 @@ TEST_F(ChainedHashTest, LockGroupIteratorRetriesMovingItem) {
   ASSERT_EQ(expectedKeys, visitedKeys);
   ASSERT_EQ(1u, numMovingRetries);
   ASSERT_EQ(1u, numFindRetries);
+}
+
+TEST_F(ChainedHashTest, LockGroupIteratorStatsSurviveMove) {
+  using Handle = Node::Handle;
+  using TryAcquireResult = Container::TryAcquireResult;
+  using HashConfig = ChainedHashTable::Config;
+
+  HashConfig config{0, 0};
+  Container c{config, typename Node::PtrCompressor()};
+
+  Node movingNode(std::string{"moving"});
+  Node stableNode(std::string{"stable"});
+  ASSERT_TRUE(c.insert(movingNode));
+  ASSERT_TRUE(c.insert(stableNode));
+
+  auto tryHandleMaker =
+      [&movingNode](Node* n) -> std::pair<Handle, TryAcquireResult> {
+    if (!n) {
+      return {Handle{nullptr}, TryAcquireResult::kSkip};
+    }
+    if (n == &movingNode) {
+      return {Handle{nullptr}, TryAcquireResult::kMoving};
+    }
+    n->incRef();
+    return {Handle{n}, TryAcquireResult::kSuccess};
+  };
+
+  auto it = c.beginLockGroup(tryHandleMaker, makeFindByKey(c));
+  const auto statsBeforeMove = it.getStats();
+  ASSERT_EQ(2u, statsBeforeMove.visited);
+  ASSERT_EQ(0u, statsBeforeMove.skipped);
+  ASSERT_EQ(1u, statsBeforeMove.retried);
+
+  auto moved = std::move(it);
+  const auto statsAfterMove = moved.getStats();
+  ASSERT_EQ(statsBeforeMove.visited, statsAfterMove.visited);
+  ASSERT_EQ(statsBeforeMove.skipped, statsAfterMove.skipped);
+  ASSERT_EQ(statsBeforeMove.retried, statsAfterMove.retried);
+  ASSERT_NE(moved, c.endLockGroup());
 }
 
 TEST_F(ChainedHashTest, LockGroupIteratorSkipsTryHandleMakerExceptions) {

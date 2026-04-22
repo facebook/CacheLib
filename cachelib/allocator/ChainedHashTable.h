@@ -639,6 +639,12 @@ class ChainedHashTable {
           std::function<std::pair<Handle, TryAcquireResult>(T*)>;
       using FindByKeyFn = std::function<Handle(folly::StringPiece)>;
 
+      struct ScanStats {
+        uint64_t visited{0}; // total items scanned
+        uint64_t skipped{0}; // items skipped (handle not acquirable)
+        uint64_t retried{0}; // items retried via findByKey
+      };
+
       ~LockGroupIterator() {
         XDCHECK_GT(container_->numIterators_.load(), 0u);
         --container_->numIterators_;
@@ -670,6 +676,9 @@ class ChainedHashTable {
 
       void reset();
 
+      // Accumulated scan statistics since construction or last reset.
+      const ScanStats& getStats() const { return stats_; }
+
      private:
       using C = Container<T, HookPtr, LockT>;
 
@@ -692,6 +701,8 @@ class ChainedHashTable {
       mutable unsigned int cursor_{0};
       // snapshot of handles for all items in the current lock group.
       mutable std::vector<Handle> lockGroupElems_;
+
+      ScanStats stats_;
 
       folly::Optional<util::Throttler> throttler_ = folly::none;
 
@@ -1437,25 +1448,28 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
   {
     auto guard = container_->locks_.lockShared(lockIdx);
     const auto numBuckets = container_->config_.getNumBuckets();
-
     container_->locks_.forEachBucketForLock(
         lockIdx, numBuckets, [this, &elems, &retryKeys](size_t bucket) {
           container_->ht_.forEachBucketElem(
               bucket, [this, &elems, &retryKeys](T* elem) {
+                ++stats_.visited;
                 try {
                   auto [h, tryRes] = tryHandleMaker_(elem);
                   if (tryRes == TryAcquireResult::kSuccess) {
                     elems.emplace_back(std::move(h));
                   } else if (tryRes == TryAcquireResult::kMoving) {
-                    // Can't retry under the lock — findByKey_ may block on the
-                    // move which needs exclusive access to this same lock
-                    // group. Save the key and retry after releasing the lock.
+                    // Can't retry under the lock — findByKey_ may block on
+                    // the move which needs exclusive access to this same
+                    // lock group. Save the key and retry after releasing
+                    // the lock.
                     auto key = elem->getKey();
                     retryKeys.emplace_back(key.data(), key.size());
+                  } else {
+                    ++stats_.skipped;
                   }
-                  // kSkip: handle not acquirable, skip it.
                 } catch (const std::exception&) {
                   // if we are not able to acquire a handle, skip over them.
+                  ++stats_.skipped;
                 }
               });
         });
@@ -1464,6 +1478,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
   // Retry items that were being moved. Now that we don't hold any lock,
   // findByKey_ can safely block waiting for the move to complete.
   for (auto& key : retryKeys) {
+    ++stats_.retried;
     try {
       auto h = findByKey_(folly::StringPiece(key));
       if (h) {
@@ -1574,6 +1589,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
       currLock_{other.currLock_},
       cursor_{other.cursor_},
       lockGroupElems_(std::move(other.lockGroupElems_)),
+      stats_{other.stats_},
       throttler_(std::move(other.throttler_)) {
   ++container_->numIterators_;
 }
@@ -1610,6 +1626,7 @@ void ChainedHashTable::Container<T, HookPtr, LockT>::LockGroupIterator::
     reset() {
   cursor_ = 0;
   currLock_ = 0;
+  stats_ = ScanStats{};
   lockGroupElems_ = getLockGroupElems(currLock_);
   while (lockGroupElems_.empty() &&
          ++currLock_ < container_->config_.getNumLocks()) {
