@@ -555,6 +555,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setRecoverEvictionPolicy(bool enable) noexcept {
+    recoverEvictionPolicy_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
     return *this;
@@ -617,6 +622,8 @@ class BlockCacheConfig {
 
   bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
 
+  bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
+
   bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
 
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
@@ -667,6 +674,9 @@ class BlockCacheConfig {
   // When enabled, getCleanRegion() can skip acquiring the mutex and return
   // Retry immediately if clean regions are empty and reclaims are in-flight.
   bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts.
+  bool recoverEvictionPolicy_{false};
 
   // Whether to use Combined entry block (For index entries and small sized
   // items).

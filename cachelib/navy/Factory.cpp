@@ -135,6 +135,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.cleanRegionFastPath = enable;
   }
 
+  void setRecoverEvictionPolicy(bool enable) override {
+    config_.recoverEvictionPolicy = enable;
+  }
+
   void setUseCombinedEntryBlock(bool useCombinedEntryBlock) override {
     config_.useCombinedEntryBlock = useCombinedEntryBlock;
   }

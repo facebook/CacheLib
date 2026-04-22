@@ -95,6 +95,9 @@ class BlockCacheProto {
   // (Optional) Enable the clean region fast path in getCleanRegion().
   virtual void setCleanRegionFastPath(bool enable) = 0;
 
+  // (Optional) Persist and recover eviction policy ordering across restarts.
+  virtual void setRecoverEvictionPolicy(bool enable) = 0;
+
   // (Optional) Set if the combined entry block is enabled.
   virtual void setUseCombinedEntryBlock(bool useCombinedEntryBlock) = 0;
 
