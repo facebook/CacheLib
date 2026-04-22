@@ -21,6 +21,7 @@ namespace facebook::cachelib::navy {
 static thread_local NavyThread* currentNavyThread_ = nullptr;
 
 NavyThread* getCurrentNavyThread() { return currentNavyThread_; }
+bool isOnNavyThread() { return currentNavyThread_ != nullptr; }
 
 NavyThread::NavyThread(folly::StringPiece name, Options options) {
   th_ = std::make_unique<folly::ScopedEventBaseThread>(name.str());

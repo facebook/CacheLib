@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   using namespace facebook::cachelib;
   using namespace facebook::cachelib::cachebench;
 
-  folly::init(&argc, &argv, true);
+  const folly::Init init(&argc, &argv, true);
   if (!checkArgsValidity()) {
     return 1;
   }
@@ -58,8 +58,8 @@ int main(int argc, char** argv) {
   std::cout << "Binary Trace Generator" << std::endl;
 
   try {
-    auto generator =
-        std::make_unique<KVReplayGenerator>(config.getStressorConfig());
+    auto generator = std::make_unique<KVReplayGenerator>(
+        config.getStressorConfig(/* instanceId */ 0));
   } catch (const std::exception& e) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;

@@ -36,6 +36,7 @@
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
+#include "cachelib/cachebench/util/Sleep.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
 
 namespace facebook {
@@ -170,7 +171,9 @@ class AsyncCacheStressor : public Stressor {
   }
 
   // obtain stats from the cache instance.
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   // obtain aggregated throughput stats for the stress run so far.
   ThroughputStats aggregateThroughputStats() const override {
@@ -418,7 +421,7 @@ class AsyncCacheStressor : public Stressor {
     auto throttleFn = [&] {
       if (needDelay && ++opCounter == opDelayBatch) {
         opCounter = 0;
-        std::this_thread::sleep_for(opDelay);
+        highPrecisionSleep(opDelay);
       }
       // Limit the rate if specified.
       limitRate();

@@ -75,7 +75,8 @@ BigHash::BigHash(Config&& config)
     : BigHash{std::move(config.validate()), ValidConfigTag{}} {}
 
 BigHash::BigHash(Config&& config, ValidConfigTag)
-    : checkExpired_(std::move(config.checkExpired)),
+    : numMutexes_(size_t{1} << config.numMutexesPower),
+      checkExpired_(std::move(config.checkExpired)),
       destructorCb_{[cb = std::move(config.destructorCb)](
                         HashedKey hk, BufferView value, DestructorEvent event) {
         if (cb) {
@@ -87,12 +88,16 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       numBuckets_{config.numBuckets()},
       bloomFilter_{std::move(config.bloomFilter)},
       device_{*config.device},
-      placementHandle_{device_.allocatePlacementHandle()} {
+      placementHandle_{device_.allocatePlacementHandle()},
+      mutex_(numMutexes_),
+      bfLock_(numMutexes_) {
   XLOGF(INFO,
-        "BigHash created: buckets: {}, bucket size: {}, base offset: {}",
+        "BigHash created: buckets: {}, bucket size: {}, base offset: {}, num "
+        "mutexes: {}",
         numBuckets_,
         bucketSize_,
-        cacheBaseOffset_);
+        cacheBaseOffset_,
+        numMutexes_);
   reset();
 }
 
@@ -145,7 +150,7 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
   Bucket* bucket{nullptr};
   Buffer buffer;
   {
-    std::unique_lock<SharedMutex> lock{getMutex(bid)};
+    std::unique_lock lock{getMutex(bid)};
     buffer = readBucket(bid);
     if (buffer.isNull()) {
       ioErrorCount_.inc();
@@ -287,7 +292,11 @@ bool BigHash::recover(RecordReader& rr) {
   return true;
 }
 
-Status BigHash::insert(HashedKey hk, BufferView value) {
+Status BigHash::insert(HashedKey hk,
+                       BufferView value,
+                       uint8_t /* poolId */,
+                       uint32_t /* expiryTime */,
+                       uint32_t /* lastAccessTimeSecs */) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 
@@ -304,7 +313,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   uint32_t newRemainingBytes = 0;
 
   // we copy the items and trigger the destructorCb after bucket lock is
-  // released to avoid possible heavy operations or locks in the destrcutor.
+  // released to avoid possible heavy operations or locks in the destructor.
   std::vector<std::tuple<Buffer, Buffer, DestructorEvent>> removedItems;
   DestructorCallback cb = [&removedItems](HashedKey key, BufferView val,
                                           DestructorEvent event) {
@@ -313,7 +322,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   };
 
   {
-    std::unique_lock<SharedMutex> lock{getMutex(bid)};
+    std::unique_lock lock{getMutex(bid)};
     auto buffer = readBucket(bid);
     if (buffer.isNull()) {
       ioErrorCount_.inc();
@@ -385,7 +394,10 @@ uint64_t BigHash::estimateWriteSize(HashedKey, BufferView) const {
   return bucketSize_;
 }
 
-Status BigHash::lookup(HashedKey hk, Buffer& value) {
+Status BigHash::lookup(HashedKey hk,
+                       Buffer& value,
+                       uint32_t& lastAccessTimeSecs) {
+  lastAccessTimeSecs = 0;
   const auto bid = getBucketId(hk);
   lookupCount_.inc();
 
@@ -401,7 +413,7 @@ Status BigHash::lookup(HashedKey hk, Buffer& value) {
   // bucket. Once the bucket is read, the buffer is local and we can find
   // without holding the lock.
   {
-    std::shared_lock<SharedMutex> lock{getMutex(bid)};
+    std::shared_lock lock{getMutex(bid)};
     if (bfReject(bid, hk.keyHash())) {
       return Status::NotFound;
     }
@@ -438,7 +450,7 @@ Status BigHash::remove(HashedKey hk) {
   uint32_t newRemainingBytes = 0;
 
   // we copy the items and trigger the destructorCb after bucket lock is
-  // released to avoid possible heavy operations or locks in the destrcutor.
+  // released to avoid possible heavy operations or locks in the destructor.
   Buffer valueCopy;
   DestructorCallback cb = [&valueCopy](HashedKey, BufferView value,
                                        DestructorEvent) {
@@ -450,7 +462,7 @@ Status BigHash::remove(HashedKey hk) {
   }
 
   {
-    std::unique_lock<SharedMutex> lock{getMutex(bid)};
+    std::unique_lock lock{getMutex(bid)};
 
     auto buffer = readBucket(bid);
     if (buffer.isNull()) {

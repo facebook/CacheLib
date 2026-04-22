@@ -39,14 +39,14 @@ class DeviceEncryptor {
   virtual uint32_t encryptionBlockSize() const = 0;
 
   // @param value   will be overwritten with encrypted value; value must
-  //                be aligned to the encrytion block size; value must
+  //                be aligned to the encryption block size; value must
   //                must be the same in size before and after encryption
   // @param salt    this must be the same salt used later for decryption
   // @return        true if success, false otherwise
   virtual bool encrypt(folly::MutableByteRange value, uint64_t salt) = 0;
 
   // @param value   will be overwritten with decrypted value; value must
-  //                be aligned to the decrytion block size; value must
+  //                be aligned to the decryption block size; value must
   //                must be the same in size before and after decryption
   // @param salt    this must be the same earlier used for encryption
   // @return        true if success, false otherwise
@@ -249,7 +249,8 @@ class Device {
 std::unique_ptr<Device> createMemoryDevice(
     uint64_t size,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t ioAlignSize = 1);
+    uint32_t ioAlignSize = 1,
+    uint32_t numInitThreads = 8);
 
 // Creates a direct IO file device supporting RAID if multiple files are
 // provided. If qDepth = 0, sync IO will be used all the time

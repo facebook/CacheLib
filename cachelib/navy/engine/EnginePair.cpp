@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/engine/EnginePair.h"
 
+#include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/engine/NoopEngine.h"
 
 namespace facebook::cachelib::navy {
@@ -32,7 +33,7 @@ EnginePair::EnginePair(std::unique_ptr<Engine> smallItemCache,
       name_{std::move(name)} {}
 
 bool EnginePair::isItemLarge(HashedKey key, BufferView value) const {
-  return key.key().size() + value.size() > smallItemMaxSize_;
+  return navy::isItemLarge(key.key().size(), value.size(), smallItemMaxSize_);
 }
 
 std::pair<Engine&, Engine&> EnginePair::select(HashedKey key,
@@ -57,15 +58,19 @@ uint64_t EnginePair::estimateWriteSize(HashedKey hk, BufferView value) const {
   return select(hk, value).first.estimateWriteSize(hk, value);
 }
 
-Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
+Status EnginePair::lookupSync(HashedKey hk,
+                              Buffer& value,
+                              uint32_t& lastAccessTimeSecs) const {
   lookupCount_.inc();
   Status status{Status::NotFound};
   // We do busy wait because we don't expect many retries.
-  while ((status = largeItemCache_->lookup(hk, value)) == Status::Retry) {
+  while ((status = largeItemCache_->lookup(hk, value, lastAccessTimeSecs)) ==
+         Status::Retry) {
     std::this_thread::yield();
   }
   if (status == Status::NotFound) {
-    while ((status = smallItemCache_->lookup(hk, value)) == Status::Retry) {
+    while ((status = smallItemCache_->lookup(hk, value, lastAccessTimeSecs)) ==
+           Status::Retry) {
       std::this_thread::yield();
     }
   }
@@ -75,11 +80,15 @@ Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
 
 Status EnginePair::insertInternal(HashedKey hk,
                                   BufferView value,
-                                  bool& skipInsertion) {
+                                  bool& skipInsertion,
+                                  uint8_t poolId,
+                                  uint32_t expiryTime,
+                                  uint32_t lastAccessTimeSecs) {
   auto selection = select(hk, value);
   Status status = Status::Ok;
   if (!skipInsertion) {
-    status = selection.first.insert(hk, value);
+    status = selection.first.insert(hk, value, poolId, expiryTime,
+                                    lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
@@ -112,11 +121,16 @@ Status EnginePair::insertInternal(HashedKey hk,
 
 void EnginePair::scheduleInsert(HashedKey hk,
                                 BufferView value,
-                                InsertCallback cb) {
+                                InsertCallback cb,
+                                uint8_t poolId,
+                                uint32_t expiryTime,
+                                uint32_t lastAccessTimeSecs) {
   insertCount_.inc();
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, value, skipInsertion = false]() mutable {
-        auto status = insertInternal(hk, value, skipInsertion);
+      [this, cb = std::move(cb), hk, value, skipInsertion = false, poolId,
+       expiryTime, lastAccessTimeSecs]() mutable {
+        auto status = insertInternal(hk, value, skipInsertion, poolId,
+                                     expiryTime, lastAccessTimeSecs);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }
@@ -146,17 +160,18 @@ void EnginePair::updateLookupStats(Status status) const {
 
 Status EnginePair::lookupInternal(HashedKey hk,
                                   Buffer& value,
-                                  bool& skipLargeItemCache) const {
+                                  bool& skipLargeItemCache,
+                                  uint32_t& lastAccessTimeSecs) const {
   Status status{Status::NotFound};
   if (!skipLargeItemCache) {
-    status = largeItemCache_->lookup(hk, value);
+    status = largeItemCache_->lookup(hk, value, lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
     skipLargeItemCache = true;
   }
   if (status == Status::NotFound) {
-    status = smallItemCache_->lookup(hk, value);
+    status = smallItemCache_->lookup(hk, value, lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
@@ -167,14 +182,16 @@ Status EnginePair::lookupInternal(HashedKey hk,
 
 void EnginePair::scheduleLookup(HashedKey hk, LookupCallback cb) {
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, skipLargeItemCache = false]() mutable {
+      [this, cb = std::move(cb), hk, skipLargeItemCache = false,
+       lastAccessTimeSecs = uint32_t{0}]() mutable {
         Buffer value;
-        Status status = lookupInternal(hk, value, skipLargeItemCache);
+        Status status =
+            lookupInternal(hk, value, skipLargeItemCache, lastAccessTimeSecs);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }
         if (cb) {
-          cb(status, hk, std::move(value));
+          cb(status, hk, std::move(value), lastAccessTimeSecs);
         }
 
         return JobExitCode::Done;
@@ -333,6 +350,13 @@ void EnginePair::updateEvictionStats(HashedKey hk,
     largeItemCache_->updateEvictionStats(lifetime);
   } else {
     smallItemCache_->updateEvictionStats(lifetime);
+  }
+}
+
+void EnginePair::setEventTracker(EventTracker* tracker) {
+  // Not setting in BigHash for now since we do not log anything there yet.
+  if (largeItemCache_) {
+    largeItemCache_->setEventTracker(tracker);
   }
 }
 

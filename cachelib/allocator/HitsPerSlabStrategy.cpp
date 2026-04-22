@@ -26,15 +26,15 @@ namespace facebook::cachelib {
 HitsPerSlabStrategy::HitsPerSlabStrategy(Config config)
     : RebalanceStrategy(HitsPerSlab), config_(std::move(config)) {}
 
-// The list of allocation classes to be rebalanced is determined by:
-//
-// 0. Filter out classes that have below minSlabThreshold_
-//
-// 1. Filter out classes that have just gained a slab recently
-//
-// 2. pick victim from the one that has poorest hitsPerSlab
+// Filters candidates by config criteria and returns the class with lowest
+// weighted hits/slab. Returns kInvalidClassId if no valid victim found.
+// - Filter out classes that have fewer than minSlabs slabs.
+// - Filter out classes that recently gained a slab.
+// - Filter out classes with tail age < minLruTailAge.
+// - Filter out classes with tail age < targetEvictionAge.
+// - Prioritize classes with excessive free memory.
+// - Prioritize classes with tail age > maxLruTailAge.
 ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
-                                        const CacheBase& cache,
                                         PoolId pid,
                                         const PoolStats& stats) {
   auto victims = stats.getClassIds();
@@ -44,13 +44,10 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
       filterByNumEvictableSlabs(stats, std::move(victims), config.minSlabs);
 
   // ignore allocation classes that recently gained a slab. These will be
-  // growing in their eviction age and we want to let the evicitons stabilize
-  // before we consider  them again.
+  // growing in their eviction age and we want to let the evictions stabilize
+  // before we consider them again.
   victims = filterVictimsByHoldOff(pid, stats, std::move(victims));
 
-  // we are only concerned about the eviction age and not the projected age.
-  const auto poolEvictionAgeStats =
-      cache.getPoolEvictionAgeStats(pid, /* projectionLength */ 0);
   // filter out alloc classes with less than the minimum tail age
   if (config.minLruTailAge != 0) {
     victims =
@@ -61,6 +58,7 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
     return Slab::kInvalidClassId;
   }
 
+  // do not pick a victim if it is below the target eviction age
   if (config.classIdTargetEvictionAge != nullptr &&
       !config.classIdTargetEvictionAge->empty()) {
     victims = filterVictimsByTargetEvictionAge(
@@ -71,6 +69,7 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
     return Slab::kInvalidClassId;
   }
 
+  // prioritize victims with excessive free memory
   const auto& poolState = getPoolState(pid);
   if (config.enableVictimByFreeMem) {
     auto victimClassId = pickVictimByFreeMem(
@@ -81,7 +80,7 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
     }
   }
 
-  // prioritize victims with max LRU tail age
+  // prioritize victims with tail age > maxLruTailAge
   if (config.maxLruTailAge != 0) {
     auto maxAgeVictims = filter(
         victims,
@@ -106,13 +105,13 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
       });
 }
 
-// The list of allocation classes to be receiver is determined by:
-//
-// 0. Filter out classes that have no evictions
-//
-// 1. Filter out classes that have no slabs
-//
-// 2. pick receiver from the one that has highest hitsPerSlab
+// Filters candidates by config criteria and returns the class with highest
+// weighted hits/slab. Returns kInvalidClassId if no valid receiver found.
+// - Filter out classes that are not evicting.
+// - Filter out classes with 0 slabs.
+// - Filter out classes with tail age > maxLruTailAge.
+// - Filter out classes with tail age > targetEvictionAge.
+// - Prioritize classes with tail age < minLruTailAge.
 ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
                                           PoolId pid,
                                           const PoolStats& stats,
@@ -143,11 +142,27 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
     return Slab::kInvalidClassId;
   }
 
-  // filter out alloc classes above retention target
+  // 1. Prioritize classes below their target age
+  // 2: If all classes tracked in classIdTargetEvictionAge met targets, use
+  // untracked classes only
   if (config.classIdTargetEvictionAge != nullptr &&
       !config.classIdTargetEvictionAge->empty()) {
-    receivers = filterReceiversByTargetEvictionAge(
-        stats, std::move(receivers), *config.classIdTargetEvictionAge.get());
+    auto candidates = filterReceiversByTargetEvictionAge(
+        stats, receivers, *config.classIdTargetEvictionAge.get());
+
+    if (!candidates.empty()) {
+      // Found classes below target age: use ONLY those
+      receivers = std::move(candidates);
+    } else {
+      // All tracked classes met target age: remove them and keep untracked ones
+      receivers = filter(
+          std::move(receivers),
+          [&](ClassId cid) {
+            return config.classIdTargetEvictionAge->find(cid) !=
+                   config.classIdTargetEvictionAge->end();
+          },
+          "receivers in target map that met their goals");
+    }
   }
 
   if (receivers.empty()) {
@@ -179,6 +194,8 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
       });
 }
 
+// Picks victim/receiver and validates the improvement meets thresholds before
+// allowing rebalancing.
 RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
     const CacheBase& cache, PoolId pid, const PoolStats& poolStats) {
   if (!cache.getPool(pid).allSlabsAllocated()) {
@@ -193,7 +210,7 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   const auto config = getConfigCopy();
 
   RebalanceContext ctx;
-  ctx.victimClassId = pickVictim(config, cache, pid, poolStats);
+  ctx.victimClassId = pickVictim(config, pid, poolStats);
   ctx.receiverClassId = pickReceiver(config, pid, poolStats, ctx.victimClassId);
 
   if (ctx.victimClassId == ctx.receiverClassId ||
@@ -229,6 +246,13 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
       improvement < config.diffRatio * static_cast<long double>(
                                            victimProjectedDeltaHitsPerSlab)) {
     XLOG(DBG, " Not enough to trigger slab rebalancing");
+    // Update hits on every attempt if enabled, even when no rebalancing occurs.
+    // This ensures consistent time windows for delta hit calculations.
+    if (config.updateHitsOnEveryAttempt) {
+      for (const auto i : poolStats.getClassIds()) {
+        poolState[i].updateHits(poolStats);
+      }
+    }
     return kNoOpContext;
   }
 
@@ -237,7 +261,7 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   poolState.at(ctx.receiverClassId).startHoldOff();
 
   // update all alloc classes' hits state to current hits so that next time we
-  // only look at the delta hits sicne the last rebalance.
+  // only look at the delta hits since the last rebalance.
   for (const auto i : poolStats.getClassIds()) {
     poolState[i].updateHits(poolStats);
   }
@@ -245,15 +269,16 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   return ctx;
 }
 
-ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& cache,
+// Victim-only selection for pool resizing (when slabs leave the pool entirely).
+ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& /* cache */,
                                             PoolId pid,
                                             const PoolStats& poolStats) {
   const auto config = getConfigCopy();
-  auto victimClassId = pickVictim(config, cache, pid, poolStats);
+  auto victimClassId = pickVictim(config, pid, poolStats);
 
   auto& poolState = getPoolState(pid);
   // update all alloc classes' hits state to current hits so that next time we
-  // only look at the delta hits sicne the last resize.
+  // only look at the delta hits since the last resize.
   for (const auto i : poolStats.getClassIds()) {
     poolState[i].updateHits(poolStats);
   }

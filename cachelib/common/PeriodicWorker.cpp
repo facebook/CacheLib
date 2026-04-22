@@ -40,7 +40,7 @@ PeriodicWorker::~PeriodicWorker() {
     stop(std::chrono::milliseconds(0));
   } catch (const std::exception&) {
   }
-  XDCHECK(workerThread_ == nullptr);
+  XDCHECK(!workerThread_.joinable());
 }
 
 void PeriodicWorker::loop(void) {
@@ -79,17 +79,17 @@ bool PeriodicWorker::start(const std::chrono::milliseconds sleepInterval,
   setInterval(sleepInterval);
 
   LockHolder l(lock_);
-  if (workerThread_) {
+  if (workerThread_.joinable()) {
     return true;
   }
 
   auto runLoop = [this]() { loop(); };
-  workerThread_ = std::make_unique<std::thread>(std::move(runLoop));
+  workerThread_ = std::thread(std::move(runLoop));
 
   /*
    * Set the name of the thread
    */
-  folly::setThreadName(workerThread_->native_handle(), thread_name);
+  folly::setThreadName(workerThread_.native_handle(), thread_name);
 
   return true;
 }
@@ -98,19 +98,20 @@ bool PeriodicWorker::shouldStopWork() const {
   LockHolder l(lock_);
   return shouldStopWork_;
 }
+
 bool PeriodicWorker::stop(const std::chrono::milliseconds timeout) {
   LockHolder l(lock_);
   if (shouldStopWork_) {
     return false;
   }
 
-  if (!workerThread_) {
+  if (!workerThread_.joinable()) {
     return true;
   } else {
     shouldStopWork_ = true;
 
     /* Notify worker to stop processing. We do this holding the lock
-     * instead of an unlock and subsequent lock, we let go off the lock
+     * instead of an unlock and subsequent lock, we let go of the lock
      * soon enough (on cond_wait) if we wait/block. */
     cond_.notify_one();
 
@@ -136,11 +137,11 @@ bool PeriodicWorker::stop(const std::chrono::milliseconds timeout) {
      * terminate before completing stop().  A new worker instance can be
      * spun once we unlock below. */
     auto tmp = std::move(workerThread_);
-    XDCHECK(workerThread_ == nullptr);
+    XDCHECK(!workerThread_.joinable());
     l.unlock();
 
-    if (tmp->joinable()) {
-      tmp->join();
+    if (tmp.joinable()) {
+      tmp.join();
     }
   }
   return true;

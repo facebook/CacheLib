@@ -83,6 +83,7 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
       fnBytesWritten_{std::move(config.fnBytesWritten)},
       lowerBound_{config.probFactorLowerBound},
       upperBound_{config.probFactorUpperBound},
+      enableLogging_{config.enableLogging},
       fnBypass_{std::move(config.fnBypass)},
       rg_{config.seed},
       deterministicKeyHashSuffixLength_{
@@ -102,7 +103,7 @@ bool DynamicRandomAP::accept(HashedKey hk,
   if (curTime - params_.updateTime >= updateInterval_) {
     // Lots of threads can get into this section. First to grab the lock will
     // update. Let proceed the rest.
-    std::unique_lock<SharedMutex> lock{mutex_, std::try_to_lock};
+    std::unique_lock lock{mutex_, std::try_to_lock};
     if (lock.owns_lock()) {
       updateThrottleParamsLocked(curTime);
     }
@@ -154,7 +155,7 @@ void DynamicRandomAP::reset() {
 }
 
 void DynamicRandomAP::update() {
-  std::unique_lock<SharedMutex> lock{mutex_};
+  std::unique_lock lock{mutex_};
   updateThrottleParamsLocked(getSteadyClockSeconds());
 }
 
@@ -187,10 +188,13 @@ void DynamicRandomAP::updateThrottleParamsLocked(std::chrono::seconds curTime) {
   }
 
   if (maxRate_ > 0 && curTargetRate > maxRate_) {
-    XLOGF(INFO,
+    if (enableLogging_) {
+      XLOGF(
+          INFO,
           "max write rate {} will be used because target current write rate {} "
           "exceeds it.",
           maxRate_.load(), curTargetRate);
+    }
     curTargetRate = maxRate_;
   }
   writeStats_.curTargetRate = curTargetRate;
@@ -238,11 +242,13 @@ void DynamicRandomAP::updateThrottleParamsLocked(std::chrono::seconds curTime) {
                             static_cast<double>(trueObservedRate));
   params_.probabilityFactor =
       clampFactor(params_.probabilityFactor * clampFactorChange(rawProbFactor));
-  XLOG_EVERY_MS(INFO, 60000)
-      << "observed current write rate = " << writeStats_.observedCurRate
-      << ", target current rate = " << curTargetRate
-      << " rawProbFactor = " << rawProbFactor
-      << ", probFactor = " << params_.probabilityFactor;
+  if (enableLogging_) {
+    XLOG_EVERY_MS(INFO, 60000)
+        << "observed current write rate = " << writeStats_.observedCurRate
+        << ", target current rate = " << curTargetRate
+        << " rawProbFactor = " << rawProbFactor
+        << ", probFactor = " << params_.probabilityFactor;
+  }
   writeStats_.bytesWrittenLastUpdate = bytesWritten;
 }
 

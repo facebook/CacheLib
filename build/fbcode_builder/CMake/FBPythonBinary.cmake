@@ -158,6 +158,8 @@ function(add_fb_python_executable TARGET)
       # CMake doesn't really seem to like having a directory specified as an
       # output; specify the __main__.py file as the output instead.
       set(zipapp_output_file "${zipapp_output}/__main__.py")
+      # Update output_file to match zipapp_output_file for dir type
+      set(output_file "${zipapp_output_file}")
       list(APPEND
         extra_cmd_params
         COMMAND "${CMAKE_COMMAND}" -E remove_directory "${zipapp_output}"
@@ -235,7 +237,6 @@ function(add_fb_python_unittest TARGET)
   set(multi_value_args SOURCES DEPENDS ENV PROPERTIES)
   set(
     one_value_args
-    WORKING_DIRECTORY BASE_DIR NAMESPACE TEST_LIST DISCOVERY_TIMEOUT
     WORKING_DIRECTORY BASE_DIR NAMESPACE TEST_LIST DISCOVERY_TIMEOUT TYPE
   )
   fb_cmake_parse_args(

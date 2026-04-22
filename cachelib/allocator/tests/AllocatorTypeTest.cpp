@@ -55,6 +55,14 @@ TYPED_TEST(BaseAllocatorTest, ReadWriteHandle) { this->testReadWriteHandle(); }
 // fetch them.
 TYPED_TEST(BaseAllocatorTest, Find) { this->testFind(); }
 
+TYPED_TEST(BaseAllocatorTest, TryAcquireSuccess) {
+  this->testTryAcquireSuccess();
+}
+
+TYPED_TEST(BaseAllocatorTest, TryAcquireMoving) {
+  this->testTryAcquireMoving();
+}
+
 // make some allocations without evictions, remove them and ensure that they
 // cannot be accessed through find.
 TYPED_TEST(BaseAllocatorTest, Remove) { this->testRemove(); }
@@ -139,6 +147,10 @@ TYPED_TEST(BaseAllocatorTest, IterateAndRemoveWithKey) {
 
 TYPED_TEST(BaseAllocatorTest, IterateAndRemoveWithIter) {
   this->testIterateAndRemoveWithIter();
+}
+
+TYPED_TEST(BaseAllocatorTest, IterateLockGroup) {
+  this->testIterateLockGroup();
 }
 
 TYPED_TEST(BaseAllocatorTest, IterateWithEvictions) {
@@ -242,6 +254,10 @@ TYPED_TEST(BaseAllocatorTest, BasicFreeMemStrategy) {
 }
 
 TYPED_TEST(BaseAllocatorTest, AllocSizes) { this->testAllocSizes(); }
+
+TYPED_TEST(BaseAllocatorTest, GenAllocClassesTuned) {
+  this->testGenAllocClassesTuned();
+}
 
 TYPED_TEST(BaseAllocatorTest, CacheCreationTime) {
   this->testCacheCreationTime();
@@ -407,6 +423,14 @@ TYPED_TEST(BaseAllocatorTest, SlabReleaseStuck) {
   this->testSlabReleaseStuck();
 }
 
+TYPED_TEST(BaseAllocatorTest, SlabReleaseTimeout) {
+  this->testSlabReleaseTimeout();
+}
+
+TYPED_TEST(BaseAllocatorTest, SlabReleaseTimeoutZero) {
+  this->testSlabReleaseTimeoutZero();
+}
+
 TYPED_TEST(BaseAllocatorTest, RateMap) { this->testRateMap(); }
 
 TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {
@@ -423,11 +447,52 @@ TYPED_TEST(BaseAllocatorTest, ManualRebalanceStrategy) {
   this->testManualRebalanceStrategy();
 }
 
+// Test that when aggregate pool stats is disabled, individual pool stats are
+// reported separately
+TYPED_TEST(BaseAllocatorTest, NonAggregatePoolStats) {
+  this->testNonAggregatePoolStats();
+}
+
+// Test that aggregated pool stats values are correctly calculated as the sum of
+// individual pool stats
+TYPED_TEST(BaseAllocatorTest, AggregatePoolStatsValues) {
+  this->testAggregatePoolStatsValues();
+}
+
+// Test that pool stats are correctly aggregated when pools have different
+// allocation classes
+TYPED_TEST(BaseAllocatorTest, AggregatePoolStatsDiffAC) {
+  this->testAggregatePoolStatsDiffAC();
+}
+
+// Test that eviction age related stats are aggregated correctly
+TYPED_TEST(BaseAllocatorTest, EvictionAgeAggregation) {
+  this->testEvictionAgeAggregation();
+}
+
+// Test that pool aggregation fails gracefully when there are too many distinct
+// allocation classes and falls back to individual pool stats
+TYPED_TEST(BaseAllocatorTest, PoolAggregationWithMaxClasses) {
+  this->testPoolAggregationWithMaxClasses();
+}
+
+// Test that pool aggregation falls back to individual pool stats when only a
+// single pool is present
+TYPED_TEST(BaseAllocatorTest, PoolAggregationWithOnePool) {
+  this->testAggregatePoolStatsSinglePool();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;
 using Lru2QAllocatorTest = BaseAllocatorTest<Lru2QAllocator>;
 using TinyLFUAllocatorTest = BaseAllocatorTest<TinyLFUAllocator>;
+
+// Reproducing issue where using 128 allocation classes with tail hits
+// tracking enabled would throw when adding a pool
+TEST_F(Lru2QAllocatorTest, MaxAllocSizesWithTailHitsTracking) {
+  testMaxAllocSizesWithTailHitsTracking();
+}
 
 // test all the error scenarios with respect to allocating a new key where it
 // is not accessible right away.
@@ -541,7 +606,7 @@ TEST_F(TinyLFUAllocatorTest, ScanResistance) {
 
   // Use close to 4MB alloc size so one item is one slab. This cache
   // can only cache 3 items at maximum.
-  const std::set<uint32_t> allocSizes = {4 * 1024 * 1024 - 100};
+  const std::set<uint32_t> allocSizes = {Slab::kSize - 100};
 
   // Set 30% of the cache for the tiny queue. This means out of 3 items
   // cached, 1 will be in tiny and 2 will be in main cache.

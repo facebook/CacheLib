@@ -21,6 +21,7 @@
 #include <folly/Range.h>
 
 #include <cstdint>
+#include <fstream>
 #include <mutex>
 
 #include "cachelib/cachebench/util/Request.h"
@@ -335,13 +336,32 @@ class PieceWiseCacheAdapter {
   // content
   // @param numAggregationFields: # of aggregation fields in trace sample
   // @param statsPerAggField: list of values we track for each aggregation field
+  // @param missTraceFile: output file path for miss traces (empty =
+  // disabled)
   explicit PieceWiseCacheAdapter(
       uint64_t maxCachePieces,
       uint32_t numAggregationFields,
       const std::unordered_map<uint32_t, std::vector<std::string>>&
-          statsPerAggField)
+          statsPerAggField,
+      const std::string& missTraceFile = "")
       : stats_(numAggregationFields, statsPerAggField),
-        maxCachePieces_(maxCachePieces) {}
+        maxCachePieces_(maxCachePieces) {
+    if (!missTraceFile.empty()) {
+      missTraceFile_.open(missTraceFile, std::ios::out);
+      if (!missTraceFile_.is_open()) {
+        XLOG(ERR) << "Failed to open miss trace file: " << missTraceFile
+                  << " (check file path and permissions)";
+      } else {
+        writeMissTraceHeader();
+      }
+    }
+  }
+
+  ~PieceWiseCacheAdapter() {
+    if (missTraceFile_.is_open()) {
+      missTraceFile_.close();
+    }
+  }
 
   // Record corresponding stats for a new request.
   void recordNewReq(PieceWiseReqWrapper& rw);
@@ -372,9 +392,21 @@ class PieceWiseCacheAdapter {
   // @return true if all ops for the request are done.
   bool updateNonPieceProcessing(PieceWiseReqWrapper& rw, OpResultType result);
 
+  // Write CSV header for miss trace file
+  void writeMissTraceHeader();
+
+  // Write a single miss event to the trace file
+  void writeMissToTrace(const PieceWiseReqWrapper& rw);
+
   PieceWiseCacheStats stats_;
 
   const uint64_t maxCachePieces_;
+
+  // Miss trace output file
+  std::ofstream missTraceFile_;
+
+  // Mutex to protect miss trace file writes (multi-threaded)
+  std::mutex missTraceMutex_;
 };
 
 } // namespace cachebench

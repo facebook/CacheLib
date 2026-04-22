@@ -222,7 +222,7 @@ void callMallctl() {
 using namespace facebook::cachelib;
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   printMsg("Benchmark various small operations");
   randomGenCost();

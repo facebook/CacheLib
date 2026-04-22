@@ -60,12 +60,12 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   static_assert(
       NumBits<Value>::value == kNumFlags + kNumAdminRefBits + kNumAccessRefBits,
       "Value must be exactly the number of all the bits added together.");
-  static constexpr Value kAccessRefMask = std::numeric_limits<Value>::max() >>
-                                          (NumBits<Value>::value -
-                                           kNumAccessRefBits);
-  static constexpr Value kRefMask = std::numeric_limits<Value>::max() >>
-                                    (NumBits<Value>::value - kNumAdminRefBits -
-                                     kNumAccessRefBits);
+  static constexpr Value kAccessRefMask =
+      std::numeric_limits<Value>::max() >>
+      (NumBits<Value>::value - kNumAccessRefBits);
+  static constexpr Value kRefMask =
+      std::numeric_limits<Value>::max() >>
+      (NumBits<Value>::value - kNumAdminRefBits - kNumAccessRefBits);
 
   /**
    * Access reference counts indicate wthere there are an outstanding
@@ -115,6 +115,10 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // A deprecated and noop flag that was used to mark whether the item is
     // unevictable in the past.
     kUnevictable_NOOP,
+
+    // Item was routed to BlockCache (large item) in NVM.
+    // Set during NVM promotion when the exact NVM buffer size is known.
+    kNvmLargeItem,
 
     // Unused. This is just to indciate the maximum number of flags
     kFlagMax,
@@ -421,6 +425,13 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   void markNvmEvicted() noexcept { return setFlag<kNvmEvicted>(); }
   void unmarkNvmEvicted() noexcept { return unSetFlag<kNvmEvicted>(); }
   bool isNvmEvicted() const noexcept { return isFlagSet<kNvmEvicted>(); }
+
+  /**
+   * Track whether the item was routed to BlockCache (large item) in NVM.
+   * Set during NVM promotion when the exact NVM buffer size is known.
+   */
+  void markNvmLargeItem() noexcept { return setFlag<kNvmLargeItem>(); }
+  bool isNvmLargeItem() const noexcept { return isFlagSet<kNvmLargeItem>(); }
 
   // Whether or not an item is completely drained of access
   // Refcount is 0 and the item is not linked, accessible, nor exclusive

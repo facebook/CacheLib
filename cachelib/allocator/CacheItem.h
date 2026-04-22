@@ -49,6 +49,10 @@ class MapTest;
 class CacheAllocatorTestWrapper;
 } // namespace tests
 
+namespace interface {
+class RAMCacheItem;
+} // namespace interface
+
 // forward declaration
 template <typename CacheTrait>
 class CacheAllocator;
@@ -166,6 +170,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Fetch the key corresponding to the allocation
   const Key getKey() const noexcept;
 
+  // Same as above but safe to call for unallocated data.  User must specify an
+  // allocation size.
+  const Key getKeySized(uint32_t allocSize) const noexcept;
+
   // Readonly memory for this allocation.
   const void* getMemory() const noexcept;
 
@@ -243,6 +251,13 @@ class CACHELIB_PACKED_ATTR CacheItem {
   void markNvmEvicted() noexcept;
   void unmarkNvmEvicted() noexcept;
   bool isNvmEvicted() const noexcept;
+
+  /**
+   * Track whether the item was routed to BlockCache (large item) in NVM.
+   * Set during NVM promotion when the exact NVM buffer size is known.
+   */
+  void markNvmLargeItem() noexcept;
+  bool isNvmLargeItem() const noexcept;
 
   /**
    * Function to set the timestamp for when to expire an item
@@ -458,6 +473,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   template <typename K, typename V, typename C>
   friend class Map;
 
+  // interface
+  friend class interface::RAMCacheItem;
+
   // tests
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
@@ -636,6 +654,12 @@ const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
 }
 
 template <typename CacheTrait>
+const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKeySized(
+    uint32_t allocSize) const noexcept {
+  return alloc_.getKeySized(allocSize);
+}
+
+template <typename CacheTrait>
 const void* CacheItem<CacheTrait>::getMemory() const noexcept {
   return getMemoryInternal();
 }
@@ -683,21 +707,7 @@ uint32_t CacheItem<CacheTrait>::getExpiryTime() const noexcept {
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isExpired() const noexcept {
-  thread_local uint32_t staleTime = 0;
-
-  if (expiryTime_ == 0) {
-    return false;
-  }
-
-  if (expiryTime_ < staleTime) {
-    return true;
-  }
-
-  uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
-  if (currentTime != staleTime) {
-    staleTime = currentTime;
-  }
-  return expiryTime_ < currentTime;
+  return util::isExpired(expiryTime_);
 }
 
 template <typename CacheTrait>
@@ -732,13 +742,14 @@ std::string CacheItem<CacheTrait>::toString() const {
         "isInMMContainer={}:isAccessible={}:isMarkedForEviction={}:"
         "isMoving={}:references={}:ctime="
         "{}:"
-        "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:hasChainedItem="
+        "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:"
+        "isNvmLargeItem={}:hasChainedItem="
         "{}",
         this, getRefCountAndFlagsRaw(), getSize(),
         folly::humanify(getKey().str()), folly::hexlify(getKey()),
         isInMMContainer(), isAccessible(), isMarkedForEviction(), isMoving(),
         getRefCount(), getCreationTime(), getExpiryTime(), getLastAccessTime(),
-        isNvmClean(), isNvmEvicted(), hasChainedItem());
+        isNvmClean(), isNvmEvicted(), isNvmLargeItem(), hasChainedItem());
   }
 }
 
@@ -861,6 +872,16 @@ void CacheItem<CacheTrait>::unmarkNvmEvicted() noexcept {
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isNvmEvicted() const noexcept {
   return ref_.isNvmEvicted();
+}
+
+template <typename CacheTrait>
+void CacheItem<CacheTrait>::markNvmLargeItem() noexcept {
+  ref_.markNvmLargeItem();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isNvmLargeItem() const noexcept {
+  return ref_.isNvmLargeItem();
 }
 
 template <typename CacheTrait>

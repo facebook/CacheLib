@@ -56,12 +56,12 @@ TEST(ApproxSplitSet, Reset) {
   ApproxSplitSet s{6, 2};
   std::vector<std::string> keys;
   auto printKeys = [&]() {
-    std::string s = "\"";
+    std::string result = "\"";
     for (const auto& key : keys) {
-      s += std::string{(const char*)key.data(), key.size()};
-      s += ", \"";
+      result += std::string{(const char*)key.data(), key.size()};
+      result += ", \"";
     }
-    return s;
+    return result;
   };
 
   for (int i = 0; i < 6; i++) {

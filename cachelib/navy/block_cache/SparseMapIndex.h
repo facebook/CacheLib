@@ -29,6 +29,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -84,11 +85,12 @@ class SparseMapIndex : public Index {
   // Writes index to a Thrift object one bucket map at a time and passes each
   // bucket map to @persistCb. The reason for this is because the index can be
   // very large and serializing everything at once uses a lot of RAM.
-  void persist(RecordWriter& rw) const override;
+  void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const override;
 
   // Resets index then inserts entries read from @deserializer. Throws
   // std::exception on failure.
-  void recover(RecordReader& rr) override;
+  void recover(std::optional<std::reference_wrapper<RecordReader>> rr) override;
 
   // Gets value and update tracking counters
   LookupResult lookup(uint64_t key) override;
@@ -103,6 +105,10 @@ class SparseMapIndex : public Index {
   LookupResult insert(uint64_t key,
                       uint32_t address,
                       uint16_t sizeHint) override;
+  // Same as above but fails if the key is already inserted in the index
+  LookupResult insertIfNotExists(uint64_t key,
+                                 uint32_t address,
+                                 uint16_t sizeHint) override;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
@@ -139,6 +145,25 @@ class SparseMapIndex : public Index {
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
+  // SparseMapIndex doesn't support combined entry block
+  bool isActiveCombinedEntryBucketLocked(uint64_t bid) const override {
+    XLOGF(
+        WARN,
+        "isActiveCombinedEntryBucketLocked() is called for bid {} but Combined "
+        "entry block is not supported by SparseMapIndex",
+        bid);
+    return false;
+  }
+
+  // SparseMapIndex doesn't support combined entry block
+  void updateCombinedEntryBucketLocked(uint64_t bid,
+                                       uint32_t address) override {
+    XLOGF(WARN,
+          "updateCombinedEntryBucketLocked() is called for bid {} with address "
+          "{}, but Combined entry block is not supported by SparseMapIndex",
+          bid, address);
+  }
+
  private:
   // Configuration related variables
   const uint32_t numBucketMaps_{64 * 1024};
@@ -162,12 +187,12 @@ class SparseMapIndex : public Index {
 
   uint32_t subkey(uint64_t hash) const { return hash & 0xffffffffu; }
 
-  SharedMutex& getMutexOfBucketMap(uint32_t bucketMap) const {
+  auto& getMutexOfBucketMap(uint32_t bucketMap) const {
     XDCHECK(folly::isPowTwo(totalMutexes_));
     return mutex_[bucketMap & (totalMutexes_ - 1)];
   }
 
-  SharedMutex& getMutex(uint64_t hash) const {
+  auto& getMutex(uint64_t hash) const {
     auto b = bucketMap(hash);
     return getMutexOfBucketMap(b);
   }
@@ -181,7 +206,9 @@ class SparseMapIndex : public Index {
 
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
-  std::unique_ptr<SharedMutex[]> mutex_;
+  using SharedMutexType =
+      trace::Profiled<SharedMutex, "cachelib:navy:bc_sparse_index">;
+  std::unique_ptr<SharedMutexType[]> mutex_;
   std::unique_ptr<Map[]> bucketMaps_;
 
   mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};

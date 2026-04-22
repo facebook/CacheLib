@@ -240,7 +240,7 @@ class ApproxSplitSet {
 
   void addNewSplit() {
     if (splits_.size() < numSplits_) {
-      splits_.push_back(Split{kProbeLimit});
+      splits_.emplace_back(kProbeLimit);
     } else {
       DCHECK(!splits_.empty());
       auto s = std::move(splits_.front());

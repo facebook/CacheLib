@@ -37,6 +37,8 @@ namespace navy {
 // to CacheProto::setBlockCache.
 class BlockCacheProto {
  public:
+  using EventTracker = EventInterface<KAllocation::Key>;
+
   virtual ~BlockCacheProto() = default;
 
   // Set cache layout. Cache will start at @baseOffset and will be @size bytes
@@ -90,12 +92,25 @@ class BlockCacheProto {
   // (Optional) Set if the region manager worker flush should be async.
   virtual void setRegionManagerFlushAsync(bool flushAsync) = 0;
 
+  // (Optional) Enable the clean region fast path in getCleanRegion().
+  virtual void setCleanRegionFastPath(bool enable) = 0;
+
+  // (Optional) Persist and recover eviction policy ordering across restarts.
+  virtual void setRecoverEvictionPolicy(bool enable) = 0;
+
+  // (Optional) Set if the combined entry block is enabled.
+  virtual void setUseCombinedEntryBlock(bool useCombinedEntryBlock) = 0;
+
   // Set number of allocators per priority.
   virtual void setNumAllocatorsPerPriority(
       std::vector<uint32_t> numAllocatorsPerPriority) = 0;
 
   // (Optional) Set Index related config.
   virtual void setIndexConfig(const BlockCacheIndexConfig& config) = 0;
+
+  virtual void setLegacyEventTracker(
+      const std::optional<std::reference_wrapper<LegacyEventTracker>>&
+          legacyEventTracker) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)
@@ -116,6 +131,10 @@ class BigHashProto {
   // bit array of @hashTableBitSize bits.
   virtual void setBloomFilter(uint32_t numHashes,
                               uint32_t hashTableBitSize) = 0;
+
+  // (Optional) Set number of mutexes for bucket locking as power of 2.
+  // numMutexes = 1 << numMutexesPower. Default: 14 (16K mutexes)
+  virtual void setNumMutexesPower(uint8_t numMutexesPower) = 0;
 };
 
 class EnginePairProto {
@@ -155,8 +174,14 @@ class CacheProto {
   // Sets device that engine will use.
   virtual void setDevice(std::unique_ptr<Device> device) = 0;
 
+  // Sets Persistence Params for navy
+  virtual void setPersistParams(const NavyPersistParams& persistParams) = 0;
+
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
+
+  // Sets maximum key size.
+  virtual void setMaxKeySize(uint32_t keySize) = 0;
 
   // Set JobScheduler for async function calls.
   virtual void setJobScheduler(std::unique_ptr<JobScheduler> ex) = 0;

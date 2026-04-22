@@ -245,6 +245,14 @@ struct PoolStats {
   //
   // throws when the operation is not compatible.
   PoolStats& operator+=(const PoolStats& other);
+
+  // Check if the given pool stats can be aggregated without exceeding
+  // the maximum number of allocation classes
+  static bool canAggregate(const PoolStats& lhs, const PoolStats& rhs);
+
+ private:
+  // aggregate eviction age statistics by merging the underlying data
+  void aggregateEvictionAgeStats(const PoolStats& other);
 };
 
 // Stats for slab release events
@@ -261,6 +269,7 @@ struct SlabReleaseStats {
   uint64_t numEvictionAttempts;
   uint64_t numEvictionSuccesses;
   uint64_t numSlabReleaseStuck;
+  uint64_t numAbortedSlabReleases;
 };
 
 // Stats for reaper
@@ -449,7 +458,7 @@ struct GlobalCacheStats {
 
   // attempts made from nvm cache to allocate an item for its destructor
   uint64_t numNvmAllocForItemDestructor{0};
-  // heap allocate errors for item destrutor
+  // heap allocate errors for item destructor
   uint64_t numNvmItemDestructorAllocErrors{0};
 
   // size of itemRemoved_ hash set in nvm
@@ -487,6 +496,12 @@ struct GlobalCacheStats {
   // allocated with a parent handle that it's chained to)
   uint64_t numChainedParentItems{0};
 
+  // Number of insertOrReplace calls that resulted in insert
+  uint64_t numInsertOrReplaceInserted{0};
+
+  // Number of insertOrReplace calls that resulted in replace
+  uint64_t numInsertOrReplaceReplaced{0};
+
   // number of eviction failures
   uint64_t numEvictionFailureFromAccessContainer{0};
   uint64_t numEvictionFailureFromConcurrentFill{0};
@@ -503,6 +518,8 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmLookupLatencyNs{};
   util::PercentileStats::Estimates nvmInsertLatencyNs{};
   util::PercentileStats::Estimates nvmRemoveLatencyNs{};
+  util::PercentileStats::Estimates nvmMakeBlobCbLatencyNs{};
+  util::PercentileStats::Estimates nvmMakeObjCbLatencyNs{};
   util::PercentileStats::Estimates ramEvictionAgeSecs{};
   util::PercentileStats::Estimates ramItemLifeTimeSecs{};
   util::PercentileStats::Estimates nvmSmallLifetimeSecs{};
@@ -510,6 +527,7 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmEvictionSecondsPastExpiry{};
   util::PercentileStats::Estimates nvmEvictionSecondsToExpiry{};
   util::PercentileStats::Estimates nvmPutSize{};
+  util::PercentileStats::Estimates nvmHitTTASecs{};
 
   // time when CacheAllocator structure is created. Whenever a process restarts
   // and even if cache content is persisted, this will be reset. It's similar
@@ -697,7 +715,7 @@ enum PoolWorkerType {
 
 /* Slab release event data */
 struct SlabReleaseData {
-  // Time when release occured.
+  // Time when release occurred.
   std::chrono::system_clock::time_point timeOfRelease;
   // The class where the slab was released from.
   ClassId from;

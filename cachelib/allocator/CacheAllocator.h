@@ -73,6 +73,7 @@
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/allocator/nvmcache/NvmCache.h"
 #include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Mutex.h"
@@ -150,6 +151,10 @@ class CacheAllocatorTestWrapper;
 class PersistenceCache;
 } // namespace tests
 
+namespace interface {
+class RAMCacheComponent;
+} // namespace interface
+
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
 // takes two templated types that control how the allocation is
 // maintained(MMType aka MemoryManagementType) and accessed(AccessType). The
@@ -221,7 +226,7 @@ class CacheAllocator : public CacheBase {
   using Key = typename Item::Key;
   using PoolIds = std::set<PoolId>;
 
-  using EventTracker = EventInterface<Key>;
+  using LegacyEventTracker = facebook::cachelib::LegacyEventTracker;
 
   // SampleItem is a wrapper for the CacheItem which is provided as the sample
   // for uploading to Scuba (see ItemStatsExporter). It is guaranteed that the
@@ -261,6 +266,16 @@ class CacheAllocator : public CacheBase {
     folly::IOBuf iobuf_;
     AllocInfo allocInfo_{};
     bool fromNvm_ = false;
+  };
+
+  // A struct holding optional event details
+  struct EventRecordParams {
+    folly::Optional<size_t> size{folly::none};       // Size of the item's value
+    folly::Optional<uint32_t> ttlSecs{folly::none};  // Time-to-live in seconds
+    folly::Optional<time_t> expiryTime{folly::none}; // Absolute expiry
+                                                     // timestamp
+    folly::Optional<uint32_t> allocSize{folly::none}; // Actual allocated size
+    folly::Optional<PoolId> poolId{folly::none};      // Memory pool identifier
   };
 
   // holds information about removal, used in RemoveCb
@@ -447,7 +462,7 @@ class CacheAllocator : public CacheBase {
   // @throw std::invalid_argument if parent is nullptr
   void addChainedItem(WriteHandle& parent, WriteHandle child);
 
-  // Pop the first chained item assocaited with this parent and unmark this
+  // Pop the first chained item associated with this parent and unmark this
   // parent handle as having chained allocations.
   // The parent handle is not reset (to become a null handle) so that the caller
   // can continue using it as before calling this api.
@@ -597,7 +612,7 @@ class CacheAllocator : public CacheBase {
 
   // Returns the storage medium if a key is potentially in cache. There is a
   // non-zero chance the key does not exist in cache (e.g. hash collision in
-  // NvmCache) even if a stoage medium is returned. This check is meant to be
+  // NvmCache) even if a storage medium is returned. This check is meant to be
   // synchronous and fast as we only check DRAM cache and in-memory index for
   // NvmCache. Similar to peek, this does not indicate to cachelib you have
   // looked up an item (i.e. no stats bump, no eviction queue promotion, etc.)
@@ -636,6 +651,34 @@ class CacheAllocator : public CacheBase {
   }
 
   AccessIterator end() { return accessContainer_->end(); }
+
+  // Alternative iterator that batches by hash table lock group instead of
+  // per-bucket.
+  //
+  // Differences from AccessIterator:
+  //   - Fewer lock acquisitions: O(numLocks) vs O(numBuckets).
+  //   - Larger pinning window: each lock group covers numBuckets/numLocks
+  //     buckets. All items across those buckets are snapshotted as Handles
+  //     at once, blocking eviction until the caller advances past them.
+  //     AccessIterator snapshots one bucket at a time.
+  using LockGroupAccessIterator = typename AccessContainer::LockGroupIterator;
+
+  LockGroupAccessIterator beginLockGroup() {
+    return accessContainer_->beginLockGroup(
+        [this](Item* it) { return tryAcquire(it); },
+        [this](Key key) -> WriteHandle { return findInternal(key); });
+  }
+
+  LockGroupAccessIterator beginLockGroup(util::Throttler::Config config) {
+    return accessContainer_->beginLockGroup(
+        [this](Item* it) { return tryAcquire(it); },
+        [this](Key key) -> WriteHandle { return findInternal(key); },
+        config);
+  }
+
+  LockGroupAccessIterator endLockGroup() {
+    return accessContainer_->endLockGroup();
+  }
 
   enum class RemoveRes : uint8_t {
     kSuccess,
@@ -707,6 +750,13 @@ class CacheAllocator : public CacheBase {
   WritableChainedAllocs viewAsWritableChainedAllocs(const WriteHandle& parent) {
     return viewAsChainedAllocsT<WriteHandle, WritableChainedItemIter>(parent);
   }
+
+  // Return whether a key is valid.  The length of the key needs to be in (0,
+  // kKeyMaxLenSmall) or (0, kKeyMaxLen) for large keys to be valid.
+  bool isKeyValid(Key key) const;
+
+  // Throw if the key is invalid.
+  void throwIfKeyInvalid(Key key) const;
 
   // Returns the full usable size for this item
   // This can be bigger than item.getSize()
@@ -1030,46 +1080,7 @@ class CacheAllocator : public CacheBase {
                              std::chrono::seconds ccacheInterval,
                              std::shared_ptr<PoolOptimizeStrategy> strategy,
                              unsigned int ccacheStepSizePercent);
-  // start memory monitor
-  // @param memMonitorMode                  memory monitor mode
-  // @param interval                        the period this worker fires
-  // @param memAdvisePercentPerIter         Percentage of
-  //                                        upperLimitGB-lowerLimitGB to be
-  //                                        advised every poll period. This
-  //                                        governs the rate of advise
-  // @param memReclaimPercentPerIter        Percentage of
-  //                                        upperLimitGB-lowerLimitGB to be
-  //                                        reclaimed every poll period. This
-  //                                        governs the rate of reclaim
-  // @param memLowerLimit                   The lower limit of resident memory
-  //                                        in GBytes
-  //                                        that triggers reclaiming of
-  //                                        previously advised away of memory
-  //                                        from cache
-  // @param memUpperLimit                   The upper limit of resident memory
-  //                                         in GBytes
-  //                                        that triggers advising of memory
-  //                                        from cache
-  // @param memMaxAdvisePercent             Maximum percentage of item cache
-  //                                        limit that
-  //                                        can be advised away before advising
-  //                                        is disabled leading to a probable
-  //                                        OOM.
-  // @param strategy                        strategy to find an allocation class
-  //                                        to release slab from
-  // @param reclaimRateLimitWindowSecs      specifies window in seconds over
-  //                                        which free/resident memory values
-  //                                        are tracked to determine rate of
-  //                                        change to rate limit reclaim
-  bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
-                          std::chrono::milliseconds interval,
-                          unsigned int memAdvisePercentPerIter,
-                          unsigned int memReclaimPercentPerIter,
-                          unsigned int memLowerLimitGB,
-                          unsigned int memUpperLimitGB,
-                          unsigned int memMaxAdvisePercent,
-                          std::shared_ptr<RebalanceStrategy> strategy,
-                          std::chrono::seconds reclaimRateLimitWindowSecs);
+
   // start memory monitor
   // @param interval                        the period this worker fires
   // @param config                          memory monitoring config
@@ -1152,14 +1163,11 @@ class CacheAllocator : public CacheBase {
   }
 
   // calculate the number of slabs to be advised/reclaimed in each pool
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override final {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise) override final {
     auto regularPoolIds = getRegularPoolIds();
-    return allocator_->calcNumSlabsToAdviseReclaim(regularPoolIds);
-  }
-
-  // update number of slabs to advise in the cache
-  void updateNumSlabsToAdvise(int32_t numSlabsToAdvise) override final {
-    allocator_->updateNumSlabsToAdvise(numSlabsToAdvise);
+    return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise,
+                                                   regularPoolIds);
   }
 
   // returns a valid PoolId corresponding to the name or kInvalidPoolId if the
@@ -1173,6 +1181,16 @@ class CacheAllocator : public CacheBase {
 
   // get stats related to all kinds of slab release events.
   SlabReleaseStats getSlabReleaseStats() const noexcept override final;
+
+  // Increment the number of aborted slab releases stat
+  void incrementAbortedSlabReleases() override final {
+    stats_.numAbortedSlabReleases.inc();
+  }
+
+  // Check if shutdown is in progress
+  bool isShutdownInProgress() const override final {
+    return shutDownInProgress_.load();
+  }
 
   // return the distribution of the keys in the cache. This is expensive to
   // compute at times even with caching. So use with caution.
@@ -1244,13 +1262,37 @@ class CacheAllocator : public CacheBase {
   util::StatsMap getNvmCacheStatsMap() const override final;
 
   // return the event tracker stats map
-  std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  std::unordered_map<std::string, uint64_t> getLegacyEventTrackerStatsMap()
       const override {
-    std::unordered_map<std::string, uint64_t> eventTrackerStats;
-    if (auto eventTracker = getEventTracker()) {
+    std::unordered_map<std::string, uint64_t> legacyEventTrackerStats;
+    if (auto legacyEventTracker = getLegacyEventTracker()) {
+      legacyEventTracker->getStats(legacyEventTrackerStats);
+    }
+    return legacyEventTrackerStats;
+  }
+
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
+      const override {
+    folly::F14FastMap<std::string, uint64_t> eventTrackerStats;
+    if (auto* eventTracker = getEventTracker()) {
       eventTracker->getStats(eventTrackerStats);
     }
     return eventTrackerStats;
+  }
+
+  // Set the event tracker for the cache allocator.
+  // This overrides the base class method to also propagate the event tracker
+  // to the NVM cache if it is enabled.
+  void setEventTracker(EventTracker::Config&& config) override {
+    // Call the base class method to set the event tracker
+    CacheBase::setEventTracker(std::move(config));
+
+    // If NVM cache is enabled, also set the event tracker there
+    if (nvmCache_ && nvmCache_->isEnabled()) {
+      if (auto* et = getEventTracker()) {
+        nvmCache_->setEventTracker(et);
+      }
+    }
   }
 
   // Whether this cache allocator was created on shared memory.
@@ -1432,6 +1474,13 @@ class CacheAllocator : public CacheBase {
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
   WriteHandle acquire(Item* it);
+
+  using TryAcquireResult = typename AccessContainer::TryAcquireResult;
+
+  // Non-blocking variant of acquire. Returns a handle and a TryAcquireResult
+  // indicating success, eviction, or moving.
+  // Safe to call while holding hash table bucket locks.
+  std::pair<WriteHandle, TryAcquireResult> tryAcquire(Item* it);
 
   // creates an item handle with wait context.
   WriteHandle createNvmCacheFillHandle() { return WriteHandle{*this}; }
@@ -1795,10 +1844,119 @@ class CacheAllocator : public CacheBase {
     return allocator_->reclaimSlabsAndGrow(id, numSlabs);
   }
 
-  FOLLY_ALWAYS_INLINE EventTracker* getEventTracker() const {
-    return config_.eventTracker.get();
+  FOLLY_ALWAYS_INLINE LegacyEventTracker* getLegacyEventTracker() const {
+    return config_.legacyEventTracker.get();
   }
 
+  // Helper function to calculate time to expire
+  static uint32_t calculateTimeToExpire(time_t expiryTime, time_t currentTime) {
+    if (expiryTime > currentTime) {
+      return static_cast<uint32_t>(expiryTime - currentTime);
+    }
+    return 0;
+  }
+
+  /**
+   * Record event, key, result and info from a struct of type EventRecordParams.
+   *
+   * Usage:
+   *  recordEvent(event, key, result);
+   *  recordEvent(event, key, result, {.size = itemSize});
+   *  recordEvent(event, key, result, {.size=itemSize, .expiryTime=expiry});
+   *
+   * @param event            The event of type AllocatorApiEvent.
+   * @param key              The key associated with the event.
+   * @param result           The result of type AllocatorApiResult.
+   * @param params           Optional struct of type EventRecordParams.
+   *
+   * @return                 void
+   */
+  void recordEvent(AllocatorApiEvent event,
+                   Key key,
+                   AllocatorApiResult result,
+                   EventRecordParams params = {}) const {
+    if (auto* eventTracker = getEventTracker()) {
+      if (!eventTracker->sampleKey(key)) {
+        return;
+      }
+    }
+    recordEventWithoutSampling(event, key, result, std::move(params));
+  }
+
+  // Record event without calling sampleKey(). Use when the caller has already
+  // determined that the key should be sampled (e.g., NvmCache::recordEvent()
+  // calls sampleKey() once and then uses this to avoid double-sampling).
+  void recordEventWithoutSampling(AllocatorApiEvent event,
+                                  Key key,
+                                  AllocatorApiResult result,
+                                  EventRecordParams params = {}) const {
+    if (auto* eventTracker = getEventTracker()) {
+      EventInfo eventInfo;
+      eventInfo.eventTimestamp = util::getCurrentTimeSec();
+      eventInfo.event = event;
+      eventInfo.result = result;
+      eventInfo.key = key;
+      if (params.size) {
+        eventInfo.size = *params.size;
+      }
+      if (params.expiryTime) {
+        eventInfo.expiryTime = *params.expiryTime;
+        eventInfo.timeToExpire =
+            calculateTimeToExpire(*params.expiryTime, eventInfo.eventTimestamp);
+      }
+      if (params.ttlSecs && *params.ttlSecs > 0) {
+        eventInfo.ttlSecs = *params.ttlSecs;
+      }
+      if (params.allocSize) {
+        eventInfo.allocSize = *params.allocSize;
+      }
+      if (params.poolId) {
+        eventInfo.poolId = *params.poolId;
+      }
+
+      eventTracker->recordWithoutSampling(eventInfo);
+    } else if (auto legacyEventTracker = getLegacyEventTracker()) {
+      folly::Optional<uint32_t> size =
+          params.size
+              ? folly::Optional<uint32_t>(static_cast<uint32_t>(*params.size))
+              : folly::none;
+      uint32_t ttl = params.ttlSecs ? *params.ttlSecs : 0;
+      legacyEventTracker->record(event, key, result, size, ttl);
+    }
+  }
+
+  /**
+   * Record event, key, result and info from a cache handle.
+   *
+   * @tparam HandleT         Cache handle type (e.g., ReadHandle, WriteHandle).
+   * @param event            The event of type AllocatorApiEvent.
+   * @param key              The key associated with the event.
+   * @param result           The result of type AllocatorApiResult.
+   * @param handle           The cache handle to extract metadata from.
+   *
+   * @return                 void
+   */
+  template <typename HandleT>
+  void recordEvent(AllocatorApiEvent event,
+                   Key key,
+                   AllocatorApiResult result,
+                   const HandleT& handle) const {
+    if (!handle) {
+      recordEvent(event, key, result);
+      return;
+    }
+
+    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
+    recordEvent(event, key, result,
+                EventRecordParams{.size = handle->getSize(),
+                                  .ttlSecs = static_cast<uint32_t>(
+                                      handle->getConfiguredTTL().count()),
+                                  .expiryTime = handle->getExpiryTime(),
+                                  .allocSize = allocInfo.allocSize,
+                                  .poolId = allocInfo.poolId});
+  }
+
+ public:
   // Releases a slab from a pool into its corresponding memory pool
   // or back to the slab allocator, depending on SlabReleaseMode.
   //  SlabReleaseMode::kRebalance -> back to the pool
@@ -1850,6 +2008,7 @@ class CacheAllocator : public CacheBase {
                    SlabReleaseMode mode,
                    const void* hint = nullptr) final;
 
+ private:
   // @param releaseContext  slab release context
   void releaseSlabImpl(const SlabReleaseContext& releaseContext);
 
@@ -1921,6 +2080,10 @@ class CacheAllocator : public CacheBase {
   // (this should be only called when we're the only thread accessing item)
   // returns true if nvmcache is enabled and we should write this item.
   bool shouldWriteToNvmCacheExclusive(const Item& item);
+
+  // Returns true if the item has an unmodified copy in BlockCache whose
+  // access time should be updated in the Access Time Map on eviction.
+  bool shouldUpdateAccessTimeMap(const Item& item) const;
 
   // Serialize the metadata for the cache into an IOBUf. The caller can now
   // use this to serialize into a serializer by estimating the size and
@@ -2271,7 +2434,8 @@ class CacheAllocator : public CacheBase {
   friend ChainedAllocs;
   friend WritableChainedAllocs;
   // ensure any modification to a chain of chained items are synchronized
-  using ChainedItemLock = facebook::cachelib::SharedMutexBuckets;
+  using ChainedItemLock = RWBucketLocks<
+      trace::Profiled<folly::SharedMutex, "cachelib:chained_item">>;
   ChainedItemLock chainedItemLocks_;
 
   // nvmCache
@@ -2363,7 +2527,7 @@ class CacheAllocator : public CacheBase {
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
-  FRIEND_TEST(CachelibAdminTest, WorkingSetAnalysisLoggingTest);
+  FRIEND_TEST(CachelibAdminCoreTest, WorkingSetAnalysisLoggingTest);
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
   template <typename AllocatorT>
@@ -2395,6 +2559,9 @@ class CacheAllocator : public CacheBase {
   friend class GET_DECORATED_CLASS_NAME(objcache::test,
                                         ObjectCache,
                                         ObjectHandleInvalid);
+
+  // interface
+  friend class interface::RAMCacheComponent;
 };
 
 template <typename CacheTrait>
@@ -2532,6 +2699,9 @@ CacheAllocator<CacheTrait>::restoreCCacheManager() {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
+  // Initialize aggregate pool stats from config
+  aggregatePoolStats_ = config_.isAggregatePoolStatsEnabled();
+
   if (config_.nvmConfig.has_value()) {
     if (config_.nvmCacheAP) {
       nvmAdmissionPolicy_ = config_.nvmCacheAP;
@@ -2547,9 +2717,15 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
       }
       nvmAdmissionPolicy_->initMinTTL(config_.nvmAdmissionMinTTL);
     }
+    if (config_.allowLargeKeys) {
+      config_.nvmConfig->navyConfig.setMaxKeySize(KAllocation::kKeyMaxLen);
+    }
   }
   initStats();
   initNvmCache(dramCacheAttached);
+  if (config_.eventTrackerConfigFactory) {
+    setEventTracker(config_.eventTrackerConfigFactory());
+  }
 
   if (!config_.delayCacheWorkersStart) {
     initWorkers();
@@ -2573,8 +2749,28 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
     nvmCacheState_.markTruncated();
   }
 
+  auto legacyEventTracker = getLegacyEventTracker();
+  if (legacyEventTracker) {
+    XLOG(INFO) << "Set legacy event tracker in block cache.";
+    config_.nvmConfig->navyConfig.blockCache().setLegacyEventTracker(
+        *legacyEventTracker);
+  }
+
+  navy::NavyPersistParams persistParam{
+      config_.nvmConfig->navyConfig.blockCache()
+          .getIndexConfig()
+          .useShmToPersist(),
+      shmManager_ != nullptr
+          ? *shmManager_
+          : std::optional<std::reference_wrapper<ShmManager>>{}};
   nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
-                                          config_.itemDestructor);
+                                          config_.itemDestructor, persistParam);
+
+  // Set EventTracker dynamically after NvmCache creation
+  if (auto* et = getEventTracker()) {
+    XLOG(INFO) << "Setting event tracker in NVM cache engines.";
+    nvmCache_->setEventTracker(et);
+  }
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();
   }
@@ -2760,7 +2956,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
       auto badKey =
           (key.start()) ? std::string(key.start(), key.size()) : std::string{};
       throw std::invalid_argument{folly::sformat(
-          "Large cache key (> {} bytes) but large keys not "
+          "Invalid cache key - large key (> {} bytes) but large keys not "
           "enabled : {} (size = {})",
           KAllocation::kKeyMaxLenSmall, folly::humanify(badKey), key.size())};
     }
@@ -2780,12 +2976,21 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     }
   }
 
-  if (auto eventTracker = getEventTracker()) {
-    const auto result =
-        handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    eventTracker->record(AllocatorApiEvent::ALLOCATE, key, result, size,
-                         expiryTime ? expiryTime - creationTime : 0);
+  const auto result =
+      handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
+  uint32_t ttl =
+      handle ? static_cast<uint32_t>(handle->getConfiguredTTL().count())
+             : (expiryTime > creationTime ? (expiryTime - creationTime) : 0);
+
+  // Get allocInfo when handle is available to log poolId and allocSize
+  EventRecordParams eventParams{
+      .size = size, .ttlSecs = ttl, .expiryTime = expiryTime};
+  if (handle) {
+    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
+    eventParams.allocSize = allocInfo.allocSize;
+    eventParams.poolId = allocInfo.poolId;
   }
+  recordEvent(AllocatorApiEvent::ALLOCATE, key, result, eventParams);
 
   return handle;
 }
@@ -2800,12 +3005,11 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ReadHandle& parent,
   }
 
   auto it = allocateChainedItemInternal(*parent, size);
-  if (auto eventTracker = getEventTracker()) {
-    const auto result =
-        it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    eventTracker->record(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(),
-                         result, size, parent->getConfiguredTTL().count());
-  }
+  const auto result =
+      it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
+  // Log the parent's information since chained items share metadata with parent
+  recordEvent(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(), result,
+              parent);
   return it;
 }
 
@@ -2890,11 +3094,8 @@ void CacheAllocator<CacheTrait>::addChainedItem(WriteHandle& parent,
   insertInMMContainer(*child);
 
   invalidateNvm(*parent);
-  if (auto eventTracker = getEventTracker()) {
-    eventTracker->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
-                         AllocatorApiResult::INSERTED, child->getSize(),
-                         child->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
+              AllocatorApiResult::INSERTED, child.get());
 }
 
 template <typename CacheTrait>
@@ -2902,7 +3103,7 @@ typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::popChainedItem(WriteHandle& parent) {
   if (!parent || !parent->hasChainedItem()) {
     throw std::invalid_argument(folly::sformat(
-        "Invalid parent {}", parent ? parent->toString() : nullptr));
+        "Invalid parent {}", parent ? parent->toString() : "null"));
   }
 
   WriteHandle head;
@@ -2928,12 +3129,8 @@ CacheAllocator<CacheTrait>::popChainedItem(WriteHandle& parent) {
   // decrement the refcount to indicate this item is unlinked from its parent
   head->decRef();
   stats_.numChainedChildItems.dec();
-
-  if (auto eventTracker = getEventTracker()) {
-    eventTracker->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
-                         AllocatorApiResult::REMOVED, head->getSize(),
-                         head->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
+              AllocatorApiResult::REMOVED, head.get());
 
   return head;
 }
@@ -3190,7 +3387,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
   if (it.isChainedItem()) {
     if (toRecycle) {
       throw std::runtime_error(
-          folly::sformat("Can not recycle a chained item {}, toRecyle",
+          folly::sformat("Can not recycle a chained item {}, toRecycle {}",
                          it.toString(), toRecycle->toString()));
     }
 
@@ -3343,6 +3540,24 @@ CacheAllocator<CacheTrait>::acquire(Item* it) {
 }
 
 template <typename CacheTrait>
+std::pair<typename CacheAllocator<CacheTrait>::WriteHandle,
+          typename CacheAllocator<CacheTrait>::TryAcquireResult>
+CacheAllocator<CacheTrait>::tryAcquire(Item* it) {
+  XDCHECK(it);
+
+  SCOPE_FAIL { stats_.numRefcountOverflow.inc(); };
+
+  auto incRes = incRef(*it);
+  if (LIKELY(incRes == RefcountWithFlags::IncResult::kIncOk)) {
+    return {WriteHandle{it, *this}, TryAcquireResult::kSuccess};
+  }
+  if (incRes == RefcountWithFlags::IncResult::kIncFailedMoving) {
+    return {WriteHandle{}, TryAcquireResult::kMoving};
+  }
+  return {WriteHandle{}, TryAcquireResult::kSkip};
+}
+
+template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::release(Item* it, bool isNascent) {
   // decrement the reference and if it drops to 0, release it back to the
   // memory allocator, and invoke the removal callback if there is one.
@@ -3455,10 +3670,7 @@ bool CacheAllocator<CacheTrait>::insertImpl(const WriteHandle& handle,
     result = AllocatorApiResult::INSERTED;
   }
 
-  if (auto eventTracker = getEventTracker()) {
-    eventTracker->record(event, handle->getKey(), result, handle->getSize(),
-                         handle->getConfiguredTTL().count());
-  }
+  recordEvent(event, handle->getKey(), result, handle);
 
   return result == AllocatorApiResult::INSERTED;
 }
@@ -3476,8 +3688,9 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
   insertInMMContainer(*(handle.getInternal()));
   WriteHandle replaced;
   try {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<TimedMutex>();
+    auto lock =
+        nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
+                  : std::unique_lock<typename NvmCacheT::ItemDestructorMutex>();
 
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
 
@@ -3489,19 +3702,17 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
     }
   } catch (const std::exception&) {
     removeFromMMContainer(*(handle.getInternal()));
-    if (auto eventTracker = getEventTracker()) {
-      eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
-                           handle->getKey(),
-                           AllocatorApiResult::FAILED,
-                           handle->getSize(),
-                           handle->getConfiguredTTL().count());
-    }
+    recordEvent(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(),
+                AllocatorApiResult::FAILED, handle);
     throw;
   }
 
   // Remove from LRU as well if we do have a handle of old item
   if (replaced) {
+    stats_.numInsertOrReplaceReplaced.inc();
     removeFromMMContainer(*replaced);
+  } else {
+    stats_.numInsertOrReplaceInserted.inc();
   }
 
   if (UNLIKELY(nvmCache_ != nullptr)) {
@@ -3514,14 +3725,11 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
 
   handle.unmarkNascent();
 
-  if (auto eventTracker = getEventTracker()) {
-    XDCHECK(handle);
-    const auto result =
-        replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
-    eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(),
-                         result, handle->getSize(),
-                         handle->getConfiguredTTL().count());
-  }
+  XDCHECK(handle);
+  const auto result =
+      replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
+  recordEvent(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(), result,
+              handle);
 
   return replaced;
 }
@@ -3810,8 +4018,21 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
 
   unlinkItemForEviction(*candidate);
 
+  // track DRAM eviction and its result
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*candidate)) {
+    recordEvent(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                AllocatorApiResult::NVM_ADMITTED, candidate);
     nvmCache_->put(*candidate, std::move(token));
+  } else {
+    recordEvent(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                AllocatorApiResult::EVICTED, candidate);
+    // When this item has an unmodified copy still present in BlockCache
+    // (large items only), record its latest DRAM access time in the Access
+    // Time Map as the value in the copy in BlockCache can be stale.
+    if (shouldUpdateAccessTimeMap(*candidate)) {
+      HashedKey hk{candidate->getKey()};
+      nvmCache_->updateAccessTime(hk, candidate->getLastAccessTime());
+    }
   }
   return {candidate, toRecycle};
 }
@@ -3838,12 +4059,6 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       (*stats_.chainedItemEvictions)[pid][cid].inc();
     } else {
       (*stats_.regularItemEvictions)[pid][cid].inc();
-    }
-
-    if (auto eventTracker = getEventTracker()) {
-      eventTracker->record(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
-                           AllocatorApiResult::EVICTED, candidate->getSize(),
-                           candidate->getConfiguredTTL().count());
     }
 
     // check if by releasing the item we intend to, we actually
@@ -3890,19 +4105,31 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCache(const Item& item) {
   }
   return true;
 }
-
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
 
-  if (nvmAdmissionPolicy_ &&
-      !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
-    stats_.numNvmRejectsByAP.inc();
-    return false;
+  if (nvmAdmissionPolicy_) {
+    AllocatorApiResult admissionResult = AllocatorApiResult::ACCEPTED;
+    const bool accepted = nvmAdmissionPolicy_->accept(item, chainedItemRange);
+    if (!accepted) {
+      admissionResult = AllocatorApiResult::REJECTED;
+      stats_.numNvmRejectsByAP.inc();
+    }
+    recordEvent(AllocatorApiEvent::NVM_ADMIT, item.getKey(), admissionResult,
+                &item);
+    return accepted;
   }
 
   return true;
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::shouldUpdateAccessTimeMap(
+    const Item& item) const {
+  return nvmCache_ && item.isNvmClean() && !item.isNvmEvicted() &&
+         item.isNvmLargeItem();
 }
 
 template <typename CacheTrait>
@@ -3962,10 +4189,7 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
     if (nvmCache_) {
       nvmCache_->remove(hk, std::move(tombStone));
     }
-    if (auto eventTracker = getEventTracker()) {
-      eventTracker->record(AllocatorApiEvent::REMOVE, key,
-                           AllocatorApiResult::NOT_FOUND);
-    }
+    recordEvent(AllocatorApiEvent::REMOVE, key, AllocatorApiResult::NOT_FOUND);
     return RemoveRes::kNotFoundInRam;
   }
 
@@ -4018,15 +4242,13 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
   stats_.numCacheRemoves.inc();
-  if (auto eventTracker = getEventTracker()) {
-    eventTracker->record(AllocatorApiEvent::REMOVE, it->getKey(),
-                         AllocatorApiResult::REMOVED, it->getSize(),
-                         it->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::REMOVE, it->getKey(),
+              AllocatorApiResult::REMOVED, it.operator->());
   HashedKey hk{it->getKey()};
   auto tombstone =
       nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : DeleteTombStoneGuard{};
-  return removeImpl(hk, *it, std::move(tombstone));
+  return removeImpl(hk, *it, std::move(tombstone), true /* removeFromNvm */,
+                    false /* recordApiEvent */);
 }
 
 template <typename CacheTrait>
@@ -4051,8 +4273,9 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
                                        bool recordApiEvent) {
   bool success = false;
   {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<TimedMutex>();
+    auto lock =
+        nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
+                  : std::unique_lock<typename NvmCacheT::ItemDestructorMutex>();
 
     success = accessContainer_->remove(item);
 
@@ -4077,12 +4300,10 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
     nvmCache_->remove(hk, std::move(tombstone));
   }
 
-  auto eventTracker = getEventTracker();
-  if (recordApiEvent && eventTracker) {
+  if (recordApiEvent) {
     const auto result =
         success ? AllocatorApiResult::REMOVED : AllocatorApiResult::NOT_FOUND;
-    eventTracker->record(AllocatorApiEvent::REMOVE, item.getKey(), result,
-                         item.getSize(), item.getConfiguredTTL().count());
+    recordEvent(AllocatorApiEvent::REMOVE, item.getKey(), result, &item);
   }
 
   // the last guy with reference to the item will release it back to the
@@ -4183,28 +4404,16 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
     stats_.numCacheGets.inc();
   }
 
-  auto eventTracker = getEventTracker();
   XDCHECK(event == AllocatorApiEvent::FIND ||
           event == AllocatorApiEvent::FIND_FAST ||
           event == AllocatorApiEvent::PEEK)
-      << toString(event);
+      << magic_enum::enum_name(event);
 
   auto handle = findInternal(key);
   if (UNLIKELY(!handle)) {
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
-    }
-    if (eventTracker) {
-      // If caller issued a regular find and we have nvm-cache enabled,
-      // it is expected a nvm-cache lookup will follow. We don't know
-      // for sure if the lookup will be a hit or miss, so we only record
-      // a NOT_FOUND_IN_MEMORY result for now.
-      if (event == AllocatorApiEvent::FIND && nvmCache_ != nullptr) {
-        eventTracker->record(event, key,
-                             AllocatorApiResult::NOT_FOUND_IN_MEMORY);
-      } else {
-        eventTracker->record(event, key, AllocatorApiResult::NOT_FOUND);
-      }
+      recordEvent(event, key, AllocatorApiResult::NOT_FOUND);
     }
     return handle;
   }
@@ -4214,19 +4423,19 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
       stats_.numCacheGetExpiries.inc();
-    }
-    if (eventTracker) {
-      eventTracker->record(event, key, AllocatorApiResult::EXPIRED);
+      recordEvent(event, key, AllocatorApiResult::EXPIRED, handle);
     }
     WriteHandle ret;
     ret.markExpired();
     return ret;
   }
 
-  if (eventTracker) {
-    eventTracker->record(event, key, AllocatorApiResult::FOUND,
-                         folly::Optional<uint32_t>(handle->getSize()),
-                         handle->getConfiguredTTL().count());
+  if (needToBumpStats) {
+    recordEvent(event, key, AllocatorApiResult::FOUND, handle);
+  }
+  auto lastAccess = handle->getLastAccessTime();
+  if (lastAccess > 0) {
+    handle.setTTASecs(util::getCurrentTimeSec() - lastAccess);
   }
   return handle;
 }
@@ -4346,6 +4555,21 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
 }
 
 template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::isKeyValid(Key key) const {
+  return config_.allowLargeKeys ? KAllocation::isKeyValid(key)
+                                : KAllocation::isSmallKeyValid(key);
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::throwIfKeyInvalid(Key key) const {
+  if (config_.allowLargeKeys) {
+    KAllocation::throwIfKeyInvalid(key);
+  } else {
+    KAllocation::throwIfSmallKeyInvalid(key);
+  }
+}
+
+template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::SampleItem
 CacheAllocator<CacheTrait>::getSampleItem() {
   size_t nvmCacheSize = nvmCache_ ? nvmCache_->getUsableSize() : 0;
@@ -4358,14 +4582,16 @@ CacheAllocator<CacheTrait>::getSampleItem() {
   }
 
   // Sampling from DRAM cache
-  auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
+  auto [allocSize, rawItem] = allocator_->getRandomAlloc();
+  auto item = reinterpret_cast<const Item*>(rawItem);
   if (!item || UNLIKELY(item->isExpired())) {
     return SampleItem{false /* fromNvm */};
   }
 
   // Check that item returned is the same that was sampled
 
-  auto sharedHdl = std::make_shared<ReadHandle>(findInternal(item->getKey()));
+  auto sharedHdl =
+      std::make_shared<ReadHandle>(findInternal(item->getKeySized(allocSize)));
   if (sharedHdl->get() != item) {
     return SampleItem{false /* fromNvm */};
   }
@@ -4867,7 +5093,7 @@ PoolEvictionAgeStats CacheAllocator<CacheTrait>::getPoolEvictionAgeStats(
 
   const auto& pool = allocator_->getPool(pid);
   const auto& allocSizes = pool.getAllocSizes();
-  for (ClassId cid = 0; cid < static_cast<ClassId>(allocSizes.size()); ++cid) {
+  for (ClassId cid = 0; static_cast<size_t>(cid) < allocSizes.size(); ++cid) {
     auto& mmContainer = getMMContainer(pid, cid);
     const auto numItemsPerSlab =
         allocator_->getPool(pid).getAllocationClass(cid).getAllocsPerSlab();
@@ -4901,17 +5127,22 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
                                              const void* hint) {
   stats_.numActiveSlabReleases.inc();
   SCOPE_EXIT { stats_.numActiveSlabReleases.dec(); };
-  switch (mode) {
-  case SlabReleaseMode::kRebalance:
-    stats_.numReleasedForRebalance.inc();
-    break;
-  case SlabReleaseMode::kResize:
-    stats_.numReleasedForResize.inc();
-    break;
-  case SlabReleaseMode::kAdvise:
-    stats_.numReleasedForAdvise.inc();
-    break;
-  }
+
+  auto incReleaseStats = [this, mode]() {
+    switch (mode) {
+    case SlabReleaseMode::kRebalance:
+      stats_.numReleasedForRebalance.inc();
+      break;
+    case SlabReleaseMode::kResize:
+      stats_.numReleasedForResize.inc();
+      break;
+    case SlabReleaseMode::kAdvise:
+      stats_.numReleasedForAdvise.inc();
+      break;
+    default:
+      break;
+    }
+  };
 
   try {
     auto releaseContext = allocator_->startSlabRelease(
@@ -4920,6 +5151,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
 
     // No work needed if the slab is already released
     if (releaseContext.isReleased()) {
+      incReleaseStats();
       return;
     }
 
@@ -4932,11 +5164,12 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
     }
 
     allocator_->completeSlabRelease(releaseContext);
+    incReleaseStats();
   } catch (const exception::SlabReleaseAborted& e) {
-    stats_.numAbortedSlabReleases.inc();
+    incrementAbortedSlabReleases();
     throw exception::SlabReleaseAborted(folly::sformat(
         "Slab release aborted while releasing "
-        "a slab in pool {} victim {} receiver {}. Original ex msg: ",
+        "a slab in pool {} victim {} receiver {}. Original ex msg: {}",
         pid, static_cast<int>(victim), static_cast<int>(receiver), e.what()));
   }
 }
@@ -4957,7 +5190,8 @@ SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats()
                           stats_.numMoveSuccesses.get(),
                           stats_.numEvictionAttempts.get(),
                           stats_.numEvictionSuccesses.get(),
-                          stats_.numSlabReleaseStuck.get()};
+                          stats_.numSlabReleaseStuck.get(),
+                          stats_.numAbortedSlabReleases.get()};
 }
 
 template <typename CacheTrait>
@@ -5048,7 +5282,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
   }
   WriteHandle newItemHdl = allocateNewItemForOldItem(oldItem);
 
-  // if we have a valid handle, try to move, if not, we attemp to evict.
+  // if we have a valid handle, try to move, if not, we attempt to evict.
   if (newItemHdl) {
     // move can fail if another thread calls insertOrReplace
     // in this case oldItem is no longer valid (not accessible,
@@ -5068,18 +5302,23 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
   const auto allocInfo = allocator_->getAllocInfo(oldItem.getMemory());
   if (chainedItem) {
     newItemHdl.reset();
-    auto parentKey = parentItem->getKey();
+    // Copy the parent key before unmarkMoving because once we unmark,
+    // another thread is free to remove/evict and free the parent item,
+    // which would make parentItem->getKey() a dangling StringPiece.
+    std::string parentKey(parentItem->getKey().data(),
+                          parentItem->getKey().size());
+    const auto parentKeyView = Key{folly::StringPiece{parentKey}};
     parentItem->unmarkMoving();
     // We do another lookup here because once we unmark moving, another thread
     // is free to remove/evict the parent item. So its unsafe to increment
     // refcount on the parent item's memory. Instead we rely on a proper lookup.
-    auto parentHdl = findInternal(parentKey);
+    auto parentHdl = findInternal(parentKeyView);
     if (!parentHdl) {
       // Parent is gone, so we wake up waiting threads with a null handle.
-      wakeUpWaiters(parentItem->getKey(), {});
+      wakeUpWaiters(parentKeyView, {});
     } else {
       if (!parentHdl.isReady()) {
-        // Parnet handle isn't ready. This can be due to the parent got evicted
+        // Parent handle isn't ready. This can be due to the parent got evicted
         // into NvmCache, or another thread is moving the slab that the parent
         // handle is on (e.g. the parent got replaced and the new parent's slab
         // is being moved). In this case, we must wait synchronously and block
@@ -5087,16 +5326,15 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(Item& oldItem) {
         // expected to be very rare.
         parentHdl.wait();
       }
-      wakeUpWaiters(parentItem->getKey(), std::move(parentHdl));
+      wakeUpWaiters(parentKeyView, std::move(parentHdl));
     }
   } else {
     auto ref = unmarkMovingAndWakeUpWaiters(oldItem, std::move(newItemHdl));
     XDCHECK_EQ(0u, ref);
   }
-  allocator_->free(&oldItem);
-
   (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, oldItem));
+  allocator_->free(&oldItem);
   stats_.numMoveSuccesses.inc();
   return true;
 }
@@ -5166,6 +5404,9 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(Item& item) {
 
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*evicted)) {
     nvmCache_->put(*evicted, std::move(token));
+  } else if (shouldUpdateAccessTimeMap(*evicted)) {
+    HashedKey hk{evicted->getKey()};
+    nvmCache_->updateAccessTime(hk, evicted->getLastAccessTime());
   }
 
   const auto allocInfo =
@@ -5258,7 +5499,32 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     });
   };
 
-  auto startTime = util::getCurrentTimeSec();
+  // Snapshot the item string under processAllocForRelease() protection.
+  // Reading alloc directly here races with concurrent free(), while doing it
+  // after abortSlabRelease() can race with the slab being advised away.
+  auto captureItemStringForAbort = [&]() {
+    std::string itemStr = "item <already freed before abort>";
+    try {
+      allocator_->processAllocForRelease(ctx, alloc, [&](void* memory) {
+        itemStr = static_cast<Item*>(memory)->toString();
+      });
+    } catch (const std::exception& e) {
+      itemStr =
+          folly::sformat("<failed to capture item for abort: {}>", e.what());
+    }
+    return itemStr;
+  };
+
+  auto abortWithMessage = [&](const std::string& reason) {
+    auto itemStr = captureItemStringForAbort();
+    allocator_->abortSlabRelease(ctx);
+    throw exception::SlabReleaseAborted(
+        folly::sformat("Slab Release aborted {} while still trying to mark"
+                       " as moving for Item: {}. Pool: {}, Class: {}.",
+                       reason, itemStr, ctx.getPoolId(), ctx.getClassId()));
+  };
+
+  auto startTime = util::getCurrentTimeMs();
   while (true) {
     allocator_->processAllocForRelease(ctx, alloc, fn);
 
@@ -5274,20 +5540,24 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     // when checking with the AllocationClass
     itemFreed = true;
 
-    if (shutDownInProgress_) {
-      allocator_->abortSlabRelease(ctx);
-      throw exception::SlabReleaseAborted(
-          folly::sformat("Slab Release aborted while still trying to mark"
-                         " as moving for Item: {}. Pool: {}, Class: {}.",
-                         static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
-                         ctx.getClassId()));
+    if (isShutdownInProgress()) {
+      abortWithMessage("due to shutdown");
     }
+
+    if (config_.slabRebalanceTimeout.count() > 0) {
+      auto elapsedTime = util::getCurrentTimeMs() - startTime;
+      if (elapsedTime >
+          static_cast<uint64_t>(config_.slabRebalanceTimeout.count())) {
+        abortWithMessage(folly::sformat("after {} ms", elapsedTime));
+      }
+    }
+
     stats_.numMoveAttempts.inc();
     throttleWith(throttler, [&] {
       XLOGF(WARN,
             "Spent {} seconds, slab release still trying to mark as moving for "
             "Item: {}. Pool: {}, Class: {}.",
-            util::getCurrentTimeSec() - startTime,
+            (util::getCurrentTimeMs() - startTime) / 1000,
             static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
             ctx.getClassId());
     });
@@ -5413,24 +5683,17 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   *metadata_.numChainedChildItems() = stats_.numChainedChildItems.get();
   *metadata_.numAbortedSlabReleases() = stats_.numAbortedSlabReleases.get();
 
-  auto serializeMMContainers = [](MMContainers& mmContainers) {
-    MMSerializationTypeContainer state;
-    for (unsigned int i = 0; i < mmContainers.size(); ++i) {
-      for (unsigned int j = 0; j < mmContainers[i].size(); ++j) {
-        if (mmContainers[i][j]) {
-          state.pools_ref()[i][j] = mmContainers[i][j]->saveState();
-        }
+  MMSerializationTypeContainer mmContainersState;
+  for (unsigned int i = 0; i < mmContainers_.size(); ++i) {
+    for (unsigned int j = 0; j < mmContainers_[i].size(); ++j) {
+      if (mmContainers_[i][j]) {
+        mmContainersState.pools_ref()[i][j] = mmContainers_[i][j]->saveState();
       }
     }
-    return state;
-  };
-  MMSerializationTypeContainer mmContainersState =
-      serializeMMContainers(mmContainers_);
-
+  }
   AccessSerializationType accessContainerState = accessContainer_->saveState();
   MemoryAllocator::SerializationType allocatorState = allocator_->saveState();
   CCacheManager::SerializationType ccState = compactCacheManager_->saveState();
-
   AccessSerializationType chainedItemAccessContainerState =
       chainedItemAccessContainer_->saveState();
 
@@ -5859,7 +6122,7 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
   if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
-                      strategy)) {
+                      strategy, allocator_->getNumSlabsAdvised())) {
     return false;
   }
 
@@ -6110,18 +6373,18 @@ using S3FIFOAllocator = CacheAllocator<S3FIFOCacheTrait>;
 using S3FIFO5BAllocator = CacheAllocator<S3FIFO5BCacheTrait>;
 
 // CacheAllocator with Tiny LFU eviction policy
-// It has a window initially to gauage the frequency of accesses of newly
-// inserted items. And eventually it will onl admit items that are accessed
+// It has a window initially to gauge the frequency of accesses of newly
+// inserted items. And eventually it will only admit items that are accessed
 // beyond a threshold into the warm cache.
 using TinyLFUAllocator = CacheAllocator<TinyLFUCacheTrait>;
 
-// CacheAllocator with Tiny LFU eviction policy with the protection segment
-// It has a window initially to gauage the frequency of accesses of newly
-// inserted items. The Main Cache is broken down into probation segement taking
-// ~20% queue size and protection segment taking ~ 80%. For popular items
-// that exceed a defined protected frequence. It will be preserved in the
-// protection segment. If protectionSegment is full, it will no immediate
-// evict out main queue, but moved into the probation segment. This will
-// prevent the popular items from being evicted out immediately.
+// CacheAllocator with Tiny LFU eviction policy and protection segment. It has a
+// window initially to gauge the frequency of accesses of newly inserted items.
+// The Main Cache is broken down into probation segment taking ~20% queue size
+// and protection segment taking ~ 80%. Popular items that exceed a defined
+// protected frequency will be preserved in the protection segment. If
+// protection segment is full, it will not be immediately evicted out of the
+// main queue, but will be moved into the probation segment. This will prevent
+// the popular items from being evicted out immediately.
 using WTinyLFUAllocator = CacheAllocator<WTinyLFUCacheTrait>;
 } // namespace facebook::cachelib

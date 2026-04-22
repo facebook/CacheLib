@@ -23,7 +23,6 @@
 #include <sys/mman.h>
 
 #include <chrono>
-#include <memory>
 #include <stdexcept>
 
 #include "cachelib/common/Utils.h"
@@ -233,7 +232,7 @@ void SlabAllocator::lockMemoryAsync() noexcept {
         // to mlock for that and require the caller to set the appropriate
         // rlimits. Use volatile to fool the compiler to not optimize this away
         // in opt mode.
-        volatile const uint8_t val = *pageAddr;
+        volatile const uint8_t val = *pageAddr; // NOLINT(facebook-hte-Volatile)
         (void)val;
       }
 
@@ -341,7 +340,7 @@ Slab* SlabAllocator::makeNewSlabImpl() {
 void SlabAllocator::initializeHeader(Slab* slab, PoolId id) {
   auto* header = getSlabHeader(slab);
   XDCHECK(header != nullptr);
-  header = new (header) SlabHeader(id);
+  new (header) SlabHeader(id);
 }
 
 Slab* SlabAllocator::makeNewSlab(PoolId id) {
@@ -401,9 +400,8 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   {
     LockHolder l(lock_);
     if (!advisedSlabs_.empty()) {
-      auto it = advisedSlabs_.begin();
-      slab = *it;
-      advisedSlabs_.erase(it);
+      slab = advisedSlabs_.back();
+      advisedSlabs_.pop_back();
     }
   }
 
@@ -419,7 +417,8 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   for (size_t pageOffset = 0; pageOffset < numPages; pageOffset++) {
     // Use volatile to fool the compiler to not optimize this away in opt
     // mode.
-    volatile const uint8_t val = *(mem + pageOffset * pageSize);
+    volatile const uint8_t val =
+        *(mem + pageOffset * pageSize); // NOLINT(facebook-hte-Volatile)
     (void)val;
   }
   memoryPoolSize_[id] += sizeof(Slab);
@@ -452,7 +451,8 @@ bool SlabAllocator::isMemoryInSlab(const void* ptr,
   return getSlabForMemory(ptr) == slab;
 }
 
-const void* SlabAllocator::getRandomAlloc() const noexcept {
+std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
+    const noexcept {
   // disregard the space we use for slab header.
   const auto validMaxOffset =
       memorySize_ - (reinterpret_cast<uintptr_t>(slabMemoryStart_) -
@@ -460,13 +460,13 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
 
   // pick a random location in the memory.
   const auto offset = folly::Random::rand64(0, validMaxOffset);
-  const auto* memory = reinterpret_cast<void*>(
-      reinterpret_cast<uintptr_t>(slabMemoryStart_) + offset);
+  const auto* memory =
+      reinterpret_cast<const uint8_t*>(slabMemoryStart_) + offset;
 
   const auto* slab = getSlabForMemory(memory);
   const auto* header = getSlabHeader(slab);
   if (header == nullptr) {
-    return nullptr;
+    return std::make_tuple(0, nullptr);
   }
 
   XDCHECK_GE(reinterpret_cast<uintptr_t>(memory),
@@ -474,7 +474,7 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
 
   const auto allocSize = header->allocSize;
   if (allocSize == 0) {
-    return nullptr;
+    return std::make_tuple(0, nullptr);
   }
 
   const auto maxAllocIdx = Slab::kSize / allocSize - 1;
@@ -482,8 +482,8 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
                    reinterpret_cast<uintptr_t>(slab)) /
                   allocSize;
   allocIdx = allocIdx > maxAllocIdx ? maxAllocIdx : allocIdx;
-  return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(slab) +
-                                       allocSize * allocIdx);
+  return std::make_tuple(
+      allocSize, reinterpret_cast<const uint8_t*>(slab) + allocSize * allocIdx);
 }
 
 serialization::SlabAllocatorObject SlabAllocator::saveState() {

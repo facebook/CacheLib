@@ -21,6 +21,7 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/Factory.h"
+#include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 #include "cachelib/navy/testing/MockDevice.h"
 
@@ -104,6 +105,9 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
     bigHash->setBloomFilter(kNumHashes, bitsPerHash);
   }
 
+  // Set number of mutexes from config
+  bigHash->setNumMutexesPower(bigHashConfig.getNumMutexesPower());
+
   proto.setBigHash(std::move(bigHash), bigHashConfig.getSmallItemMaxSize());
 
   if (bigHashCacheOffset <= bigHashStartOffsetLimit) {
@@ -174,6 +178,12 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                                   blockCacheConfig.getCleanRegionThreads());
   blockCache->setRegionManagerFlushAsync(
       blockCacheConfig.isRegionManagerFlushAsync());
+
+  blockCache->setCleanRegionFastPath(blockCacheConfig.isCleanRegionFastPath());
+  blockCache->setRecoverEvictionPolicy(
+      blockCacheConfig.isRecoverEvictionPolicy());
+  blockCache->setUseCombinedEntryBlock(
+      blockCacheConfig.isCombinedEntryBlockEnabled());
   blockCache->setNumAllocatorsPerPriority(
       blockCacheConfig.getNumAllocatorsPerPriority());
 
@@ -184,6 +194,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setStackSize(stackSize);
   blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
   blockCache->setIndexConfig(blockCacheConfig.getIndexConfig());
+  blockCache->setLegacyEventTracker(blockCacheConfig.getLegacyEventTracker());
 
   proto.setBlockCache(std::move(blockCache));
   return blockCacheOffset + blockCacheSize;
@@ -236,6 +247,8 @@ void setupCacheProtos(const navy::NavyConfig& config,
                        totalCacheSize)};
   }
   proto.setMetadataSize(metadataSize);
+
+  proto.setMaxKeySize(config.getMaxKeySize());
 
   // Start offsets are inclusive. End offsets are exclusive.
   // For each engine pair, bigHashStartOffset will be calculated by setting up
@@ -316,9 +329,12 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   auto maxNumWrites = config.getMaxNumWrites();
   auto stackSize = config.getStackSize();
   auto reqOrderShardsPower = config.getNavyReqOrderingShards();
+  auto readerPriority = config.getReaderThreadsPriority();
+  auto writerPriority = config.getWriterThreadsPriority();
   if (maxNumReads == 0 && maxNumWrites == 0) {
     return cachelib::navy::createOrderedThreadPoolJobScheduler(
-        readerThreads, writerThreads, reqOrderShardsPower);
+        readerThreads, writerThreads, reqOrderShardsPower, readerPriority,
+        writerPriority);
   }
 
   return cachelib::navy::createNavyRequestScheduler(readerThreads,
@@ -330,7 +346,7 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 }
 } // namespace
 
-std::unique_ptr<cachelib::navy::Device> createDevice(
+std::unique_ptr<navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   auto blockSize = config.getBlockSize();
@@ -347,7 +363,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       fileSize = alignDown(fileSize, stripeSize);
     }
 
-    return cachelib::navy::createFileDevice(
+    return navy::createFileDevice(
         filePaths,
         fileSize,
         config.getTruncateFile(),
@@ -360,8 +376,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         std::move(encryptor),
         config.getExclusiveOwner());
   } else {
-    return cachelib::navy::createMemoryDevice(config.getFileSize(),
-                                              std::move(encryptor), blockSize);
+    return navy::createMemoryDevice(config.getFileSize(), std::move(encryptor),
+                                    blockSize);
   }
 }
 
@@ -371,7 +387,8 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    bool itemDestructorEnabled) {
+    bool itemDestructorEnabled,
+    const navy::NavyPersistParams& persistParams) {
   auto device = createDevice(config, std::move(encryptor));
 
   std::unique_ptr<navy::MockDevice> mockDevice;
@@ -413,7 +430,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     break;
   }
 
-  auto proto = cachelib::navy::createCacheProto();
+  auto proto = navy::createCacheProto();
   auto* devicePtr = device.get();
   proto->setDevice(std::move(device));
   proto->setJobScheduler(createJobScheduler(config));
@@ -423,6 +440,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   setAdmissionPolicy(config, *proto);
   proto->setExpiredCheck(checkExpired);
   proto->setDestructorCallback(destructorCb);
+  proto->setPersistParams(persistParams);
 
   setupCacheProtos(config, *devicePtr, *proto, itemDestructorEnabled);
 

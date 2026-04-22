@@ -34,36 +34,35 @@ class MockPolicy : public EvictionPolicy {
   // NiceMock can only delegate copyable parameters
   explicit MockPolicy(std::vector<uint32_t>* hits) : hits_{*hits} {
     using testing::_;
-    using testing::Invoke;
     using testing::Return;
 
-    ON_CALL(*this, track(_)).WillByDefault(Invoke([this](const Region& region) {
+    ON_CALL(*this, track(_)).WillByDefault([this](const Region& region) {
       fifo_.track(region);
-    }));
-    ON_CALL(*this, touch(_)).WillByDefault(Invoke([this](RegionId rid) {
+    });
+    ON_CALL(*this, touch(_)).WillByDefault([this](RegionId rid) {
       hits_[rid.index()]++;
       fifo_.touch(rid);
-    }));
-    ON_CALL(*this, evict()).WillByDefault(Invoke([this] {
-      return fifo_.evict();
-    }));
-    ON_CALL(*this, reset()).WillByDefault(Invoke([this]() {
+    });
+    ON_CALL(*this, evict()).WillByDefault([this] { return fifo_.evict(); });
+    ON_CALL(*this, reset()).WillByDefault([this]() {
       std::fill(hits_.begin(), hits_.end(), 0);
       fifo_.reset();
-    }));
-    ON_CALL(*this, memorySize()).WillByDefault(Invoke([this] {
+    });
+    ON_CALL(*this, memorySize()).WillByDefault([this] {
       return fifo_.memorySize();
-    }));
+    });
     ON_CALL(*this, getCounters(_))
         .WillByDefault(
-            Invoke([this](const CounterVisitor& v) { fifo_.getCounters(v); }));
+            [this](const CounterVisitor& v) { fifo_.getCounters(v); });
 
-    ON_CALL(*this, persist(_)).WillByDefault(Invoke([this](RecordWriter& rw) {
-      fifo_.persist(rw);
-    }));
-    ON_CALL(*this, recover(_)).WillByDefault(Invoke([this](RecordReader& rr) {
-      fifo_.recover(rr);
-    }));
+    ON_CALL(*this, persist(_))
+        .WillByDefault([this](serialization::EvictionPolicyData& out) {
+          fifo_.persist(out);
+        });
+    ON_CALL(*this, recover(_))
+        .WillByDefault([this](const serialization::EvictionPolicyData& in) {
+          fifo_.recover(in);
+        });
   }
 
   MOCK_METHOD1(track, void(const Region& region));
@@ -73,8 +72,8 @@ class MockPolicy : public EvictionPolicy {
   MOCK_CONST_METHOD0(memorySize, size_t());
   MOCK_CONST_METHOD1(getCounters, void(const CounterVisitor&));
 
-  MOCK_CONST_METHOD1(persist, void(RecordWriter& rw));
-  MOCK_METHOD1(recover, void(RecordReader& rr));
+  MOCK_CONST_METHOD1(persist, void(serialization::EvictionPolicyData& out));
+  MOCK_METHOD1(recover, void(const serialization::EvictionPolicyData& in));
 
  private:
   std::vector<uint32_t>& hits_;

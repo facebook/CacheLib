@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <ctime>
 #include <future>
 #include <mutex>
@@ -750,6 +751,59 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testTryAcquireSuccess() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+
+    auto res = alloc.tryAcquire(itemHandle.get());
+    ASSERT_EQ(TryAcquireResult::kSuccess, res.second);
+    ASSERT_NE(nullptr, res.first);
+    ASSERT_EQ(itemHandle.get(), res.first.get());
+  }
+
+  void testTryAcquireMoving() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+    auto* item = itemHandle.get();
+    itemHandle.reset();
+
+    ASSERT_TRUE(item->markMoving());
+
+    auto res = alloc.tryAcquire(item);
+    ASSERT_EQ(TryAcquireResult::kMoving, res.second);
+    ASSERT_EQ(nullptr, res.first);
+    item->unmarkMoving();
+    ASSERT_FALSE(item->isMoving());
+  }
+
   // make some allocations without evictions and ensure that we are able to
   // fetch them.
   void testFind() {
@@ -1010,7 +1064,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       movedKeys.insert(oldItem.getKey().str());
     };
 
-    config.enableMovingOnSlabRelease(moveCb, {}, 10);
+    config.enableMovingOnSlabRelease(moveCb, {});
 
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
@@ -1553,7 +1607,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(AllocatorT::ShutDownStatus::kSuccess, alloc.shutDown());
     }
     testShmIsNotRemoved(config);
-    { ASSERT_NO_THROW(AllocatorT alloc(AllocatorT::SharedMemAttach, config)); }
+    {
+      ASSERT_NO_THROW(AllocatorT alloc(AllocatorT::SharedMemAttach, config));
+    }
   }
 
   void testSerialization() {
@@ -2023,6 +2079,35 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       (void)item;
       visited++;
     }
+  }
+
+  // Verify that LockGroupAccessIterator visits every accessible item exactly
+  // once. Exercises CacheAllocator::beginLockGroup() / endLockGroup() and the
+  // tryHandleMaker / findByKey wiring inside CacheAllocator.
+  void testIterateLockGroup() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    std::set<uint32_t> allocSizes{1024};
+    auto poolId = alloc.addPool("foobar", numBytes, allocSizes);
+
+    const unsigned int numItems = 100;
+    const uint32_t itemSize = 100;
+    std::set<std::string> expectedKeys;
+    for (unsigned int i = 0; i < numItems; ++i) {
+      const std::string key = "key_" + folly::to<std::string>(i);
+      auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
+      ASSERT_NE(nullptr, handle);
+      expectedKeys.insert(key);
+    }
+
+    std::set<std::string> visitedKeys;
+    for (auto it = alloc.beginLockGroup(); it != alloc.endLockGroup(); ++it) {
+      const bool inserted = visitedKeys.insert(it->getKey().str()).second;
+      ASSERT_TRUE(inserted);
+    }
+    ASSERT_EQ(expectedKeys, visitedKeys);
   }
 
   void testIterateWithEvictions() {
@@ -3297,6 +3382,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   // but they are still held by the user.
   void testRebalancingWithItemsAlreadyRemoved() {
     typename AllocatorT::Config config{};
+    config.setSlabRebalanceTimeout(std::chrono::milliseconds(0));
     config.setCacheSize(10 * Slab::kSize);
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
@@ -3354,6 +3440,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.enableCachePersistence(this->cacheDir_);
     config.setCacheSize(size);
+    config.setSlabRebalanceTimeout(std::chrono::milliseconds(0));
     {
       std::vector<typename AllocatorT::ReadHandle> handles;
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
@@ -3600,8 +3687,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Request numSlabs + 1 slabs so that we get numSlabs usable slabs
     typename AllocatorT::Config config;
-    config.enableMovingOnSlabRelease(moveCb, {} /* ChainedItemsMoveSync */,
-                                     -1 /* movingAttemptsLimit */);
+    config.enableMovingOnSlabRelease(moveCb, {} /* ChainedItemsMoveSync */);
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
     AllocatorT allocator(config);
     const size_t numBytes = allocator.getCacheMemoryStats().ramCacheSize;
@@ -4140,6 +4226,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // start with no reaper
     config.reaperInterval = std::chrono::seconds(0);
     config.setCacheSize(numSlabs * Slab::kSize);
+    config.setSlabRebalanceTimeout(std::chrono::milliseconds(0));
 
     AllocatorT allocator(config);
     const size_t numBytes = allocator.getCacheMemoryStats().ramCacheSize;
@@ -4178,6 +4265,58 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_THROW(allocator.addPool("default", numBytes, badAllocSizes),
                  std::invalid_argument);
     ASSERT_NO_THROW(allocator.addPool("default", numBytes, goodAllocSizes));
+  }
+
+  void testGenAllocClassesTuned() {
+    auto allocClasses = util::genAllocClassesTuned();
+    ASSERT_GT(allocClasses.size(), 0);
+
+    // Create an allocator with enough memory to support all allocation classes
+    // We need at least one slab per allocation class for testing
+    const size_t numSlabs = allocClasses.size() + 10;
+    typename AllocatorT::Config config;
+    config.setCacheSize(numSlabs * Slab::kSize);
+    AllocatorT allocator(config);
+
+    // Create a pool using the tuned allocation classes
+    const size_t numBytes = allocator.getCacheMemoryStats().ramCacheSize;
+    PoolId poolId = allocator.addPool("tuned_pool", numBytes, allocClasses);
+
+    // Try to allocate an item for each allocation size
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    size_t allocIndex = 0;
+    for (auto allocSize : allocClasses) {
+      const std::string key = "key_" + std::to_string(allocIndex++);
+
+      // Calculate the value size needed to result in this allocation size
+      // getRequiredSize(key, valueSize) returns the total size needed
+      // We need to find valueSize such that getRequiredSize <= allocSize
+      const auto requiredSizeForZero =
+          AllocatorT::Item::getRequiredSize(key, 0);
+      uint32_t valueSize = allocSize - requiredSizeForZero;
+
+      auto handle = allocator.allocate(poolId, key, valueSize);
+      ASSERT_NE(nullptr, handle)
+          << "Failed to allocate item for alloc size " << allocSize
+          << " (value size: " << valueSize << ")";
+
+      ASSERT_TRUE(allocator.insert(handle));
+      auto foundHandle = allocator.find(key);
+      ASSERT_NE(nullptr, foundHandle) << "Failed to find item with key " << key;
+
+      // Keep the handle to prevent immediate eviction
+      handles.push_back(std::move(handle));
+    }
+
+    // After allocating items, verify each allocation class now has exactly 1
+    // slab
+    auto finalPoolStats = allocator.getPoolStats(poolId);
+    for (size_t i = 0; i < allocClasses.size(); ++i) {
+      const auto classId = static_cast<ClassId>(i);
+      EXPECT_EQ(1, finalPoolStats.numSlabsForClass(classId))
+          << "Allocation class " << static_cast<int>(classId)
+          << " should have exactly 1 slab after allocation";
+    }
   }
 
   // Check that item is in the expected container.
@@ -5062,9 +5201,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                       oldItem.getSize());
           ++numMoves;
         },
-        [&m](typename Item::Key) { return std::make_unique<TestSyncObj>(m); },
-        // Attempt a lot of moving so we're more lilely to succeed
-        1'000'000 /* movingAttempts */);
+        [&m](typename Item::Key) { return std::make_unique<TestSyncObj>(m); });
 
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
@@ -5203,7 +5340,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     std::string movingKey = "helloworldmoving";
 
-    const size_t numMovingAttempts = 100;
     std::atomic<uint64_t> numMoves{0};
     config.enableMovingOnSlabRelease(
         [&](Item& oldItem, Item& newItem, Item* /* parentPtr */) {
@@ -5213,8 +5349,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                       oldItem.getSize());
           ++numMoves;
         },
-        {},
-        numMovingAttempts);
+        {});
 
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
@@ -5861,33 +5996,127 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   void testCacheKeyValidity() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    AllocatorT alloc(config);
+
     {
       // valid case
       auto key = std::string{"a"};
-      EXPECT_TRUE(util::isKeyValid(key));
-      EXPECT_NO_THROW(util::throwIfKeyInvalid(key));
+      EXPECT_TRUE(alloc.isKeyValid(key));
+      EXPECT_NO_THROW(alloc.throwIfKeyInvalid(key));
     }
     {
-      // 1) invalid due to key length
-      auto key = std::string(KAllocation::kKeyMaxLen + 1, 'a');
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      // 1) invalid due to key length - verify exception message mentions the
+      // root cause
+      auto key = std::string(KAllocation::kKeyMaxLenSmall + 1, 'a');
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("exceeds maximum allowed") != std::string::npos)
+            << "Exception message should mention key size exceeds maximum. "
+               "Actual: "
+            << msg;
+      }
     }
     {
-      // 2) invalid due to size being 0
+      // 2) invalid due to size being 0 - verify exception message mentions the
+      // root cause
       auto string = std::string{"some string"};
       auto key = folly::StringPiece{string.data(), std::size_t{0}};
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("key is empty") != std::string::npos)
+            << "Exception message should mention key is empty. Actual: " << msg;
+      }
     }
     // Note: we don't test for a null stringpiece with positive size as the
     // key
     //       because folly::StringPiece now throws an exception for it
     {
-      // 3) invalid due due a null key
+      // 3) invalid due due a null key - verify exception message mentions the
+      // root cause
       auto key = folly::StringPiece{nullptr, std::size_t{0}};
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("null data pointer") != std::string::npos)
+            << "Exception message should mention null data pointer. Actual: "
+            << msg;
+      }
+    }
+  }
+
+  void testLargeCacheKeyValidity() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    config.allowLargeKeys(true);
+    AllocatorT alloc(config);
+
+    {
+      // valid case
+      auto key = std::string{"a"};
+      EXPECT_TRUE(alloc.isKeyValid(key));
+      EXPECT_NO_THROW(alloc.throwIfKeyInvalid(key));
+    }
+    {
+      // 1) invalid due to key length - verify exception message mentions the
+      // root cause
+      auto key = std::string(KAllocation::kKeyMaxLen + 1, 'a');
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("exceeds maximum allowed") != std::string::npos)
+            << "Exception message should mention key size exceeds maximum. "
+               "Actual: "
+            << msg;
+      }
+    }
+    {
+      // 2) invalid due to size being 0 - verify exception message mentions the
+      // root cause
+      auto string = std::string{"some string"};
+      auto key = folly::StringPiece{string.data(), std::size_t{0}};
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("key is empty") != std::string::npos)
+            << "Exception message should mention key is empty. Actual: " << msg;
+      }
+    }
+    // Note: we don't test for a null stringpiece with positive size as the
+    // key
+    //       because folly::StringPiece now throws an exception for it
+    {
+      // 3) invalid due due a null key - verify exception message mentions the
+      // root cause
+      auto key = folly::StringPiece{nullptr, std::size_t{0}};
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      try {
+        alloc.throwIfKeyInvalid(key);
+        FAIL() << "Expected std::invalid_argument";
+      } catch (const std::invalid_argument& e) {
+        std::string msg = e.what();
+        EXPECT_TRUE(msg.find("null data pointer") != std::string::npos)
+            << "Exception message should mention null data pointer. Actual: "
+            << msg;
+      }
     }
   }
 
@@ -6156,7 +6385,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     auto poolId = alloc.addPool("default", numBytes);
-    { auto handle = alloc.allocate(poolId, "test", 100); }
+    {
+      auto handle = alloc.allocate(poolId, "test", 100);
+    }
     EXPECT_EQ(false, isRemoveCbTriggered);
     {
       auto handle = alloc.allocate(poolId, "test", 100);
@@ -6202,6 +6433,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setCacheSize(3 * Slab::kSize);
     config.setSlabReleaseStuckThreashold(
         std::chrono::seconds(releaseStuckThreshold));
+    config.setSlabRebalanceTimeout(std::chrono::milliseconds(0));
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     auto poolId = alloc.addPool("foobar", numBytes);
@@ -6256,6 +6488,110 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     handle2.reset();
     r2.wait();
     ASSERT_EQ(0, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+  }
+
+  void testSlabReleaseTimeoutHelper(unsigned int slabRebalanceTimeoutSecs,
+                                    bool shouldTimeout) {
+    typename AllocatorT::Config config{};
+    config.setCacheSize(3 * Slab::kSize);
+    config.setSlabRebalanceTimeout(
+        std::chrono::milliseconds(slabRebalanceTimeoutSecs * 1000));
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    // 3/4 * kSize to make sure items are allocated in different slabs
+    std::vector<uint32_t> sizes = {Slab::kSize * 3 / 4};
+
+    // Allocate two items to be used for tests
+    auto handle1 = util::allocateAccessible(alloc, poolId, "key1", sizes[0]);
+    ASSERT_NE(nullptr, handle1);
+
+    auto handle2 = util::allocateAccessible(alloc, poolId, "key2", sizes[0]);
+    ASSERT_NE(nullptr, handle2);
+
+    const uint8_t classId = alloc.getAllocInfo(handle1->getMemory()).classId;
+    ASSERT_EQ(classId, alloc.getAllocInfo(handle2->getMemory()).classId);
+
+    // Assert that numAbortedSlabReleases is not set initially
+    ASSERT_EQ(0, alloc.getSlabReleaseStats().numAbortedSlabReleases);
+    ASSERT_EQ(0, alloc.getGlobalCacheStats().numAbortedSlabReleases);
+
+    // Get initial count for verification of successful slab releases
+    uint64_t initialRebalanceCount =
+        alloc.getSlabReleaseStats().numSlabReleaseForRebalance;
+
+    // Helper lambda to start a slab release operation with appropriate
+    // assertions
+    auto startSlabRelease = [&](const void* hint) {
+      return std::async(std::launch::async, [&, hint] {
+        if (shouldTimeout) {
+          ASSERT_THROW(alloc.releaseSlab(poolId, classId,
+                                         SlabReleaseMode::kRebalance, hint),
+                       exception::SlabReleaseAborted);
+        } else {
+          ASSERT_NO_THROW(alloc.releaseSlab(poolId, classId,
+                                            SlabReleaseMode::kRebalance, hint));
+        }
+      });
+    };
+
+    // Determine sleep duration based on timeout setting
+    // Need to sleep longer than timeout to trigger abort, or just 1 sec if no
+    // timeout
+    unsigned int sleepDuration =
+        shouldTimeout ? (2 + slabRebalanceTimeoutSecs) : 1;
+
+    // Start first slab release operation (will be blocked by handle1)
+    auto r1 = startSlabRelease(handle1->getMemory());
+    /* sleep override */ sleep(sleepDuration);
+
+    // Check expected abort count after first sleep
+    unsigned int expectedAborts = shouldTimeout ? 1 : 0;
+    ASSERT_EQ(expectedAborts,
+              alloc.getSlabReleaseStats().numAbortedSlabReleases);
+    ASSERT_EQ(expectedAborts,
+              alloc.getGlobalCacheStats().numAbortedSlabReleases);
+
+    // Start second slab release operation (will be blocked by handle2)
+    auto r2 = startSlabRelease(handle2->getMemory());
+
+    // Sleep again and check abort count
+    /* sleep override */ sleep(sleepDuration);
+    expectedAborts = shouldTimeout ? 2 : 0;
+    ASSERT_EQ(expectedAborts,
+              alloc.getSlabReleaseStats().numAbortedSlabReleases);
+    ASSERT_EQ(expectedAborts,
+              alloc.getGlobalCacheStats().numAbortedSlabReleases);
+
+    // Release handles to allow operations to complete
+    handle1.reset();
+    r1.wait();
+
+    handle2.reset();
+    r2.wait();
+
+    // Final verification: abort count should remain the same
+    ASSERT_EQ(expectedAborts,
+              alloc.getSlabReleaseStats().numAbortedSlabReleases);
+    ASSERT_EQ(expectedAborts,
+              alloc.getGlobalCacheStats().numAbortedSlabReleases);
+
+    // When not timing out, verify slab releases actually completed successfully
+    if (!shouldTimeout) {
+      ASSERT_EQ(initialRebalanceCount + 2,
+                alloc.getSlabReleaseStats().numSlabReleaseForRebalance);
+    }
+  }
+
+  void testSlabReleaseTimeout() {
+    // 5 seconds timeout, should abort
+    testSlabReleaseTimeoutHelper(5, true);
+  }
+
+  void testSlabReleaseTimeoutZero() {
+    // 0 = no timeout, should not abort
+    testSlabReleaseTimeoutHelper(0, false);
   }
 
   void testRateMap() {
@@ -6499,6 +6835,342 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_EQ(1, poolStats.numSlabsForClass(1));
       EXPECT_EQ(4, poolStats.numSlabsForClass(2));
     }
+  }
+
+ private:
+  static constexpr const char* kTestCachePrefix = "cachelib.test_cache.";
+  static constexpr const char* kPool1Name = "pool1";
+  static constexpr const char* kPool2Name = "pool2";
+  static constexpr const char* kAggregatedName = "aggregated";
+
+  AllocatorT createPoolStatsTestAllocator(bool enableAggregation = false) {
+    typename AllocatorT::Config config;
+    config.setCacheSize(20 * Slab::kSize).cacheName = "test_cache";
+    if (enableAggregation) {
+      config.enableAggregatePoolStats();
+    }
+    return AllocatorT(config);
+  }
+
+  void setupTestPools(AllocatorT& alloc,
+                      const std::set<uint32_t>& pool1Sizes,
+                      const std::set<uint32_t>& pool2Sizes) {
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, pool1Sizes);
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, pool2Sizes);
+
+    auto item1 = util::allocateAccessible(alloc, poolId1, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId2, "key2", 120);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+  }
+
+  bool hasAggregatedStats(AllocatorT& alloc) {
+    bool foundAggregated = false;
+    bool foundIndividual = false;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName, ".");
+    std::string pool1NamePrefix =
+        folly::to<std::string>("pool.", kPool1Name, ".");
+    std::string pool2NamePrefix =
+        folly::to<std::string>("pool.", kPool2Name, ".");
+
+    alloc.exportStats(
+        kTestCachePrefix, std::chrono::seconds{60},
+        [&](folly::StringPiece name, uint64_t) {
+          const std::string nameStr = name.str();
+          if (nameStr.find(aggregatedNamePrefix) != std::string::npos) {
+            foundAggregated = true;
+          }
+          if (nameStr.find(pool1NamePrefix) != std::string::npos ||
+              nameStr.find(pool2NamePrefix) != std::string::npos) {
+            foundIndividual = true;
+          }
+        });
+    XDCHECK(foundAggregated ^ foundIndividual,
+            "Expected to find aggregated or individual stats only, not both or "
+            "neither");
+    return foundAggregated;
+  }
+
+ public:
+  void testAggregatePoolStatsDiffAC() {
+    auto alloc = createPoolStatsTestAllocator(true);
+    // Test aggregation of stats from two pools with different allocation
+    // classes
+    const std::set<uint32_t> pool1Sizes = {64, 128, 256};
+    const std::set<uint32_t> pool2Sizes = {256, 512};
+    setupTestPools(alloc, pool1Sizes, pool2Sizes);
+    EXPECT_TRUE(hasAggregatedStats(alloc));
+
+    auto poolId1 = alloc.getPoolId(kPool1Name);
+    auto poolId2 = alloc.getPoolId(kPool2Name);
+
+    // Add items for each allocation class in pool1
+    auto item1_64 = util::allocateAccessible(alloc, poolId1, "key1_64", 20);
+    auto item1_128 = util::allocateAccessible(alloc, poolId1, "key1_128", 80);
+    auto item1_256 = util::allocateAccessible(alloc, poolId1, "key1_256", 200);
+    ASSERT_NE(nullptr, item1_64);
+    ASSERT_NE(nullptr, item1_128);
+    ASSERT_NE(nullptr, item1_256);
+
+    // Add items for each allocation class in pool2
+    auto item2_256 = util::allocateAccessible(alloc, poolId2, "key2_256", 200);
+    auto item2_512 = util::allocateAccessible(alloc, poolId2, "key2_512", 450);
+    ASSERT_NE(nullptr, item2_256);
+    ASSERT_NE(nullptr, item2_512);
+
+    auto pool1Stats = alloc.getPoolStats(poolId1);
+    auto pool2Stats = alloc.getPoolStats(poolId2);
+
+    // Capture aggregated pool statistics from exportStats() callback
+    uint64_t aggregatedSize = 0;
+    uint64_t aggregatedItems = 0;
+    uint64_t aggregatedFreeMemoryBytes = 0;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName);
+    std::string sizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".size");
+    std::string itemsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".items");
+    std::string freeMemoryBytesIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".free_memory_bytes");
+
+    alloc.exportStats(kTestCachePrefix, std::chrono::seconds{60},
+                      [&](folly::StringPiece name, uint64_t value) {
+                        if (name.endsWith(sizeIdentifier)) {
+                          aggregatedSize = value;
+                        } else if (name.endsWith(itemsIdentifier)) {
+                          aggregatedItems = value;
+                        } else if (name.endsWith(freeMemoryBytesIdentifier)) {
+                          aggregatedFreeMemoryBytes = value;
+                        }
+                      });
+
+    // Verify aggregated stats match the sum of individual pool stats
+    EXPECT_EQ(aggregatedSize, pool1Stats.poolSize + pool2Stats.poolSize);
+    EXPECT_EQ(aggregatedItems, pool1Stats.numItems() + pool2Stats.numItems());
+    EXPECT_EQ(aggregatedFreeMemoryBytes,
+              pool1Stats.freeMemoryBytes() + pool2Stats.freeMemoryBytes());
+
+    // Verify we have correct number of items in both pools
+    // 3 new items + 1 from setupTestPools
+    EXPECT_EQ(pool1Stats.numItems(), 4);
+    // 2 new items + 1 from setupTestPools
+    EXPECT_EQ(pool2Stats.numItems(), 3);
+  }
+
+  void testNonAggregatePoolStats() {
+    auto alloc = createPoolStatsTestAllocator(false);
+    setupTestPools(alloc, {64, 128, 256}, {64, 128, 256});
+    EXPECT_FALSE(hasAggregatedStats(alloc));
+  }
+
+  void testAggregatePoolStatsValues() {
+    auto alloc = createPoolStatsTestAllocator(true);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, {64, 128});
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, {64, 128});
+
+    auto pool1Stats = alloc.getPoolStats(poolId1);
+    auto pool2Stats = alloc.getPoolStats(poolId2);
+
+    // Capture specific aggregated pool statistics from exportStats() callback.
+    // Hand-picked a few representative stats to avoid checking 10+ different
+    // stats. Verify these exported aggregated values match manually summed
+    // individual pool stats.
+    uint64_t aggregatedSize = 0;
+    uint64_t aggregatedUsableSize = 0;
+    uint64_t aggregatedItems = 0;
+    uint64_t aggregatedAllocAttempts = 0;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName);
+    std::string sizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".size");
+    std::string usableSizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".usable_size");
+    std::string itemsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".items");
+    std::string allocAttemptsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".alloc.attempts");
+
+    alloc.exportStats(kTestCachePrefix, std::chrono::seconds{60},
+                      [&](folly::StringPiece name, uint64_t value) {
+                        if (name.endsWith(sizeIdentifier)) {
+                          aggregatedSize = value;
+                        } else if (name.endsWith(usableSizeIdentifier)) {
+                          aggregatedUsableSize = value;
+                        } else if (name.endsWith(itemsIdentifier)) {
+                          aggregatedItems = value;
+                        } else if (name.endsWith(allocAttemptsIdentifier)) {
+                          aggregatedAllocAttempts = value;
+                        }
+                      });
+
+    EXPECT_EQ(aggregatedSize, pool1Stats.poolSize + pool2Stats.poolSize);
+    EXPECT_EQ(aggregatedUsableSize,
+              pool1Stats.poolUsableSize + pool2Stats.poolUsableSize);
+    EXPECT_EQ(aggregatedItems, pool1Stats.numItems() + pool2Stats.numItems());
+    EXPECT_EQ(aggregatedAllocAttempts,
+              pool1Stats.numAllocAttempts() + pool2Stats.numAllocAttempts());
+  }
+
+  void testEvictionAgeAggregation() {
+    // Create a small allocator to fill up quickly
+    typename AllocatorT::Config config;
+    config.setCacheSize(6 * Slab::kSize);
+    AllocatorT alloc(config);
+
+    const std::set<uint32_t> allocSizes{150};
+
+    // Create two pools of different sizes to get different eviction patterns
+    auto poolId1 = alloc.addPool("pool1", Slab::kSize, allocSizes);
+    auto poolId2 = alloc.addPool("pool2", 2 * Slab::kSize, allocSizes);
+
+    ASSERT_NE(Slab::kInvalidPoolId, poolId1);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId2);
+
+    std::vector<uint32_t> sizes = {80};
+    const unsigned int keyLen = 30;
+
+    // Fill pools until evictions happen
+    this->fillUpPoolUntilEvictions(alloc, poolId1, sizes, keyLen);
+    this->fillUpPoolUntilEvictions(alloc, poolId2, sizes, keyLen);
+
+    // Cause different amounts of evictions to generate different age statistics
+    // Pool1 (smaller) - cause more evictions relative to its size
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId1, sizes, keyLen,
+                                        Slab::kSize / 2, false);
+    // Pool2 (larger) - cause fewer evictions relative to its size
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId2, sizes, keyLen,
+                                        Slab::kSize / 4, false);
+
+    // Get individual pool stats
+    auto stats1 = alloc.getPoolStats(poolId1);
+    auto stats2 = alloc.getPoolStats(poolId2);
+
+    // Verify both pools have evictions
+    ASSERT_GT(stats1.numEvictions(), 0) << "Pool 1 should have evictions";
+    ASSERT_GT(stats2.numEvictions(), 0) << "Pool 2 should have evictions";
+
+    auto aggregated = stats1;
+    aggregated += stats2;
+    const uint64_t totalEvictions =
+        stats1.numEvictions() + stats2.numEvictions();
+
+    // Verify eviction counts are summed
+    ASSERT_EQ(aggregated.numEvictions(), totalEvictions);
+
+    const double expectedWeightedAvg =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.avg +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.avg) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.avg,
+              static_cast<uint64_t>(std::round(expectedWeightedAvg)))
+        << "Aggregated eviction age should be weighted average";
+
+    // Test a few percentiles to ensure the weighted averaging works across
+    // all fields
+    const double expectedWeightedP50 =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.p50 +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.p50) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.p50,
+              static_cast<uint64_t>(std::round(expectedWeightedP50)))
+        << "Aggregated p50 should be weighted average";
+
+    const double expectedWeightedP99 =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.p99 +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.p99) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.p99,
+              static_cast<uint64_t>(std::round(expectedWeightedP99)))
+        << "Aggregated p99 should be weighted average";
+  }
+
+  void testPoolAggregationWithMaxClasses() {
+    auto alloc = createPoolStatsTestAllocator(true);
+
+    // Create two pools whose sum of allocation classes exceeds
+    // MemoryAllocator::kMaxClasses
+    std::set<uint32_t> pool1Sizes;
+    std::set<uint32_t> pool2Sizes;
+
+    for (unsigned int i = 1; i <= MemoryAllocator::kMaxClasses + 1; ++i) {
+      if (i < MemoryAllocator::kMaxClasses / 2) {
+        pool1Sizes.insert(64 * i);
+      } else {
+        pool2Sizes.insert(64 * i);
+      }
+    }
+
+    // This creates exactly MemoryAllocator::kMaxClasses + 1 (=129) distinct
+    // allocation sizes which does not allow aggregated stats
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, pool1Sizes);
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, pool2Sizes);
+
+    // Allocate one item in each pool
+    auto item1 = util::allocateAccessible(alloc, poolId1, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId2, "key2", 4200);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+
+    // Verify that aggregated stats are not present
+    ASSERT_FALSE(hasAggregatedStats(alloc));
+  }
+
+  void testAggregatePoolStatsSinglePool() {
+    // Test fallback to individual pool stats when only one pool exists
+    // and aggregatePoolStats is enabled
+    auto alloc = createPoolStatsTestAllocator(true);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    // Add a single pool
+    auto poolId = alloc.addPool(kPool1Name, numBytes, {64, 128, 256});
+
+    // Add some items to the pool
+    auto item1 = util::allocateAccessible(alloc, poolId, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId, "key2", 120);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+
+    // With only one pool, exportStats should fall back to individual
+    // pool stats and NOT export aggregated stats (nothing to aggregate)
+    EXPECT_FALSE(hasAggregatedStats(alloc));
+  }
+
+  // Reproducing issue where using 128 allocation classes with tail hits
+  // tracking enabled would throw when adding a pool
+  void testMaxAllocSizesWithTailHitsTracking() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.enableTailHitsTracking();
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    // Create 128 allocation sizes: 128, 256, 384, ..., 16384
+    std::set<uint32_t> allocSizes;
+    for (uint32_t i = 1; i <= 128; ++i) {
+      allocSizes.insert(i * 128);
+    }
+
+    // Assert that adding a pool with 128 allocation sizes does not throw
+    ASSERT_NO_THROW(alloc.addPool("test_pool", numBytes, allocSizes));
   }
 };
 } // namespace tests

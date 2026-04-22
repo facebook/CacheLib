@@ -67,11 +67,18 @@ class EnginePair {
   uint64_t estimateWriteSize(HashedKey hk, BufferView value) const;
 
   // Schedule an insert.
-  void scheduleInsert(HashedKey hk, BufferView value, InsertCallback cb);
+  void scheduleInsert(HashedKey hk,
+                      BufferView value,
+                      InsertCallback cb,
+                      uint8_t poolId = 0,
+                      uint32_t expiryTime = 0,
+                      uint32_t lastAccessTimeSecs = 0);
 
   // Perform lookup by keeping retrying until a result (Ok, NotFound, Error) is
   // reached.
-  Status lookupSync(HashedKey hk, Buffer& value) const;
+  Status lookupSync(HashedKey hk,
+                    Buffer& value,
+                    uint32_t& lastAccessTimeSecs) const;
 
   // Perform remove by keeping retrying until a result (Ok, NotFound, Error) is
   // reached.
@@ -103,7 +110,7 @@ class EnginePair {
 
   uint64_t getUsableSize() const;
 
-  std::pair<Status, std::string> getRandomAlloc(Buffer& value);
+  std::pair<Status, std::string /* key */> getRandomAlloc(Buffer& value);
 
   void validate();
 
@@ -111,6 +118,9 @@ class EnginePair {
 
   // Update any stats needed to be updated when eviction is done
   void updateEvictionStats(HashedKey hk, BufferView value, uint32_t lifetime);
+
+  // Set the EventTracker for BlockCache not available for BigHash
+  void setEventTracker(EventTracker* tracker);
 
  private:
   // Update statistics for lookup
@@ -124,11 +134,17 @@ class EnginePair {
   // Perform lookup in a retry friendly manner.
   Status lookupInternal(HashedKey hk,
                         Buffer& value,
-                        bool& skipLargeItemCache) const;
+                        bool& skipLargeItemCache,
+                        uint32_t& lastAccessTimeSecs) const;
 
   // insert an item to one of the engine and remove it from the other.
   // An option can be specified to skip insertion on retry.
-  Status insertInternal(HashedKey key, BufferView value, bool& skipInsertion);
+  Status insertInternal(HashedKey key,
+                        BufferView value,
+                        bool& skipInsertion,
+                        uint8_t poolId = 0,
+                        uint32_t expiryTime = 0,
+                        uint32_t lastAccessTimeSecs = 0);
 
   // Performa a remove by hashed key in a retry friendly manner.
   Status removeHashedKeyInternal(HashedKey hk, bool& skipSmallItemCache);

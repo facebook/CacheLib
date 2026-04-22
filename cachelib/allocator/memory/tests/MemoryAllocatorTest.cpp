@@ -749,4 +749,31 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   m.forEachAllocation(test_callback);
   ASSERT_EQ(forEachAllocationCount, 0);
 }
+
+TEST_F(MemoryAllocatorTest, isValidAllocSize) {
+  // Test zero size - invalid
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(0));
+
+  // Test sizes below minimum - invalid
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(Slab::kMinAllocSize - 1));
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(32));
+
+  // Test sizes above maximum - invalid
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(Slab::kSize + 1));
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(Slab::kSize + 8));
+
+  // Test misaligned sizes - invalid
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(65));
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(127));
+  EXPECT_FALSE(MemoryAllocator::isValidAllocSize(1023));
+
+  // Test valid sizes
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(Slab::kMinAllocSize));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(Slab::kSize));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(128));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(256));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(264));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(1024));
+  EXPECT_TRUE(MemoryAllocator::isValidAllocSize(4096));
+}
 } // namespace facebook::cachelib

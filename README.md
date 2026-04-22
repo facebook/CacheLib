@@ -47,7 +47,7 @@ You can install system dependencies to save building them:
 
 If you'd like to see the packages before installing them:
 
-    ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive
+    ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
 
 On other platforms or if on Linux and without system dependencies `getdeps.py` will mostly download and build them for you during the build step.
 
@@ -73,9 +73,8 @@ and will then invoke cmake etc to build CacheLib.  This will help ensure that yo
 
 ### Run tests
 
-By default `getdeps.py` will build the tests for folly. To run them:
+By default `getdeps.py` will build the tests for cachelib. To run them:
 
-    cd folly
     python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
 
 

@@ -120,11 +120,131 @@ class Index {
     size_t minUsedBytes{0};
   };
 
-  // Writes index to a Thrift object
-  virtual void persist(RecordWriter& rw) const = 0;
+  // Internally, FixedSizeIndex will maintain each entry as PackedItemRecord
+  // which is reduced size version of Index::ItemRecord, and there is missing
+  // precision or info due to the smaller size, but those missing details are
+  // not critical ones.
+  struct FOLLY_PACK_ATTR PackedItemRecord {
+    // encoded address
+    uint32_t address{kInvalidAddress};
+    // info about size and current hits.
+    struct {
+      uint8_t curHits : 2;
+      uint8_t sizeExp : 6;
+    } info{};
 
-  // Resets index then inserts entries read from @deserializer.
-  virtual void recover(RecordReader& rr) = 0;
+    static constexpr double kSizeExpBase = 1.196;
+    // Rather than using extra bit for indicating combined entry in index, this
+    // specific size value will be used.
+    static constexpr uint8_t kCombinedEntrySizeExp = 0x3f;
+
+    // Instead of using 1-bit for a flag per item to say if it's a valid entry
+    // or not, we will use the pre-defined invalid address value to decide the
+    // validity. With the current block cache implementation, address 0 won't be
+    // used for index address, so we are using it as the invalid address value
+    // here.
+    //
+    // (Current BC implementation/design always stores the end of the slot
+    // address (for the entry), so it will be always the address of the end of
+    // entry descriptor. See BlockCache.h for more details)
+    static constexpr uint32_t kInvalidAddress{0};
+    // Likewise, address '1' won't be used for index address with current BC
+    // implementation/design. So we are using it to indicate it's in active
+    // Combined entry block (Still in memory and not written to region yet, so
+    // no region address was assigned yet).
+    static constexpr uint32_t kActiveCebAddress{1};
+
+    PackedItemRecord() {}
+
+    PackedItemRecord(uint32_t _address,
+                     uint16_t _sizeHint,
+                     uint8_t _currentHits)
+        : address(_address) {
+      info.curHits = truncateCurHits(_currentHits);
+      info.sizeExp = sizeHintToExp(_sizeHint);
+      XDCHECK(isValidAddress(_address));
+    }
+
+    bool operator==(const PackedItemRecord& other) const noexcept {
+      return (address == other.address) &&
+             (info.curHits == other.info.curHits) &&
+             (info.sizeExp == other.info.sizeExp);
+    }
+
+    static uint8_t sizeHintToExp(uint16_t sizeHint) {
+      // Input value (sizeHint) is the unit of kMinAllocAlignSize
+      // (i.e. sizeHint = 1 means 512Bytes currently).
+      // We want to represent this 16bit value by exponent value with 6bits
+      // while 0x3F (all '1's, or 63 in decimal) will be reserved to indicate
+      // it's a combined entry bucket.
+      // So (a ^ 0) = 0, (a ^ 62) >= max value (65535), then we will use a
+      // == 1.196. So we can represent sizeHint by the exponent of base 1.196.
+      // (All these exponent usage will be improved as described as TODO below,
+      // but for now, for simplicity, this exponent convention is used here)
+      // TODO1: Will remove using exponents and multiplications and improve here
+      // TODO2: Need to revisit and evaluate to see if we need the same
+      // precision level for the larger sizes
+
+      XDCHECK(sizeHint > 0) << sizeHint;
+      constexpr double m = kSizeExpBase;
+      double x = 1;
+      int xp = 0;
+      while (x < sizeHint) {
+        x *= m;
+        ++xp;
+      }
+      XDCHECK(xp < kCombinedEntrySizeExp) << sizeHint << " " << xp;
+      return static_cast<uint8_t>(xp);
+    }
+
+    static uint16_t sizeExpToHint(uint8_t sizeExp) {
+      // TODO: Will remove using exponents and multiplications and improve here
+      constexpr double m = kSizeExpBase;
+      double sizeHint = 1;
+      for (int j = 0; j < sizeExp; ++j) {
+        sizeHint *= m;
+      }
+      return static_cast<uint16_t>(sizeHint);
+    }
+
+    static uint8_t truncateCurHits(uint8_t curHits) {
+      return (curHits > 3) ? 3 : curHits;
+    }
+
+    static bool isValidAddress(uint32_t address) {
+      return address != kInvalidAddress;
+    }
+
+    bool isValid() const { return isValidAddress(address); }
+    uint16_t getSizeHint() const { return sizeExpToHint(info.sizeExp); }
+    bool isCombinedEntry() const {
+      return info.sizeExp == kCombinedEntrySizeExp;
+    }
+    void setCombinedEntry() {
+      info.sizeExp = kCombinedEntrySizeExp;
+      address = kActiveCebAddress;
+      // reset the current hits to 0
+      // This hit count will be for the combined entry itself
+      info.curHits = 0;
+    }
+
+    int bumpCurHits(uint8_t hits = 1) {
+      info.curHits = (uint8_t)(std::min(info.curHits + hits, 3));
+      return info.curHits;
+    }
+  };
+  static_assert(5 == sizeof(PackedItemRecord),
+                "PackedItemRecord size is 5 bytes");
+
+  // Writes index to a Thrift object or shm.
+  // When the index uses shm for its persistence, RecordWriter is not needed.
+  virtual void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const = 0;
+
+  // Resets index then inserts entries read from @deserializer or shm.
+  // When the index uses shm for its persistence, RecordReader is not needed.
+  virtual void recover(
+      std::optional<std::reference_wrapper<RecordReader>> rr) = 0;
 
   // Gets value and update tracking counters
   virtual LookupResult lookup(uint64_t key) = 0;
@@ -139,6 +259,10 @@ class Index {
   virtual LookupResult insert(uint64_t key,
                               uint32_t address,
                               uint16_t sizeHint) = 0;
+  // Same as above but fails if the key already exists
+  virtual LookupResult insertIfNotExists(uint64_t key,
+                                         uint32_t address,
+                                         uint16_t sizeHint) = 0;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
@@ -173,6 +297,18 @@ class Index {
 
   // Exports index stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
+
+  /////////////////////////////////////////////////////////////////////////////
+  // APIs only for the index supporting Combined Entry Block.
+  //
+
+  // Return true if the given bucket is in active combined entry block.
+  // Should be called under proper lock is held.
+  virtual bool isActiveCombinedEntryBucketLocked(uint64_t bid) const = 0;
+  // Update the combined entry bucket's address to the given one.
+  // Should be called under proper lock is held.
+  virtual void updateCombinedEntryBucketLocked(uint64_t bid,
+                                               uint32_t address) = 0;
 
  protected:
   // Updates hits information of a key.

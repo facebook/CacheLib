@@ -17,7 +17,7 @@
 #include <folly/File.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
-#include <folly/experimental/io/IoUring.h>
+#include <folly/io/async/IoUring.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
