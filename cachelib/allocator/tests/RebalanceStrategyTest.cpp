@@ -501,6 +501,173 @@ class RebalanceStrategyTest : public testing::Test {
       ASSERT_TRUE(event.sequenceNum >= 0);
     }
   }
+
+  void testPickVictimHeuristics() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(50 * Slab::kSize);
+    auto cache = std::make_unique<AllocatorT>(config);
+
+    const uint32_t tinyAllocSize = Slab::kSize / 8;
+    const uint32_t smallAllocSize = Slab::kSize / 4;
+    const uint32_t mediumAllocSize = Slab::kSize / 2;
+    const uint32_t largeAllocSize = Slab::kSize;
+
+    const std::set<uint32_t> allocSizes{tinyAllocSize, smallAllocSize,
+                                        mediumAllocSize, largeAllocSize};
+
+    auto pid = cache->addPool(
+        "TestPool", cache->getCacheMemoryStats().ramCacheSize, allocSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, pid);
+
+    // Find the ClassIds for each allocation size
+    ClassId tinyClass{Slab::kInvalidClassId};
+    ClassId smallClass{Slab::kInvalidClassId};
+    ClassId mediumClass{Slab::kInvalidClassId};
+    ClassId largeClass{Slab::kInvalidClassId};
+    {
+      auto cacheStats = cache->getPoolStats(pid).cacheStats;
+      for (auto&& it : cacheStats) {
+        if (it.second.allocSize == tinyAllocSize) {
+          tinyClass = it.first;
+        } else if (it.second.allocSize == smallAllocSize) {
+          smallClass = it.first;
+        } else if (it.second.allocSize == mediumAllocSize) {
+          mediumClass = it.first;
+        } else if (it.second.allocSize == largeAllocSize) {
+          largeClass = it.first;
+        }
+      }
+    }
+    ASSERT_NE(Slab::kInvalidClassId, tinyClass);
+    ASSERT_NE(Slab::kInvalidClassId, smallClass);
+    ASSERT_NE(Slab::kInvalidClassId, mediumClass);
+    ASSERT_NE(Slab::kInvalidClassId, largeClass);
+
+    // Allocate 20 slabs to tiny class
+    std::vector<typename AllocatorT::WriteHandle> tinyHandles;
+    for (uint32_t i = 0;
+         cache->getPoolStats(pid).numSlabsForClass(tinyClass) < 20;
+         i++) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, "tiny-" + std::to_string(i), tinyAllocSize / 2);
+      if (handle) {
+        tinyHandles.push_back(std::move(handle));
+      }
+    }
+
+    // Allocate 12 slabs to small class
+    std::vector<typename AllocatorT::WriteHandle> smallHandles;
+    for (uint32_t i = 0;
+         cache->getPoolStats(pid).numSlabsForClass(smallClass) < 12;
+         i++) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, "small-" + std::to_string(i), tinyAllocSize + 100);
+      if (handle) {
+        smallHandles.push_back(std::move(handle));
+      }
+    }
+
+    // Allocate 8 slabs to medium class
+    std::vector<typename AllocatorT::WriteHandle> mediumHandles;
+    for (uint32_t i = 0;
+         cache->getPoolStats(pid).numSlabsForClass(mediumClass) < 8;
+         i++) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, "medium-" + std::to_string(i), smallAllocSize + 100);
+      if (handle) {
+        mediumHandles.push_back(std::move(handle));
+      }
+    }
+
+    // Allocate 5 slabs to large class
+    std::vector<typename AllocatorT::WriteHandle> largeHandles;
+    for (uint32_t i = 0;
+         cache->getPoolStats(pid).numSlabsForClass(largeClass) < 5;
+         i++) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, "large-" + std::to_string(i), mediumAllocSize + 100);
+      if (handle) {
+        largeHandles.push_back(std::move(handle));
+      }
+    }
+
+    auto poolStats = cache->getPoolStats(pid);
+
+    ASSERT_EQ(poolStats.numSlabsForClass(tinyClass), 20);
+    ASSERT_EQ(poolStats.numSlabsForClass(smallClass), 12);
+    ASSERT_EQ(poolStats.numSlabsForClass(mediumClass), 8);
+    ASSERT_EQ(poolStats.numSlabsForClass(largeClass), 5);
+
+    // Test 1: TotalSlabs strategy picks the class with most slabs
+    {
+      TotalSlabsStrategy totalSlabsStrategy;
+      ClassId victim =
+          totalSlabsStrategy.pickAllocClassForResizing(*cache, pid, poolStats);
+      EXPECT_EQ(tinyClass, victim);
+    }
+
+    // Test 2: AllocationSize strategy with numClassesToPickFrom = 1
+    {
+      AllocationSizeStrategy::Config asConfig;
+      asConfig.minSlabsForResizing = 3;
+      asConfig.numClassesToPickFrom = 1;
+      AllocationSizeStrategy allocSizeStrategy(asConfig);
+
+      // All classes have >= 3 slabs, so should pick the largest allocation size
+      ClassId victim =
+          allocSizeStrategy.pickAllocClassForResizing(*cache, pid, poolStats);
+      EXPECT_EQ(largeClass, victim);
+    }
+
+    // Test 3: AllocationSize strategy with stricter minSlabs filter
+    {
+      AllocationSizeStrategy::Config asConfig;
+      asConfig.minSlabsForResizing = 10;
+      asConfig.numClassesToPickFrom = 1;
+      AllocationSizeStrategy allocSizeStrategy(asConfig);
+
+      // Only tiny and small have >= 10 slabs, so should pick small since small
+      // is the larger allocation size
+      ClassId victim =
+          allocSizeStrategy.pickAllocClassForResizing(*cache, pid, poolStats);
+      EXPECT_EQ(smallClass, victim);
+    }
+
+    // Test 4: AllocationSize strategy fallback when filter too strict
+    {
+      AllocationSizeStrategy::Config asConfig;
+      asConfig.minSlabsForResizing = 100;
+      asConfig.numClassesToPickFrom = 1;
+      AllocationSizeStrategy allocSizeStrategy(asConfig);
+
+      // Should fallback to TotalSlabs heuristic because no classes have >= 100
+      // slabs
+      ClassId victim =
+          allocSizeStrategy.pickAllocClassForResizing(*cache, pid, poolStats);
+      EXPECT_EQ(tinyClass, victim);
+    }
+
+    // Test 5: RebalanceStrategy with default (TotalSlabs) strategy
+    {
+      RebalanceStrategy strategy;
+      // Default strategy should be TotalSlabs
+      ClassId victim = strategy.pickVictimForResizing(*cache, pid);
+      EXPECT_EQ(tinyClass, victim);
+    }
+
+    // Test 6: RebalanceStrategy with custom AllocationSize strategy
+    {
+      RebalanceStrategy strategy;
+      AllocationSizeStrategy::Config asConfig;
+      asConfig.minSlabsForResizing = 3;
+      asConfig.numClassesToPickFrom = 1;
+      strategy.setPickVictimStrategy(
+          std::make_unique<AllocationSizeStrategy>(asConfig));
+
+      ClassId victim = strategy.pickVictimForResizing(*cache, pid);
+      EXPECT_EQ(largeClass, victim);
+    }
+  }
 };
 
 TYPED_TEST_CASE(RebalanceStrategyTest, AllocatorTypes);
@@ -527,6 +694,10 @@ TYPED_TEST(RebalanceStrategyTest, WeightedHitsPerSlabRebalancer) {
 
 TYPED_TEST(RebalanceStrategyTest, WeightedLruTailAgeRebalancer) {
   this->testLruTailAgeWithWeights();
+}
+
+TYPED_TEST(RebalanceStrategyTest, PickVictimHeuristics) {
+  this->testPickVictimHeuristics();
 }
 
 using RebalanceStrategy2QTest = RebalanceStrategyTest<Lru2QAllocator>;
@@ -743,6 +914,8 @@ TEST_F(RebalanceStrategyMaxAgeEvictionTest, HitsSlabRebalanceMaxAge) {
     EXPECT_EQ(cid0, ctx.victimClassId);
   }
 }
+
 } // namespace tests
+
 } // namespace cachelib
 } // namespace facebook

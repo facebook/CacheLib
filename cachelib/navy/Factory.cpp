@@ -105,6 +105,12 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
 
   void setDevice(Device* device) { config_.device = device; }
 
+  void setPersistParams(const NavyPersistParams& params) {
+    config_.persistParams = params;
+  }
+
+  void setName(const std::string& name) { config_.name = name; }
+
   void setNumInMemBuffers(uint32_t numInMemBuffers) override {
     config_.numInMemBuffers = numInMemBuffers;
   }
@@ -125,17 +131,32 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.regionManagerFlushAsync = asyn;
   }
 
+  void setCleanRegionFastPath(bool enable) override {
+    config_.cleanRegionFastPath = enable;
+  }
+
+  void setRecoverEvictionPolicy(bool enable) override {
+    config_.recoverEvictionPolicy = enable;
+  }
+
+  void setUseCombinedEntryBlock(bool useCombinedEntryBlock) override {
+    config_.useCombinedEntryBlock = useCombinedEntryBlock;
+  }
+
   void setIndexConfig(const BlockCacheIndexConfig& indexConfig) override {
     config_.indexConfig = indexConfig;
   }
 
-  std::unique_ptr<Engine> create(JobScheduler& scheduler,
-                                 ExpiredCheck checkExpired,
+  void setLegacyEventTracker(
+      const std::optional<std::reference_wrapper<LegacyEventTracker>>&
+          legacyEventTracker) override {
+    config_.legacyEventTracker = legacyEventTracker;
+  }
+
+  std::unique_ptr<Engine> create(ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {
-    config_.scheduler = &scheduler;
     config_.checkExpired = std::move(checkExpired);
     config_.destructorCb = std::move(cb);
-    config_.validate();
     return std::make_unique<BlockCache>(std::move(config_));
   }
 
@@ -164,6 +185,10 @@ class BigHashProtoImpl final : public BigHashProto {
     bloomFilterEnabled_ = true;
     numHashes_ = numHashes;
     hashTableBitSize_ = hashTableBitSize;
+  }
+
+  void setNumMutexesPower(uint8_t numMutexesPower) override {
+    config_.numMutexesPower = numMutexesPower;
   }
 
   void setDevice(Device* device) { config_.device = device; }
@@ -195,12 +220,6 @@ class EnginePairProtoImpl final : public EnginePairProto {
  public:
   EnginePairProtoImpl() = default;
   ~EnginePairProtoImpl() override = default;
-  EnginePairProtoImpl(EnginePairProtoImpl&& proto) noexcept {
-    bigHashProto_ = std::move(proto.bigHashProto_);
-    blockCacheProto_ = std::move(proto.blockCacheProto_);
-    smallItemMaxSize_ = proto.smallItemMaxSize_;
-    name_ = std::move(proto.name_);
-  }
 
   void setBigHash(std::unique_ptr<BigHashProto> proto,
                   uint32_t smallItemMaxSize) override {
@@ -213,6 +232,7 @@ class EnginePairProtoImpl final : public EnginePairProto {
   }
 
   EnginePair create(Device* device,
+                    const NavyPersistParams& persistParams,
                     const ExpiredCheck& checkExpired,
                     const DestructorCallback& destructorCb,
                     JobScheduler& scheduler) {
@@ -232,7 +252,9 @@ class EnginePairProtoImpl final : public EnginePairProto {
       auto bcProto = dynamic_cast<BlockCacheProtoImpl*>(blockCacheProto_.get());
       if (bcProto != nullptr) {
         bcProto->setDevice(device);
-        bc = std::move(*bcProto).create(scheduler, checkExpired, destructorCb);
+        bcProto->setPersistParams(persistParams);
+        bcProto->setName(name_);
+        bc = std::move(*bcProto).create(checkExpired, destructorCb);
       }
     }
 
@@ -249,10 +271,10 @@ class EnginePairProtoImpl final : public EnginePairProto {
   std::string name_;
 };
 
-class CacheProtoImpl final : public CacheProto {
+class DriverProtoImpl final : public CacheProto {
  public:
-  CacheProtoImpl() = default;
-  ~CacheProtoImpl() override = default;
+  DriverProtoImpl() = default;
+  ~DriverProtoImpl() override = default;
 
   void setMaxConcurrentInserts(uint32_t limit) override {
     config_.maxConcurrentInserts = limit;
@@ -270,7 +292,15 @@ class CacheProtoImpl final : public CacheProto {
     config_.device = std::move(device);
   }
 
+  void setPersistParams(const NavyPersistParams& params) override {
+    config_.persistParams = params;
+  }
+
   void setMetadataSize(size_t size) override { config_.metadataSize = size; }
+
+  void setMaxKeySize(uint32_t keySize) override {
+    config_.maxKeySize = keySize;
+  }
 
   void setExpiredCheck(ExpiredCheck checkExpired) override {
     checkExpired_ = std::move(checkExpired);
@@ -319,6 +349,7 @@ class CacheProtoImpl final : public CacheProto {
       apConfig.probFactorLowerBound = probFactorLowerBound;
       apConfig.probFactorUpperBound = probFactorUpperBound;
     }
+    apConfig.enableLogging = config.getEnableLogging();
     auto fnBypass = config.getFnBypass();
     if (fnBypass) {
       apConfig.fnBypass = std::move(fnBypass);
@@ -340,8 +371,8 @@ class CacheProtoImpl final : public CacheProto {
     for (auto& p : enginePairsProto_) {
       config_.enginePairs.push_back(
           dynamic_cast<EnginePairProtoImpl*>(p.get())->create(
-              config_.device.get(), checkExpired_, destructorCb_,
-              *config_.scheduler));
+              config_.device.get(), config_.persistParams, checkExpired_,
+              destructorCb_, *config_.scheduler));
     }
 
     return std::make_unique<Driver>(std::move(config_));
@@ -368,10 +399,10 @@ std::unique_ptr<EnginePairProto> createEnginePairProto() {
 }
 
 std::unique_ptr<CacheProto> createCacheProto() {
-  return std::make_unique<CacheProtoImpl>();
+  return std::make_unique<DriverProtoImpl>();
 }
 
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto) {
-  return std::move(dynamic_cast<CacheProtoImpl&>(*proto)).create();
+  return std::move(dynamic_cast<DriverProtoImpl&>(*proto)).create();
 }
 } // namespace facebook::cachelib::navy

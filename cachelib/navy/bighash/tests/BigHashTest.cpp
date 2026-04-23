@@ -65,14 +65,17 @@ TEST(BigHash, InsertAndRemove) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(Status::NotFound, bh.remove(makeHK("key")));
 }
 
@@ -86,10 +89,13 @@ TEST(BigHash, CouldExistWithoutBF) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
@@ -108,12 +114,15 @@ TEST(BigHash, CouldExistWithBF) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
   // bloom filter is initially un-initialized. So it will only return true for
   // keys that were inserted.
   EXPECT_EQ(false, bh.couldExist(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
   EXPECT_EQ(false, bh.couldExist(makeHK("key")));
@@ -128,8 +137,11 @@ TEST(BigHash, SimpleStats) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -180,8 +192,12 @@ TEST(BigHash, EvictionStats) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("123456789")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key1"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key2"), makeView("123456789"), 0 /* poolId */,
+                      0 /* expiryTime */));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -210,9 +226,13 @@ TEST(BigHash, DeviceErrorStats) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key1"), makeView("1"), 0 /* poolId */,
+                      0 /* expiryTime */));
   EXPECT_CALL(*device, writeImpl(0, 64, _, _)).WillOnce(Return(false));
-  EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1")));
+  EXPECT_EQ(Status::DeviceError,
+            bh.insert(makeHK("key2"), makeView("1"), 0 /* poolId */,
+                      0 /* expiryTime */));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -245,17 +265,22 @@ TEST(BigHash, DoubleInsert) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   EXPECT_CALL(helper,
               call(makeHK("key"), makeView("12345"), DestructorEvent::Removed));
 
   // Insert the same key a second time will overwrite the previous value.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("45678"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("45678"), value.view());
 }
 
@@ -275,8 +300,12 @@ TEST(BigHash, DestructorCallback) {
   config.destructorCb = toCallback(helper);
 
   BigHash bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("value 2")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 1"), makeView("value 1"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 2"), makeView("value 2"), 0 /* poolId */,
+                      0 /* expiryTime */));
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key 2")));
 }
 
@@ -306,14 +335,17 @@ TEST(BigHash, Reset) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
   auto oldBucketContent = readFirstBucket();
 
   bh.reset();
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
   // bh reset should reset the bloom filter as well.
   EXPECT_EQ(1, bh.bfRejectCount());
@@ -321,7 +353,9 @@ TEST(BigHash, Reset) {
   // The new bucket content must be identical to that of the old since
   // after a reset, our first write is equivalent to writing to a brand
   // new bucket.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
   auto newBucketContent = readFirstBucket();
   EXPECT_EQ(oldBucketContent.view(), newBucketContent.view());
 }
@@ -361,9 +395,15 @@ TEST(BigHash, WriteInTwoBuckets) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("A"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("B"), makeView("45678")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("C"), makeView("67890")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("A"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("B"), makeView("45678"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("C"), makeView("67890"), 0 /* poolId */,
+                      0 /* expiryTime */));
 }
 
 TEST(BigHash, RemoveNotFound) {
@@ -385,7 +425,8 @@ TEST(BigHash, RemoveNotFound) {
 
   BigHash bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"));
+  bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+            0 /* expiryTime */);
   bh.remove(makeHK("key"));
   bh.remove(makeHK("key"));
 }
@@ -401,10 +442,12 @@ TEST(BigHash, CorruptBucket) {
 
   BigHash bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"));
+  bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+            0 /* expiryTime */);
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   // Corrupt data. Use device directly to avoid alignment checks
@@ -414,7 +457,7 @@ TEST(BigHash, CorruptBucket) {
   memcpy(badBuf.data(), badBytes, sizeof(badBytes));
   device->getRealDeviceRef().write(0, std::move(badBuf));
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 }
 
 TEST(BigHash, Recovery) {
@@ -426,8 +469,11 @@ TEST(BigHash, Recovery) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   folly::IOBufQueue queue;
@@ -437,7 +483,7 @@ TEST(BigHash, Recovery) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_TRUE(bh.recover(*rr));
 
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 }
 
@@ -454,8 +500,11 @@ TEST(BigHash, RecoveryBadConfig) {
     BigHash bh(std::move(config));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-    EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok,
+              bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                        0 /* expiryTime */));
+    EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
     EXPECT_EQ(makeView("12345"), value.view());
 
     auto rw = createMemoryRecordWriter(queue);
@@ -485,9 +534,12 @@ TEST(BigHash, RecoveryCorruptedData) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -500,7 +552,7 @@ TEST(BigHash, RecoveryCorruptedData) {
 
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 }
 
 TEST(BigHash, ConcurrentRead) {
@@ -511,9 +563,15 @@ TEST(BigHash, ConcurrentRead) {
   config.device = device.get();
 
   BigHash bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("1")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("2")));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 1"), makeView("1"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 2"), makeView("2"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 3"), makeView("3"), 0 /* poolId */,
+                      0 /* expiryTime */));
 
   struct MockLookupHelper {
     MOCK_METHOD2(call, void(HashedKey, BufferView));
@@ -525,7 +583,8 @@ TEST(BigHash, ConcurrentRead) {
 
   auto runRead = [&bh, &helper](HashedKey hk) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, bh.lookup(hk, value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, bh.lookup(hk, value, lat));
     helper.call(hk, value.view());
   };
 
@@ -549,7 +608,8 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
 
   // After a bad recovery, filters will not be affected
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -562,7 +622,7 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
 }
 
 TEST(BigHash, BloomFilter) {
@@ -580,7 +640,9 @@ TEST(BigHash, BloomFilter) {
   BigHash bh(std::move(config));
   BufferGen bg;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), bg.gen(20).view()));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("100"), bg.gen(20).view(), 0 /* poolId */,
+                      0 /* expiryTime */));
 
   // Check that eviction triggers BF rebuild. Use the following setup:
   // - Insert "100". BF rejects "101" and accepts "102" and "103".
@@ -591,37 +653,42 @@ TEST(BigHash, BloomFilter) {
   EXPECT_EQ(0, bh.bfRejectCount());
 
   Buffer value;
+  uint32_t lat = 0;
   // Rejected by BF
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
   // False positive, rejected by key
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
   // False positive, rejected by key
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
 
   // Insert "101"
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view()));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("101"), bg.gen(20).view(), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value, lat));
   EXPECT_EQ(2, bh.bfRejectCount());
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view()));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("110"), bg.gen(20).view(), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value, lat));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value, lat));
   EXPECT_EQ(2, bh.bfRejectCount());
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
   EXPECT_EQ(3, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value, lat));
   EXPECT_EQ(4, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value, lat));
   EXPECT_EQ(5, bh.bfRejectCount());
 
   // If we remove, BF will be rebuilt and will reject "101":
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("101")));
   EXPECT_EQ(5, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value, lat));
   EXPECT_EQ(6, bh.bfRejectCount());
 }
 
@@ -643,9 +710,12 @@ TEST(BigHash, BloomFilterRecovery) {
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
     BigHash bh(std::move(config));
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat")));
+    EXPECT_EQ(Status::Ok,
+              bh.insert(makeHK("100"), makeView("cat"), 0 /* poolId */,
+                        0 /* expiryTime */));
     Buffer value;
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value, lat));
     EXPECT_EQ(1, bh.bfRejectCount());
     auto rw = createMemoryRecordWriter(queue);
     bh.persist(*rw);
@@ -674,13 +744,14 @@ TEST(BigHash, BloomFilterRecovery) {
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(2, bh.bfRejectCount());
     Buffer value;
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value, lat));
     EXPECT_EQ(3, bh.bfRejectCount());
 
     // Test lookup, second bucket
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value, lat));
     EXPECT_EQ(4, bh.bfRejectCount());
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value, lat));
     EXPECT_EQ(5, bh.bfRejectCount());
 
     actual = device->releaseRealDevice();
@@ -703,15 +774,19 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
   };
 
   BigHash bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key 1"), makeView("value 1"), 0 /* poolId */,
+                      0 /* expiryTime */));
 
   // insert will hang in the destructor, but lock should be released once
   // destructorCB starts
   std::thread t([&]() {
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 2")));
+    EXPECT_EQ(Status::Ok,
+              bh.insert(makeHK("key 1"), makeView("value 2"), 0 /* poolId */,
+                        0 /* expiryTime */));
   });
 
-  // wait until destrcutor started, which means bucket lock is released
+  // wait until destructor started, which means bucket lock is released
   while (!started) {
     ;
   }
@@ -737,7 +812,9 @@ TEST(BigHash, RandomAlloc) {
       auto keyStr = genKey(4, bid);
       sprintf((char*)data.data(),
               "data_%8s PAYLOAD: ", &keyStr[keyStr.size() - 8]);
-      EXPECT_EQ(Status::Ok, bh.insert(makeHK(keyStr.c_str()), data.view()));
+      EXPECT_EQ(Status::Ok,
+                bh.insert(makeHK(keyStr.c_str()), data.view(), 0 /* poolId */,
+                          0 /* expiryTime */));
     }
   }
 

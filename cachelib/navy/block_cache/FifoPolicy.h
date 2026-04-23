@@ -19,7 +19,6 @@
 #include <folly/fibers/TimedMutex.h>
 
 #include <deque>
-#include <set>
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 
@@ -61,7 +60,7 @@ class FifoPolicy final : public EvictionPolicy {
 
   // Gets memory used by FIFO policy.
   size_t memorySize() const override {
-    std::lock_guard<TimedMutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     return sizeof(*this) + sizeof(detail::Node) * queue_.size();
   }
 
@@ -69,14 +68,14 @@ class FifoPolicy final : public EvictionPolicy {
   void getCounters(const CounterVisitor& v) const override;
 
   // Persists metadata associated with FIFO policy.
-  void persist(RecordWriter& rw) const override;
+  void persist(serialization::EvictionPolicyData& out) const override;
 
   // Recovers from previously persisted metadata associated with FIFO policy.
-  void recover(RecordReader& rr) override;
+  void recover(const serialization::EvictionPolicyData& in) override;
 
  private:
   std::deque<detail::Node> queue_;
-  mutable TimedMutex mutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:fifo_policy"> mutex_;
 };
 
 // Segmented FIFO policy
@@ -137,13 +136,6 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   // Exports Segmented FIFO policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
 
-  // Persists metadata associated with segmented FIFO policy.
-  void persist(RecordWriter& rw) const override;
-
-  // Recovers from previously persisted metadata associated with segmented FIFO
-  // policy.
-  void recover(RecordReader& rr) override;
-
  private:
   void rebalanceLocked();
   size_t numElementsLocked();
@@ -155,7 +147,8 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   const unsigned int totalRatioWeight_;
 
   std::vector<std::deque<detail::Node>> segments_;
-  mutable TimedMutex mutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_segmented_fifo_policy">
+      mutex_;
 };
 } // namespace navy
 } // namespace cachelib

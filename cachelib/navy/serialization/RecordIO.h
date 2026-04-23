@@ -19,7 +19,6 @@
 #include <folly/io/IOBufQueue.h>
 
 #include <memory>
-#include <stdexcept>
 
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/common/Device.h"

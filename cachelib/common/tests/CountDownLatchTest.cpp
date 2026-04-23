@@ -38,7 +38,7 @@ TEST(CountDownLatchTest, BasicTest) {
 
   std::vector<std::thread> threads;
   for (size_t i = 0; i < kThreads; i++) {
-    threads.push_back(std::thread{countDown});
+    threads.emplace_back(countDown);
   }
   for (size_t i = 0; i < kThreads; i++) {
     threads[i].join();
@@ -68,7 +68,7 @@ TEST(CountDownLatchTest, MultiLatches) {
 
   std::vector<std::thread> threads;
   for (size_t i = 0; i < kThreads; i++) {
-    threads.push_back(std::thread{countDown});
+    threads.emplace_back(countDown);
   }
   for (size_t i = 0; i < 10; i++) {
     threads[i].join();

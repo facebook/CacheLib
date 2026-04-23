@@ -40,17 +40,60 @@ TYPED_TEST(AllocatorResizeTest, BasicResizeWithSharedMem) {
   this->testBasicResizeWithSharedMem();
 }
 
-TYPED_TEST(AllocatorResizeTest, ResizeAndMemMonitorTests) {
+TYPED_TEST(AllocatorResizeTest, ResizeMemMonitor) {
   this->testResizeMemMonitor();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorNoResize) {
   this->testMemMonitorNoResize();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorCompactCache) {
   this->testMemMonitorCompactCache();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorEmptySlabs) {
   this->testMemMonitorEmptySlabs();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisedCountsMatchReality) {
+  this->testMemMonitorAdvisedCountsMatchReality();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemoryAdviseWithSaveRestore) {
   this->testMemoryAdviseWithSaveRestore();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemoryMonitorPerIterationAdviseReclaim) {
   this->testMemoryMonitorPerIterationAdviseReclaim();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit) {
+  this->testMemMonitorAdvisesAwayOverLimit();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit2) {
+  this->testMemMonitorAdvisesAwayOverLimit2();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit3) {
+  this->testMemMonitorAdvisesAwayOverLimit3();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayAllCacheBug) {
+  this->testMemMonitorAdvisesAwayAllCacheBug();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesTimeout) {
+  this->testMemMonitorAdvisesTimeout();
 }
 
 TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
+}
+
+TYPED_TEST(AllocatorResizeTest, PoolResizerWithSlabReleaseTimeouts) {
+  this->testPoolResizerWithSlabReleaseTimeouts();
 }
 
 } // end of namespace tests

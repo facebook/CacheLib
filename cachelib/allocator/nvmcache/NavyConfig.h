@@ -22,6 +22,7 @@
 #include <stdexcept>
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Hash.h"
 
 namespace facebook {
@@ -53,7 +54,7 @@ class RandomAPConfig {
 };
 
 /**
- * RandomDynamicAPConfig provides APIs for users to configure one of the
+ * DynamicRandomAPConfig provides APIs for users to configure one of the
  * admission policy - "dynamic_random". Admission policy is one part of
  * NavyConfig.
  *
@@ -110,6 +111,12 @@ class DynamicRandomAPConfig {
     return *this;
   }
 
+  DynamicRandomAPConfig& enableLogging(bool enable) noexcept {
+    enableLogging_ = enable;
+    return *this;
+  }
+
+  // Set a function to determine which items bypass the admission policy.
   DynamicRandomAPConfig& setFnBypass(FnBypass fn) {
     fnBypass_ = std::move(fn);
     return *this;
@@ -126,6 +133,8 @@ class DynamicRandomAPConfig {
   double getProbFactorLowerBound() const { return probFactorLowerBound_; }
 
   double getProbFactorUpperBound() const { return probFactorUpperBound_; }
+
+  bool getEnableLogging() const { return enableLogging_; }
 
   FnBypass getFnBypass() const { return fnBypass_; }
 
@@ -146,6 +155,8 @@ class DynamicRandomAPConfig {
   // Upper bound of the probability factor. Non-positive value would be
   // replaced the default value from DynamicRandomAP::Config
   double probFactorUpperBound_{0};
+  // Whether to putting out logs for more information
+  bool enableLogging_{false};
   // Bypass function to determine keys to bypass in admission policy.
   FnBypass fnBypass_;
 };
@@ -162,15 +173,14 @@ class DynamicRandomAPConfig {
  *
  * With sparse_map index, it will dynamically adjust the number of buckets
  * depending on the number of entries stored and hash distribution to avoid hash
- * collision. However, it will kepp rehashing on the runtime, meaning that it
- * will increase resizing costs (accompanying memory allocations and copies) and
- * also memory footprint that it uses can't be controlled (Adding more
- * entries will consume more memory)
- * Another side effect caused by sparse_map index implementatoin is, it may
- * consume much more memory per entries than fixed sized one even with the same
- * number of buckets are populated and stored.
+ * collision. However, it will keep rehashing at runtime, meaning that it will
+ * increase resizing costs (accompanying memory allocations and copies) and also
+ * memory footprint that it uses can't be controlled (Adding more entries will
+ * consume more memory).
  *
- * TODO: For now, only SparseMapIndex related configs are supported here
+ * Another side effect caused by sparse_map index implementation is that it may
+ * consume much more memory per entries than fixed sized one even when the same
+ * number of buckets are populated and stored.
  */
 class BlockCacheIndexConfig {
  public:
@@ -179,6 +189,31 @@ class BlockCacheIndexConfig {
   // config values as previously used in SparseMapIndex implementation.
   static constexpr uint32_t kDefaultNumSparseMapBuckets{64 * 1024};
   static constexpr uint64_t kDefaultNumBucketsPerMutex{64};
+
+  BlockCacheIndexConfig& enableFixedSizeIndex(bool enable) {
+    enableFixedSizeIndex_ = enable;
+    return *this;
+  }
+
+  // TODO: For the config values for fixed size index, we need to add more
+  // checks to see if it's a reasonable range with the block cache size given
+  BlockCacheIndexConfig& setNumChunks(uint32_t numChunks) {
+    if (numChunks == 0) {
+      throw std::invalid_argument("numChunks must be > 0");
+    }
+    numChunks_ = numChunks;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& setNumBucketsPerChunkPower(
+      uint8_t numBucketsPerChunkPower) {
+    if (numBucketsPerChunkPower == 0 || numBucketsPerChunkPower >= 64) {
+      throw std::invalid_argument(
+          "numBucketsPerChunkPower is 0 or too large (>= 64).");
+    }
+    numBucketsPerChunkPower_ = numBucketsPerChunkPower;
+    return *this;
+  }
 
   BlockCacheIndexConfig& setNumBucketsPerMutex(uint64_t numBucketsPerMutex) {
     if (numBucketsPerMutex == 0) {
@@ -201,20 +236,50 @@ class BlockCacheIndexConfig {
     return *this;
   }
 
+  BlockCacheIndexConfig& setPersistUsingShm(bool useShm) {
+    persistUsingShm_ = useShm;
+    return *this;
+  }
+
   BlockCacheIndexConfig& validate() {
-    // with SparseMapIndex
-    if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numSparseMapBuckets must be power of two");
-    }
-    if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numBucketsPerMutex must be power of two");
-    }
-    if (numBucketsPerMutex_ > numSparseMapBuckets_) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numBucketsPerMutex must be <= "
-          "numSparseMapBuckets");
+    if (enableFixedSizeIndex_) {
+      // with FixedSizeIndex
+      if (numChunks_ == 0 || numBucketsPerMutex_ == 0 ||
+          numBucketsPerChunkPower_ == 0 || numBucketsPerChunkPower_ >= 64) {
+        throw std::invalid_argument(
+            "enableFixedSizeIndex is set, but numChunks, numBucketsPerMutex, "
+            "or numBucketsPerChunkPower is not a reasonable value");
+      }
+      if ((uint64_t)numChunks_ * (1ull << numBucketsPerChunkPower_) <
+          numBucketsPerMutex_) {
+        throw std::invalid_argument(
+            "enableFixedSizeIndex is set, numBucketsPerMutex is larger than "
+            "total number of buckets");
+      }
+      if (!persistUsingShm_) {
+        throw std::invalid_argument(
+            "with FixedSizeIndex, persistence using flash is not supported "
+            "yet");
+      }
+    } else {
+      // with SparseMapIndex
+      if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numSparseMapBuckets must be power of two");
+      }
+      if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numBucketsPerMutex must be power of two");
+      }
+      if (numBucketsPerMutex_ > numSparseMapBuckets_) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numBucketsPerMutex must be <= "
+            "numSparseMapBuckets");
+      }
+      if (persistUsingShm_) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, persistence using shm is not supported");
+      }
     }
     return *this;
   }
@@ -222,9 +287,14 @@ class BlockCacheIndexConfig {
   // getter functions
   bool isFixedSizeIndexEnabled() const { return enableFixedSizeIndex_; }
 
+  uint32_t getNumChunks() const { return numChunks_; }
+  uint8_t getNumBucketsPerChunkPower() const {
+    return numBucketsPerChunkPower_;
+  }
   uint64_t getNumBucketsPerMutex() const { return numBucketsPerMutex_; }
   uint32_t getNumSparseMapBuckets() const { return numSparseMapBuckets_; }
   bool isTrackItemHistoryEnabled() const { return trackItemHistory_; }
+  bool useShmToPersist() const { return persistUsingShm_; }
 
  private:
   // Whether to enable fixed size index, true for enabling it.
@@ -245,14 +315,35 @@ class BlockCacheIndexConfig {
   // SparseMapIndex. This is a compromise to keep index size low, enabling this
   // will make totalHits return undefined value.
   bool trackItemHistory_{false};
+
+  // Use Shm to persist. This is only for FixedSizeIndex.
+  // SparseMapIndex doesn't support persistence using Shm (and don't have a plan
+  // to do so)
+  // TODO: Currently, FixedSizeIndex only support persistence using Shm. We may
+  // support persistenc using flash in the future.
+  bool persistUsingShm_{false};
+
+  // Below are parameters for the fixed size index, and when it's not enabled
+  // they will be ignored
+
+  // The number of total chunks. Fixed size index will be divided into chunks
+  // and each chunk will maintain a fixed number of buckets with the fixed
+  // number mutexes.
+  uint32_t numChunks_{4};
+  // The integer power for the number of buckets per chunk which should be a
+  // power of 2.
+  // The total number of buckets = numChunks_ * (2 ^ numBucketsPerChunkPower_)
+  uint8_t numBucketsPerChunkPower_{27};
 };
 
 /**
  * BlockCacheReinsertionConfig provides APIs for users to configure BlockCache
  * reinsertion policy, which is a part of NavyConfig.
  *
- * By this class, user can:
- * - enable hits-based OR probability based reinsertion policy (but not both)
+ * By this class, users can enable one of the following reinsertion policies:
+ * - hits-based
+ * - probability-based
+ * - custom
  */
 class BlockCacheReinsertionConfig {
  public:
@@ -427,6 +518,18 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setLegacyEventTracker(
+      LegacyEventTracker& legacyEventTracker) {
+    legacyEventTracker_ =
+        std::reference_wrapper<LegacyEventTracker>(legacyEventTracker);
+    return *this;
+  }
+
+  const std::optional<std::reference_wrapper<LegacyEventTracker>>&
+  getLegacyEventTracker() const {
+    return legacyEventTracker_;
+  }
+
   BlockCacheConfig& setDataChecksum(bool dataChecksum) noexcept {
     dataChecksum_ = dataChecksum;
     return *this;
@@ -447,8 +550,23 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setCleanRegionFastPath(bool enable) noexcept {
+    cleanRegionFastPath_ = enable;
+    return *this;
+  }
+
+  BlockCacheConfig& setRecoverEvictionPolicy(bool enable) noexcept {
+    recoverEvictionPolicy_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
+    return *this;
+  }
+
+  BlockCacheConfig& useCombinedEntryBlock(bool enable) noexcept {
+    useCombinedEntryBlock_ = enable;
     return *this;
   }
 
@@ -464,6 +582,23 @@ class BlockCacheConfig {
   BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
                                          uint32_t numBucketsPerMutex,
                                          bool trackItemHistory);
+  // To enable fixed size Index for BC. All the parameter should be valid.
+  // Without calling this explicitly, default index will be SparseMapIndex
+  // with the default parameters.
+  //
+  // With the fixed size index, the number of buckets that it can hold is
+  // decided by the configured numbers.
+  // The table is managed by a number of chunks (numChunks), and each chunk will
+  // maintain a number of buckets (2 ^ numBucketsPerChunkPower). For example, if
+  // numChunks is 4 and numBucketsPerChunkPower is 27, the total number of
+  // buckets is 4 * (2 ^ 27) = 512M. Those numbers should be decided considering
+  // the total entries populated with the cache and the memory footprint that it
+  // could consume.
+  // numBucketsPerMutex is for how many buckets will be covered by each mutex
+  // and total number mutexes will be decided by this number.
+  BlockCacheConfig& enableFixedSizeIndex(uint32_t numChunks,
+                                         uint8_t numBucketsPerChunkPower,
+                                         uint64_t numBucketsPerMutex);
 
   bool isLruEnabled() const { return lru_; }
 
@@ -484,6 +619,12 @@ class BlockCacheConfig {
   uint64_t getSize() const { return size_; }
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
+
+  bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
+
+  bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
+
+  bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
 
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
@@ -529,13 +670,31 @@ class BlockCacheConfig {
   // Whether the region manager workers flushes asynchronously.
   bool regionManagerFlushAsync_{false};
 
+  // Whether to enable the clean region fast path in getCleanRegion().
+  // When enabled, getCleanRegion() can skip acquiring the mutex and return
+  // Retry immediately if clean regions are empty and reclaims are in-flight.
+  bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts.
+  bool recoverEvictionPolicy_{false};
+
+  // Whether to use Combined entry block (For index entries and small sized
+  // items).
+  // Only FixedSizeIndex will support this and it doesn't work with
+  // SparseMapIndex
+  //
+  // TODO: For now, only index entries will be handled with Combined entry block
+  bool useCombinedEntryBlock_{false};
+
   // Number of allocators per priority.
   // Do not set this directly. This should be configured by setAllocatorCount
-  // for FIFO and LRU, and enableSegmentedFifio for segmented FIFO.
+  // for FIFO and LRU, and enableSegmentedFifo for segmented FIFO.
   std::vector<uint32_t> allocatorsPerPriority_{1};
 
   // Index related config. If not specified, SparseMapIndex will be used
   BlockCacheIndexConfig indexConfig_;
+
+  std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
 
   friend class NavyConfig;
 };
@@ -575,6 +734,12 @@ class BigHashConfig {
     return *this;
   }
 
+  // Set number of mutexes for bucket locking in BigHash engine.
+  BigHashConfig& setNumMutexesPower(uint8_t numMutexesPower) noexcept {
+    numMutexesPower_ = numMutexesPower;
+    return *this;
+  }
+
   bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
 
   unsigned int getSizePct() const { return sizePct_; }
@@ -584,6 +749,8 @@ class BigHashConfig {
   uint64_t getBucketBfSize() const { return bucketBfSize_; }
 
   uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
+
+  uint8_t getNumMutexesPower() const { return numMutexesPower_; }
 
  private:
   // Percentage of how much of the device out of all is given to BigHash
@@ -598,6 +765,8 @@ class BigHashConfig {
   uint64_t bucketBfSize_{8};
   // The maximum item size to put into Navy BigHash engine.
   uint64_t smallItemMaxSize_{};
+  // numMutexes = 1 << numMutexesPower_.
+  uint8_t numMutexesPower_{14};
 };
 
 // Config for a pair of small,large engines.
@@ -668,6 +837,8 @@ class NavyConfig {
 
   static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
+  static constexpr uint32_t kDefaultNumReaderThreads{32};
+  static constexpr uint32_t kDefaultNumWriterThreads{32};
 
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
@@ -691,43 +862,55 @@ class NavyConfig {
   const RandomAPConfig& randomAdmPolicy() const { return randomAPConfig_; }
 
   // ============ Device settings =============
-  uint64_t getBlockSize() const { return blockSize_; }
+  uint32_t getBlockSize() const { return blockSize_; }
   bool getExclusiveOwner() const { return isExclusiveOwner_; }
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
   uint64_t getDeviceMetadataSize() const { return deviceMetadataSize_; }
+  uint32_t getMaxKeySize() const { return maxKeySize_; }
   uint64_t getFileSize() const { return fileSize_; }
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
   IoEngine getIoEngine() const { return ioEngine_; }
-  unsigned int getQDepth() const { return qDepth_; }
+  uint32_t getQDepth() const { return qDepth_; }
   BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
 
   // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].bigHash();
   }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BlockCacheConfig& blockCache() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].blockCache();
   }
 
   // ============ Job scheduler settings =============
-  unsigned int getReaderThreads() const { return readerThreads_; }
-  unsigned int getWriterThreads() const { return writerThreads_; }
+  uint32_t getReaderThreads() const {
+    // return default value if it's not explicitly set
+    return (readerThreads_ == 0) ? kDefaultNumReaderThreads : readerThreads_;
+  }
+  uint32_t getWriterThreads() const {
+    // return default value if it's not explicitly set
+    return (writerThreads_ == 0) ? kDefaultNumWriterThreads : writerThreads_;
+  }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
-  unsigned int getMaxNumReads() const { return maxNumReads_; }
-  unsigned int getMaxNumWrites() const { return maxNumWrites_; }
-  unsigned int getStackSize() const { return stackSize_; }
+  int getReaderThreadsPriority() const { return readerThreadsPriority_; }
+  int getWriterThreadsPriority() const { return writerThreadsPriority_; }
+
+  uint32_t getMaxNumReads() const { return maxNumReads_; }
+  uint32_t getMaxNumWrites() const { return maxNumWrites_; }
+  uint32_t getStackSize() const { return stackSize_; }
   // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
   size_t getNumShards() const { return numShards_; }
+  bool getEnableAccessTimeMap() const { return enableAccessTimeMap_; }
+  size_t getAccessTimeMapMaxSize() const { return accessTimeMapMaxSize_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -742,7 +925,7 @@ class NavyConfig {
 
   // ============ Device settings =============
   // Set the device block size, i.e., minimum unit of IO
-  void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
+  void setBlockSize(uint32_t blockSize) noexcept { blockSize_ = blockSize; }
   // Set the NVMe FDP Device data placement mode in the Cachelib
   void setEnableFDP(bool enable) noexcept { enableFDP_ = enable; }
   // If true, Navy will only start if it's the sole owner of the file.
@@ -785,11 +968,29 @@ class NavyConfig {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
   }
 
+  // Configure the max key size for Navy
+  void setMaxKeySize(uint32_t maxKeySize) noexcept { maxKeySize_ = maxKeySize; }
+
   // Enable AsyncIo
   // If enabled already via job config settings, this will override
   // the qDepth_ or enableIoUring_.
   // If qDepth is 0, existing qDepth_ will be used
+  // * CAUTION: This version of enableAsyncIo() is DEPRECATED.
+  //          Please use the version with four arguments below
   void enableAsyncIo(unsigned int qDepth, bool enableIoUring);
+
+  // Enable async IO (IO to the device) - either libaio or io_uring
+  //  - maxNumReads : the number of concurrent reads issued to the queues and in
+  //  process
+  //  - maxNumWrites: the number of concurrent writes issued to the queues
+  //  and in process
+  //  - useIoUring : true to use io_uring
+  //  - stackSizeKB : size of the stack for each fibers with the async job
+  //  scheduler. 0 for default stack size
+  void enableAsyncIo(uint32_t maxNumReads,
+                     uint32_t maxNumWrites,
+                     bool useIoUring,
+                     uint32_t stackSizeKB = 0);
 
   // ============ BlockCache settings =============
   // Return BlockCacheConfig for configuration.
@@ -811,15 +1012,36 @@ class NavyConfig {
   // ============ Job scheduler settings =============
   // Set the number of reader threads and writer threads.
   // If maxNumReads and maxNumWrites are all 0, sync IO will be used
+  // * CAUTION: This version of setReaderAndWriterThreads() is DEPRECATED.
+  //          Please use the version with two arguments below.
   void setReaderAndWriterThreads(unsigned int readerThreads,
                                  unsigned int writerThreads,
-                                 unsigned int maxNumReads = 0,
-                                 unsigned int maxNumWrites = 0,
+                                 unsigned int maxNumReads,
+                                 unsigned int maxNumWrites,
                                  unsigned int stackSizeKB = 0);
+
+  // ============ Job scheduler settings =============
+  // Set the number of reader threads and writer threads.
+  void setReaderAndWriterThreads(uint32_t readerThreads,
+                                 uint32_t writerThreads);
 
   // Set Navy request ordering shards (expressed as power of two).
   // @throw std::invalid_argument if the input value is 0.
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
+
+  // Set the nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setReaderThreadsPriority(int priority) noexcept {
+    readerThreadsPriority_ = priority;
+  }
+
+  // Set the nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setWriterThreadsPriority(int priority) noexcept {
+    writerThreadsPriority_ = priority;
+  }
 
   // ============ Other settings =============
   void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) noexcept {
@@ -832,6 +1054,12 @@ class NavyConfig {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
   void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
+  void setEnableAccessTimeMap(bool enable) noexcept {
+    enableAccessTimeMap_ = enable;
+  }
+  void setAccessTimeMapMaxSize(size_t maxSize) noexcept {
+    accessTimeMapMaxSize_ = maxSize;
+  }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -849,7 +1077,9 @@ class NavyConfig {
 
   // ============ Device settings =============
   // Navy specific device block size in bytes.
-  uint64_t blockSize_{4096};
+  uint32_t blockSize_{4096};
+  // The maximum key size (in bytes) for items cached in Navy.
+  uint32_t maxKeySize_{255};
   // If true, Navy will only start if it's the sole owner of the file.
   bool isExclusiveOwner_{false};
   // The file name/path for caching.
@@ -874,37 +1104,45 @@ class NavyConfig {
 
   // Number of queue depth per thread for async IO.
   // 0 for Sync io engine and >1 for libaio and io_uring
-  unsigned int qDepth_{0};
+  uint32_t qDepth_{0};
 
   // ============ Engines settings =============
-  // Currently we support one pair of engines.
   std::vector<EnginesConfig> enginesConfigs_{1};
   // Function to map each item to a pair of engine.
   EnginesSelector selector_{};
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.
-  unsigned int readerThreads_{32};
+  uint32_t readerThreads_{0};
   // Number of asynchronous worker thread for write operation.
-  unsigned int writerThreads_{32};
+  uint32_t writerThreads_{0};
   // Number of shards expressed as power of two for native request ordering in
   // Navy.
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
+  // Nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int readerThreadsPriority_{0};
+  // Nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int writerThreadsPriority_{0};
+
   // Max number of concurrent reads/writes in whole Navy.
   // This needs to be a multiple of the number of readers and writers.
   // Setting this to non-0 will enable async IO where fibers are used
   // for Navy operations including device IO
-  unsigned int maxNumReads_{0};
-  unsigned int maxNumWrites_{0};
+  uint32_t maxNumReads_{0};
+  uint32_t maxNumWrites_{0};
 
   // Stack size of fibers when async-io is enabled. 0 for default
-  unsigned int stackSize_{0};
+  uint32_t stackSize_{0};
 
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
-  // 0 means unlimited.
+  // 0 rejects all inserts. Default of 1'000'000 is effectively no limit.
   uint32_t maxConcurrentInserts_{1'000'000};
   // Total memory limit for in-flight parcels.
   // Once this is reached, requests will be rejected until the parcel
@@ -918,6 +1156,10 @@ class NavyConfig {
   bool enableFDP_{false};
   // Number of nvm lock shards
   size_t numShards_{8192};
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool enableAccessTimeMap_{false};
+  // Maximum number of entries in the AccessTimeMap. 0 means unbounded.
+  size_t accessTimeMapMaxSize_{0};
 };
 } // namespace navy
 } // namespace cachelib

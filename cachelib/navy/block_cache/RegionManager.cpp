@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/block_cache/RegionManager.h"
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -33,7 +34,10 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint32_t numInMemBuffers,
                              uint16_t numPriorities,
                              uint16_t inMemBufFlushRetryLimit,
-                             bool workerFlushAsync)
+                             bool workerFlushAsync,
+                             bool allowReadDuringReclaim,
+                             bool cleanRegionFastPath,
+                             bool recoverEvictionPolicy)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -44,11 +48,15 @@ RegionManager::RegionManager(uint32_t numRegions,
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
       numCleanRegions_{numCleanRegions},
       workerFlushAsync_{workerFlushAsync},
+      allowReadDuringReclaim_(allowReadDuringReclaim),
+      cleanRegionFastPath_{cleanRegionFastPath},
+      recoverEvictionPolicy_{recoverEvictionPolicy},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
       placementHandle_{device_.allocatePlacementHandle()} {
-  XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
+  XLOGF(INFO, "{} regions, {} bytes each, allowReadDuringReclaim {}",
+        numRegions_, regionSize_, allowReadDuringReclaim);
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
   }
@@ -100,11 +108,12 @@ void RegionManager::reset() {
     regions_[i]->reset();
   }
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     // Reset is inherently single threaded. All pending jobs, including
     // reclaims, have to be finished first.
     XDCHECK_EQ(reclaimsOutstanding_, 0u);
     cleanRegions_.clear();
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
     }
@@ -165,8 +174,9 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
@@ -194,7 +204,7 @@ std::pair<std::unique_ptr<Buffer>, std::unique_ptr<CondWaiter>>
 RegionManager::claimBufferFromPool(bool addWaiter) {
   std::unique_ptr<Buffer> buf;
   {
-    std::lock_guard<TimedMutex> bufLock{bufferMutex_};
+    std::lock_guard bufLock{bufferMutex_};
     if (buffers_.empty()) {
       std::unique_ptr<CondWaiter> waiter;
       if (addWaiter) {
@@ -212,22 +222,37 @@ RegionManager::claimBufferFromPool(bool addWaiter) {
 
 std::pair<OpenStatus, std::unique_ptr<CondWaiter>>
 RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
+  // Fast-path: if we know clean regions are empty and reclaims are in-flight,
+  // skip acquiring the mutex entirely. This prevents allocator threads from
+  // starving reclaim workers that need the same mutex to push clean regions.
+  if (cleanRegionFastPath_ && !addWaiter &&
+      cleanRegionsEmpty_.load(std::memory_order_relaxed)) {
+    cleanRegionRetries_.inc();
+    return {OpenStatus::Retry, nullptr};
+  }
+
   auto status = OpenStatus::Retry;
   std::unique_ptr<CondWaiter> waiter;
   uint32_t newSched = 0;
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     if (!cleanRegions_.empty()) {
       rid = cleanRegions_.back();
       cleanRegions_.pop_back();
       INJECT_PAUSE(pause_blockcache_clean_alloc_locked);
       status = OpenStatus::Ready;
+      if (cleanRegions_.empty() && reclaimsOutstanding_ > 0) {
+        cleanRegionsEmpty_.store(true, std::memory_order_relaxed);
+      }
     } else {
       if (addWaiter) {
         waiter = std::make_unique<CondWaiter>();
         cleanRegionsCond_.addWaiter(waiter.get());
       }
       status = OpenStatus::Retry;
+      if (reclaimsOutstanding_ > 0) {
+        cleanRegionsEmpty_.store(true, std::memory_order_relaxed);
+      }
     }
     auto plannedClean = cleanRegions_.size() + reclaimsOutstanding_;
     if (plannedClean < numCleanRegions_) {
@@ -244,8 +269,9 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     XDCHECK(!waiter);
     std::tie(status, waiter) = assignBufferToRegion(rid, addWaiter);
     if (status != OpenStatus::Ready) {
-      std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+      std::lock_guard lock{cleanRegionsMutex_};
       cleanRegions_.push_back(rid);
+      cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
       INJECT_PAUSE(pause_blockcache_clean_free_locked);
       if (cleanRegionsCond_.numWaiters() > 0) {
         cleanRegionsCond_.notifyAll();
@@ -300,7 +326,7 @@ void RegionManager::doFlushInternal(RegionId rid) {
     }
 
     // Device write failed; retry after 100ms
-    folly::fibers::Baton b;
+    trace::Profiled<folly::fibers::Baton, "cachelib:navy:bc_flush_retry"> b;
     b.try_wait_for(std::chrono::milliseconds(100));
   }
 
@@ -341,7 +367,7 @@ void RegionManager::doReclaim() {
 
   const auto startTime = getSteadyClock();
   auto& region = getRegion(rid);
-  bool status = region.readyForReclaim(true);
+  bool status = region.readyForReclaim(true, allowReadDuringReclaim_);
   XDCHECK(status);
 
   // We know now we're the only thread working with this region.
@@ -369,7 +395,11 @@ void RegionManager::doReclaim() {
   INJECT_PAUSE(pause_reclaim_done);
 }
 
-RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
+RegionDescriptor RegionManager::openForRead(RegionId rid,
+                                            std::optional<uint64_t> seqNumber) {
+  // If seqNumber is not providied, this function will just open the
+  // region without checking the seqNumber. In this case the caller must take
+  // care of the race condition between reclaim and lookup.
   auto& region = getRegion(rid);
   auto desc = region.openForRead();
   if (!desc.isReady()) {
@@ -410,7 +440,11 @@ RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   // by a acq_rel memory order in 3x. See releaseEvictedRegion() for details.
   //
   // Finally, 4r has acquire semantic which will sychronizes-with 3x's acq_rel.
-  if (seqNumber_.load(std::memory_order_acquire) != seqNumber) {
+  if (seqNumber.has_value() &&
+      seqNumber_.load(std::memory_order_acquire) != seqNumber.value()) {
+    // If allowReadDuringReclaim_ is true, this is the only case that will
+    // return Retry status. Immediate retry by checking the updated index
+    // should succeed in that case.
     region.close(std::move(desc));
     return RegionDescriptor{OpenStatus::Retry};
   }
@@ -434,13 +468,24 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // race where a read returns stale data. See openForRead() for details.
   seqNumber_.fetch_add(1, std::memory_order_acq_rel);
 
+  if (allowReadDuringReclaim_) {
+    // Should wait for all readers to finish before resetting the region
+    region.waitForActiveReaders();
+  }
   // Reset all region internal state, making it ready to be
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
-    reclaimsOutstanding_--;
+    std::lock_guard lock{cleanRegionsMutex_};
+    if (reclaimsOutstanding_ > 0) {
+      // Though this should be always > 0 at this point with normal run path, it
+      // is possible that it's 0, if we run reclaim manually (e.g. for testing)
+      reclaimsOutstanding_--;
+    }
     cleanRegions_.push_back(rid);
+    // Clear the fast-path flag so allocator threads will try acquiring
+    // the mutex again now that a clean region is available.
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
@@ -453,7 +498,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
 void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
   INJECT_PAUSE(pause_do_eviction_start);
   if (buffer.isNull()) {
-    XLOGF(ERR, "Error reading region {} on reclamation", rid.index());
+    XLOGF(ERR, "Error reading region {} on reclaim", rid.index());
   } else {
     const auto evictStartTime = getSteadyClock();
     XLOGF(DBG, "Evict region {} entries", rid.index());
@@ -478,6 +523,17 @@ void RegionManager::persist(RecordWriter& rw) const {
     regionProto.priority() = regions_[i]->getPriority();
     *regionProto.numItems() = regions_[i]->getNumItems();
   }
+
+  if (recoverEvictionPolicy_) {
+    try {
+      serialization::EvictionPolicyData policyData;
+      policy_->persist(policyData);
+      regionData.evictionPolicyData() = std::move(policyData);
+    } catch (const std::exception& e) {
+      XLOGF(WARN, "Eviction policy does not support persistence: {}", e.what());
+    }
+  }
+
   serializeProto(regionData, rw);
 }
 
@@ -507,20 +563,93 @@ void RegionManager::recover(RecordReader& rr) {
         std::make_unique<Region>(regionProto, *regionData.regionSize());
   }
 
-  // Reset policy and reinitialize it per the recovered state
-  resetEvictionPolicy();
+  // Try to recover eviction policy from persisted data, or fall back to
+  // rebuilding in region-ID order (the old behavior).
+  bool policyRecovered = false;
+  if (recoverEvictionPolicy_ && regionData.evictionPolicyData().has_value()) {
+    try {
+      // Clear any stale entries from the earlier resetEvictionPolicy() call
+      // during initializeBlockCache(). FifoPolicy::recover() also clears the
+      // queue internally, but we don't depend on that implementation detail.
+      policy_->reset();
+      policy_->recover(*regionData.evictionPolicyData());
+      // Restore any regions that aren't in the recovered policy queue
+      // (e.g., the cleanRegions_ pool at persist time). Without this,
+      // those regions would be permanently leaked. Also validates region
+      // IDs from the persisted policy data.
+      restoreUntrackedRegions(*regionData.evictionPolicyData());
+      policyRecovered = true;
+      recomputeFragmentation();
+      XLOG(INFO, "Eviction policy recovered successfully");
+    } catch (const std::exception& e) {
+      XLOGF(WARN,
+            "Eviction policy recovery failed: {}. Falling back to reset.",
+            e.what());
+    }
+  } else if (recoverEvictionPolicy_) {
+    XLOG(INFO,
+         "recoverEvictionPolicy enabled but no persisted policy data found. "
+         "Falling back to resetEvictionPolicy() (forward-compat path).");
+  }
+
+  if (!policyRecovered) {
+    resetEvictionPolicy();
+  }
+}
+
+void RegionManager::restoreUntrackedRegions(
+    const serialization::EvictionPolicyData& data) {
+  // Build the set of region IDs known to the recovered policy queue. Today
+  // only FifoPolicy supports persistence; adding a new persistable policy
+  // requires extending this dispatch (and the EvictionPolicyData union).
+  std::vector<bool> tracked(numRegions_, false);
+  if (data.getType() == serialization::EvictionPolicyData::Type::fifo) {
+    for (const auto& node : data.fifo_ref()->queue().value()) {
+      auto idx = static_cast<uint32_t>(node.idx().value());
+      if (idx >= numRegions_) {
+        throw std::invalid_argument(
+            "Persisted policy contains out-of-bounds region id");
+      }
+      tracked[idx] = true;
+    }
+  }
+
+  // Any region not in the recovered queue would otherwise be leaked
+  // (in neither cleanRegions_ nor the policy queue). Empty regions go to
+  // cleanRegions_ up to the pool capacity (these are typically the regions
+  // that were in the pool at persist time). Anything beyond capacity, or
+  // any non-empty untracked region (defensive: shouldn't happen), is
+  // tracked into the policy so it remains evictable.
+  std::lock_guard lock{cleanRegionsMutex_};
+  for (uint32_t i = 0; i < numRegions_; i++) {
+    if (tracked[i]) {
+      continue;
+    }
+    if (regions_[i]->getNumItems() == 0 &&
+        cleanRegions_.size() < numCleanRegions_) {
+      cleanRegions_.push_back(RegionId{i});
+    } else {
+      track(RegionId{i});
+    }
+  }
+}
+
+void RegionManager::recomputeFragmentation() {
+  uint64_t fragmentation = 0;
+  for (uint32_t i = 0; i < numRegions_; i++) {
+    fragmentation += regions_[i]->getFragmentationSize();
+  }
+  externalFragmentation_.set(fragmentation);
 }
 
 void RegionManager::resetEvictionPolicy() {
   XDCHECK_GT(numRegions_, 0u);
 
   policy_->reset();
-  externalFragmentation_.set(0);
+  recomputeFragmentation();
 
-  // Go through all the regions, restore fragmentation size, and track all empty
-  // regions
+  // Track all empty regions first
   for (uint32_t i = 0; i < numRegions_; i++) {
-    externalFragmentation_.add(regions_[i]->getFragmentationSize());
     if (regions_[i]->getNumItems() == 0) {
       track(RegionId{i});
     }
@@ -561,12 +690,6 @@ bool RegionManager::deviceWrite(RelAddress addr, BufferView view) {
   return true;
 }
 
-void RegionManager::write(RelAddress addr, Buffer buf) {
-  auto rid = addr.rid();
-  auto& region = getRegion(rid);
-  region.writeToBuffer(addr.offset(), buf.view());
-}
-
 Buffer RegionManager::read(const RegionDescriptor& desc,
                            RelAddress addr,
                            size_t size) const {
@@ -574,6 +697,10 @@ Buffer RegionManager::read(const RegionDescriptor& desc,
   auto& region = getRegion(rid);
   // Do not expect to read beyond what was already written
   XDCHECK_LE(addr.offset() + size, region.getLastEntryEndOffset());
+  if (region.isBeingReclaimed()) {
+    readDuringReclaimCount_.inc();
+  }
+
   if (!desc.isPhysReadMode()) {
     auto buffer = Buffer(size);
     XDCHECK(region.hasBuffer());
@@ -603,6 +730,8 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_region_reclaim_errors",
           reclaimRegionErrors_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_read_during_reclaim", readDuringReclaimCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_evictions",
           evictedCount_.get(),

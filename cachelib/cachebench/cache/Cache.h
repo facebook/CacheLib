@@ -43,6 +43,7 @@
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 DECLARE_bool(report_api_latency);
 DECLARE_string(report_ac_memory_usage_stats);
@@ -115,6 +116,10 @@ class Cache {
                  std::string cacheDir = "",
                  bool touchValue = false);
 
+  Cache(const Cache&) = delete;
+  Cache& operator=(const Cache&) = delete;
+  Cache(Cache&&) = delete;
+  Cache& operator=(Cache&&) = delete;
   ~Cache();
 
   // allocate an item from the cache.
@@ -318,7 +323,7 @@ class Cache {
   }
 
   // Get overall stats on the whole cache allocator
-  Stats getStats() const;
+  std::unique_ptr<StatsBase> getStats() const;
 
   // Get number of bytes written to NVM.
   double getNvmBytesWritten() const;
@@ -684,7 +689,16 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       }
     }
 
-    if (config_.navyHitsReinsertionThreshold > 0) {
+    if (config_.navyEnableItemHistoryTracking) {
+      bcConfig.enableSparseMapIndex(
+          navy::SparseMapIndex::kDefaultNumBucketMaps,
+          navy::SparseMapIndex::kDefaultBucketMapsPerMutex,
+          /*trackItemHistory=*/true);
+    }
+
+    if (config_.customReinsertionPolicyFactory) {
+      bcConfig.enableCustomReinsertion(config_.customReinsertionPolicyFactory);
+    } else if (config_.navyHitsReinsertionThreshold > 0) {
       bcConfig.enableHitsBasedReinsertion(
           static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
     }
@@ -723,6 +737,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     }
     nvmConfig.navyConfig.setMaxConcurrentInserts(
         config_.navyMaxConcurrentInserts);
+    nvmConfig.navyConfig.setEnableAccessTimeMap(
+        config_.navyEnableAccessTimeMap);
+    nvmConfig.navyConfig.setAccessTimeMapMaxSize(
+        config_.navyAccessTimeMapMaxSize);
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;
@@ -1130,12 +1148,14 @@ double Cache<Allocator>::getNvmBytesWritten() const {
 }
 
 template <typename Allocator>
-Stats Cache<Allocator>::getStats() const {
+std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
+  auto retPtr = std::make_unique<Stats>();
+  auto& ret = *retPtr;
+
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
   auto usageFraction =
       1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
                 aggregate.poolUsableSize;
-  Stats ret;
   ret.poolUsageFraction.push_back(usageFraction);
   for (size_t pid = 1; pid < pools_.size(); pid++) {
     auto poolStats = cache_->getPoolStats(static_cast<PoolId>(pid));
@@ -1268,6 +1288,37 @@ Stats Cache<Allocator>::getStats() const {
     ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_max");
     ret.numNvmItemRemovedSetSize = lookup("items_tracked_for_destructor");
 
+    ret.bcInsertLatencyMicrosP50 = lookup("navy_bc_insert_latency_us_p50");
+    ret.bcInsertLatencyMicrosP90 = lookup("navy_bc_insert_latency_us_p90");
+    ret.bcInsertLatencyMicrosP99 = lookup("navy_bc_insert_latency_us_p99");
+    ret.bcInsertLatencyMicrosP999 = lookup("navy_bc_insert_latency_us_p999");
+    ret.bcInsertLatencyMicrosP9999 = lookup("navy_bc_insert_latency_us_p9999");
+    ret.bcInsertLatencyMicrosP99999 =
+        lookup("navy_bc_insert_latency_us_p99999");
+    ret.bcInsertLatencyMicrosP999999 =
+        lookup("navy_bc_insert_latency_us_p999999");
+    ret.bcInsertLatencyMicrosP100 = lookup("navy_bc_insert_latency_us_max");
+    ret.bcLookupLatencyMicrosP50 = lookup("navy_bc_lookup_latency_us_p50");
+    ret.bcLookupLatencyMicrosP90 = lookup("navy_bc_lookup_latency_us_p90");
+    ret.bcLookupLatencyMicrosP99 = lookup("navy_bc_lookup_latency_us_p99");
+    ret.bcLookupLatencyMicrosP999 = lookup("navy_bc_lookup_latency_us_p999");
+    ret.bcLookupLatencyMicrosP9999 = lookup("navy_bc_lookup_latency_us_p9999");
+    ret.bcLookupLatencyMicrosP99999 =
+        lookup("navy_bc_lookup_latency_us_p99999");
+    ret.bcLookupLatencyMicrosP999999 =
+        lookup("navy_bc_lookup_latency_us_p999999");
+    ret.bcLookupLatencyMicrosP100 = lookup("navy_bc_lookup_latency_us_max");
+    ret.bcRemoveLatencyMicrosP50 = lookup("navy_bc_remove_latency_us_p50");
+    ret.bcRemoveLatencyMicrosP90 = lookup("navy_bc_remove_latency_us_p90");
+    ret.bcRemoveLatencyMicrosP99 = lookup("navy_bc_remove_latency_us_p99");
+    ret.bcRemoveLatencyMicrosP999 = lookup("navy_bc_remove_latency_us_p999");
+    ret.bcRemoveLatencyMicrosP9999 = lookup("navy_bc_remove_latency_us_p9999");
+    ret.bcRemoveLatencyMicrosP99999 =
+        lookup("navy_bc_remove_latency_us_p99999");
+    ret.bcRemoveLatencyMicrosP999999 =
+        lookup("navy_bc_remove_latency_us_p999999");
+    ret.bcRemoveLatencyMicrosP100 = lookup("navy_bc_remove_latency_us_max");
+
     // track any non-zero check sum errors or io errors
     for (const auto& [k, v] : navyStats) {
       if (v != 0 && ((k.find("checksum_error") != std::string::npos) ||
@@ -1277,7 +1328,7 @@ Stats Cache<Allocator>::getStats() const {
     }
   }
 
-  return ret;
+  return retPtr;
 }
 
 template <typename Allocator>
@@ -1295,7 +1346,7 @@ template <typename Allocator>
 void Cache<Allocator>::clearCache(uint64_t errorLimit) {
   if (config_.enableItemDestructorCheck) {
     // all items leftover in the cache must be removed
-    // at the end of the test to trigger ItemDestrutor
+    // at the end of the test to trigger ItemDestructor
     // so that we are able to check if ItemDestructor
     // are called once and only once for every item.
     auto keys = itemRecords_.getKeys();

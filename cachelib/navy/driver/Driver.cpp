@@ -19,6 +19,7 @@
 #include <folly/Range.h>
 #include <folly/fibers/Baton.h>
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
@@ -58,9 +59,11 @@ Driver::Driver(Config&& config, ValidConfigTag)
     : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
+      maxKeySize_{config.maxKeySize},
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
+      persistParams_{config.persistParams},
       selector_{std::move(config.selector)},
       enginePairs_{std::move(config.enginePairs)},
       admissionPolicy_{std::move(config.admissionPolicy)},
@@ -107,14 +110,20 @@ uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
              : hk.key().size() + value.size();
 }
 
-Status Driver::insert(HashedKey key, BufferView value) {
-  folly::fibers::Baton done;
+Status Driver::insert(HashedKey key,
+                      BufferView value,
+                      uint8_t poolId,
+                      uint32_t expiryTime,
+                      uint32_t lastAccessTimeSecs) {
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:driver_insert"> done;
   Status cbStatus{Status::Ok};
-  auto status = insertAsync(key, value,
-                            [&done, &cbStatus](Status s, HashedKey /* key */) {
-                              cbStatus = s;
-                              done.post();
-                            });
+  auto status = insertAsync(
+      key, value,
+      [&done, &cbStatus](Status s, HashedKey /* key */) {
+        cbStatus = s;
+        done.post();
+      },
+      poolId, expiryTime, lastAccessTimeSecs);
   if (status != Status::Ok) {
     return status;
   }
@@ -168,8 +177,13 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   return false;
 }
 
-Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
-  if (hk.key().size() > kMaxKeySize) {
+Status Driver::insertAsync(HashedKey hk,
+                           BufferView value,
+                           InsertCallback cb,
+                           uint8_t poolId,
+                           uint32_t expiryTime,
+                           uint32_t lastAccessTimeSecs) {
+  if (hk.key().size() > maxKeySize_) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
 
@@ -197,12 +211,16 @@ Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
         }
         parcelMemory_.sub(totalSize);
         concurrentInserts_.dec();
-      });
+      },
+      poolId, expiryTime, lastAccessTimeSecs);
   return Status::Ok;
 }
 
-Status Driver::lookup(HashedKey hk, Buffer& value) {
-  return enginePairs_[selectEnginePair(hk)].lookupSync(hk, value);
+Status Driver::lookup(HashedKey hk,
+                      Buffer& value,
+                      uint32_t& lastAccessTimeSecs) {
+  return enginePairs_[selectEnginePair(hk)].lookupSync(hk, value,
+                                                       lastAccessTimeSecs);
 }
 
 void Driver::lookupAsync(HashedKey hk, LookupCallback cb) {
@@ -375,5 +393,11 @@ void Driver::updateEvictionStats(HashedKey key,
                                  BufferView value,
                                  uint32_t lifetime) {
   enginePairs_[selectEnginePair(key)].updateEvictionStats(key, value, lifetime);
+}
+
+void Driver::setEventTracker(EventTracker* tracker) {
+  for (auto& enginePair : enginePairs_) {
+    enginePair.setEventTracker(tracker);
+  }
 }
 } // namespace facebook::cachelib::navy

@@ -17,7 +17,8 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 
 #include <algorithm>
-#include <string>
+#include <numeric>
+#include <utility>
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
@@ -177,7 +178,7 @@ AllocationClass& MemoryPool::getAllocationClassFor(void* memory) const {
 }
 
 AllocationClass& MemoryPool::getAllocationClassFor(ClassId cid) const {
-  if (cid < static_cast<ClassId>(ac_.size())) {
+  if (cid >= 0 && static_cast<size_t>(cid) < ac_.size()) {
     XDCHECK(ac_[cid] != nullptr);
     return *ac_[cid];
   }
@@ -223,7 +224,7 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
   }
 
   const auto classId = header->classId;
-  if (classId >= static_cast<ClassId>(ac_.size()) || classId < 0) {
+  if (classId < 0 || static_cast<size_t>(classId) >= ac_.size()) {
     // at this point, the slab indicates that it belongs to a bogus classId and
     // things are corrupt and the caller cant do anything about it. so throw an
     // exception to abort.
@@ -491,7 +492,7 @@ SlabReleaseContext MemoryPool::startSlabRelease(
   auto context = victim == Slab::kInvalidClassId
                      ? releaseFromFreeSlabs()
                      : getAllocationClassFor(victim).startSlabRelease(
-                           mode, hint, shouldAbortFn);
+                           mode, hint, std::move(shouldAbortFn));
   context.setReceiver(receiver);
   context.setZeroOnRelease(zeroOnRelease);
 
@@ -548,6 +549,7 @@ void MemoryPool::completeSlabRelease(const SlabReleaseContext& context) {
 MPStats MemoryPool::getStats() const {
   LockHolder l(lock_);
   folly::F14FastMap<ClassId, ACStats> acStats;
+  acStats.reserve(ac_.size());
   std::set<ClassId> classIds;
   for (const auto& ac : ac_) {
     acStats.insert({ac->getId(), ac->getStats()});

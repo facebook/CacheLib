@@ -22,13 +22,9 @@
 #include <fstream>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 #include "cachelib/common/Utils.h"
-#include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
-#include "cachelib/shm/SysVShmSegment.h"
 
 namespace facebook {
 namespace cachelib {

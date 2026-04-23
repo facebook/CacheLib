@@ -41,13 +41,19 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
                                                unsigned int) const override {
     return PoolEvictionAgeStats();
   }
-  std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  std::unordered_map<std::string, uint64_t> getLegacyEventTrackerStatsMap()
+      const override {
+    return {};
+  }
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     return {};
   }
   CacheMetadata getCacheMetadata() const noexcept override { return {}; }
   GlobalCacheStats getGlobalCacheStats() const override { return {}; }
   SlabReleaseStats getSlabReleaseStats() const override { return {}; }
+  void incrementAbortedSlabReleases() override {}
+  bool isShutdownInProgress() const override final { return false; }
   CacheMemoryStats getCacheMemoryStats() const override { return {}; }
   std::set<PoolId> getRegularPoolIdsForResize() const override { return {}; }
   std::set<PoolId> getRegularPoolIds() const override { return {}; }
@@ -70,9 +76,9 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   }
 
   util::StatsMap getNvmCacheStatsMap() const override { return {}; }
-  void updateNumSlabsToAdvise(int32_t /* unused */) override final {}
 
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override final {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* unused */) override final {
     return {};
   }
 

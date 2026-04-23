@@ -21,7 +21,6 @@
 #include <atomic>
 #include <mutex>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 
 #pragma GCC diagnostic push
@@ -35,7 +34,6 @@
 
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/Slab.h"
-#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -121,10 +119,10 @@ class SlabAllocator {
   // fetch a random allocation in memory.
   // this does not guarantee the allocation is in a valid state.
   //
-  // @return the start address of the allocation
-  //         nullptr if the allocation is in invalid state according to
-  //         allocator.
-  const void* getRandomAlloc() const noexcept;
+  // @return a tuple containing the alloc size and the start address of the
+  //         allocation (nullptr if the allocation is in invalid state
+  //         according to allocator).
+  std::tuple<uint32_t, const void*> getRandomAlloc() const noexcept;
 
   // grab an empty slab from the slab allocator if one is available.
   //
@@ -214,8 +212,9 @@ class SlabAllocator {
   FOLLY_ALWAYS_INLINE const Slab* getSlabForMemory(
       const void* memory) const noexcept {
     // returns the closest slab boundary for the memory address.
-    return reinterpret_cast<const Slab*>(reinterpret_cast<uintptr_t>(memory) &
-                                         kAddressMask);
+    auto offset = reinterpret_cast<uintptr_t>(memory) & ~kAddressMask;
+    return reinterpret_cast<const Slab*>(
+        reinterpret_cast<const uint8_t*>(memory) - offset);
   }
 
   using SlabIdx = uint32_t;

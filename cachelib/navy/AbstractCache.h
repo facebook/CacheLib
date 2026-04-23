@@ -24,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
@@ -39,8 +40,8 @@ namespace navy {
 
 using InsertCallback = folly::Function<void(Status status, HashedKey key)>;
 
-using LookupCallback =
-    folly::Function<void(Status status, HashedKey key, Buffer value)>;
+using LookupCallback = folly::Function<void(
+    Status status, HashedKey key, Buffer value, uint32_t lastAccessTimeSecs)>;
 
 using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 
@@ -49,6 +50,9 @@ using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
+
+  // Set the EventTracker for all underlying engines (non-owning pointer)
+  virtual void setEventTracker(EventTracker* tracker) = 0;
 
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as
@@ -63,7 +67,14 @@ class AbstractCache {
 
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
-  virtual Status insert(HashedKey key, BufferView value) = 0;
+  // TODO: For now passing lastAccessTimeSecs as a param. This is
+  // temporary until ItemMetadata lands. After that, we will pass
+  // ItemMetadata as a param.
+  virtual Status insert(HashedKey key,
+                        BufferView value,
+                        uint8_t poolId = 0,
+                        uint32_t expiryTime = 0,
+                        uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Asynchronously inserts entry into the cache.
   // Invokes callback when done on a worker thread. Callback is optional.
@@ -74,11 +85,16 @@ class AbstractCache {
   // Returns: Ok, Rejected
   virtual Status insertAsync(HashedKey key,
                              BufferView value,
-                             InsertCallback cb) = 0;
+                             InsertCallback cb,
+                             uint8_t poolId = 0,
+                             uint32_t expiryTime = 0,
+                             uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Looks up value. Returns non-null buffer if found.
   // Returns: Ok, NotFound, DeviceError
-  virtual Status lookup(HashedKey key, Buffer& value) = 0;
+  virtual Status lookup(HashedKey key,
+                        Buffer& value,
+                        uint32_t& lastAccessTimeSecs) = 0;
 
   // Asynchronously looks up value.
   // Invokes callback when done on a worker thread.
@@ -87,11 +103,11 @@ class AbstractCache {
   // is user responsibility to make a copy if needed (capture in callback).
   virtual void lookupAsync(HashedKey key, LookupCallback cb) = 0;
 
-  // Removes from the index, space reused after reclamation.
+  // Removes from the index, space reused after reclaim.
   // Returns: Ok, NotFound
   virtual Status remove(HashedKey key) = 0;
 
-  // Asynchronously removes key from the index, space reused after reclamation.
+  // Asynchronously removes key from the index, space reused after reclaim.
   // Callback is optional.
   //
   // See @lookupAsync about @key lifetime.

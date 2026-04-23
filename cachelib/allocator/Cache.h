@@ -16,16 +16,16 @@
 
 #pragma once
 
+#include <folly/lang/Hint.h>
 #include <gtest/gtest_prod.h>
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
-#include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/ICompactCache.h"
-#include "cachelib/allocator/memory/MemoryAllocator.h"
-#include "cachelib/common/Hash.h"
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -82,11 +82,11 @@ class CacheBase {
   CacheBase() = default;
   virtual ~CacheBase() = default;
 
-  // Movable but not copyable
+  // Not copyable or movable
   CacheBase(const CacheBase&) = delete;
   CacheBase& operator=(const CacheBase&) = delete;
-  CacheBase(CacheBase&&) = default;
-  CacheBase& operator=(CacheBase&&) = default;
+  CacheBase(CacheBase&&) = delete;
+  CacheBase& operator=(CacheBase&&) = delete;
 
   // Get a string referring to the cache name for this cache
   virtual const std::string getCacheName() const = 0;
@@ -123,9 +123,14 @@ class CacheBase {
   // cache stats. This is useful for our monitoring to directly upload them.
   virtual util::StatsMap getNvmCacheStatsMap() const = 0;
 
+  // @return a map of <stat name -> stat value> representation for all the
+  // legacy event tracker stats. If no event tracker exists, this will be empty
+  virtual std::unordered_map<std::string, uint64_t>
+  getLegacyEventTrackerStatsMap() const = 0;
+
   // @return a map of <stat name -> stat value> representation for all the event
   // tracker stats. If no event tracker exists, this will be empty
-  virtual std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  virtual folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
       const = 0;
 
   // @return the Cache metadata
@@ -139,6 +144,13 @@ class CacheBase {
 
   // @return the slab release stats.
   virtual SlabReleaseStats getSlabReleaseStats() const = 0;
+
+  // Increment the number of aborted slab releases stat
+  virtual void incrementAbortedSlabReleases() = 0;
+
+  // Check if shutdown is in progress
+  // @return true if shutdown is in progress, false otherwise
+  virtual bool isShutdownInProgress() const = 0;
 
   // export stats via callback. This function is not thread safe
   //
@@ -216,6 +228,14 @@ class CacheBase {
   // <Stat -> Count/Delta> maps
   mutable RateMap counters_;
 
+  // Whether to aggregate pool stats to reduce ODS counter inflation
+  bool aggregatePoolStats_{false};
+
+  FOLLY_ALWAYS_INLINE EventTracker* getEventTracker() const {
+    return eventTracker_.get();
+  }
+  virtual void setEventTracker(EventTracker::Config&& config);
+
  protected:
   // move bytes from one pool to another. The source pool should be at least
   // _bytes_ in size.
@@ -258,11 +278,9 @@ class CacheBase {
                            SlabReleaseMode mode,
                            const void* hint = nullptr) = 0;
 
-  // update the number of slabs to be advised
-  virtual void updateNumSlabsToAdvise(int32_t numSlabsToAdvise) = 0;
-
   // calculate the number of slabs to be advised/reclaimed in each pool
-  virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() = 0;
+  virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise) = 0;
 
   // Releasing a slab from this allocation class id and pool id. The release
   // could be for a pool resizing or allocation class rebalancing.
@@ -304,9 +322,27 @@ class CacheBase {
   //   @param pid    the poolId that needs updating
   void updatePoolStats(const std::string& statPrefix, PoolId pid) const;
 
+  // Update pool stats with a PoolStats object directly
+  //   @param stats  the PoolStats object to update
+  void updatePoolStats(const std::string& statPrefix,
+                       const PoolStats& stats) const;
+
+  // Update individual pool stats (each pool reported separately)
+  void updateIndividualPoolStats(const std::string& statPrefix) const;
+
+  // Update aggregated pool stats (all pools combined into one stat)
+  void updateAggregatedPoolStats(const std::string& statPrefix) const;
+
+  // Returns true if the number of distinct allocation sizes across all pools is
+  // less than the maximum number of allocation sizes allowed.
+  bool canAggregatePoolStats() const;
+
   // Update stats specific to compact caches
   void updateCompactCacheStats(const std::string& statPrefix,
                                const ICompactCache& c) const;
+
+  // Update stats specific to the legacy event tracker
+  void updateLegacyEventTrackerStats(const std::string& statPrefix) const;
 
   // Update stats specific to the event tracker
   void updateEventTrackerStats(const std::string& statPrefix) const;
@@ -341,6 +377,14 @@ class CacheBase {
   std::unordered_map<PoolId, std::shared_ptr<RebalanceStrategy>>
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
+
+  std::unique_ptr<EventTracker> eventTracker_;
+
+  // Enable aggregating pool stats
+  void enableAggregatePoolStats() { aggregatePoolStats_ = true; }
+
+  // Check if pool stats aggregation is enabled
+  bool isAggregatePoolStatsEnabled() const { return aggregatePoolStats_; }
 
   friend PoolResizer;
   friend PoolRebalancer;

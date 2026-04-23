@@ -18,6 +18,8 @@
 
 #include <folly/Range.h>
 
+#include "cachelib/common/EventTracker.h"
+
 namespace facebook {
 namespace cachelib {
 
@@ -31,7 +33,7 @@ class CacheAPIWrapperForNvm {
   using Key = typename Item::Key;
   using WriteHandle = typename C::WriteHandle;
   using ReadHandle = typename C::ReadHandle;
-  using EventTracker = typename C::EventTracker;
+  using LegacyEventTracker = typename C::LegacyEventTracker;
 
  public:
   // Get chained allocation on the item.
@@ -137,8 +139,49 @@ class CacheAPIWrapperForNvm {
   // @return Stats of the nvmcache
   static detail::Stats& getStats(C& cache) { return cache.stats(); }
 
+  static LegacyEventTracker* getLegacyEventTracker(C& cache) {
+    return cache.getLegacyEventTracker();
+  }
+
   static EventTracker* getEventTracker(C& cache) {
     return cache.getEventTracker();
+  }
+
+  /**
+   * Record event, key, result and info from a struct of type EventRecordParams
+   * through CacheAllocator's recordEvent function.
+   *
+   * Usage:
+   *  recordEvent(cache, event, key, result);
+   *  recordEvent(cache, event, key, result, {.size = itemSize});
+   *  recordEvent(cache, event, key, result, {.size=itemSize,
+   * .expiryTime=expiry});
+   *
+   * @param cache            The instance of the cache to call recordEvent on.
+   * @param event            The event of type AllocatorApiEvent.
+   * @param key              The key associated with the event.
+   * @param result           The result of type AllocatorApiResult.
+   * @param params           Optional struct of type EventRecordParams.
+   *
+   * @return                 void
+   */
+  static void recordEvent(C& cache,
+                          AllocatorApiEvent event,
+                          Key key,
+                          AllocatorApiResult result,
+                          typename C::EventRecordParams params = {}) {
+    cache.recordEvent(event, key, result, params);
+  }
+
+  // Record event without sampling. Use when the caller has already called
+  // sampleKey() and determined the key should be sampled.
+  static void recordEventWithoutSampling(
+      C& cache,
+      AllocatorApiEvent event,
+      Key key,
+      AllocatorApiResult result,
+      typename C::EventRecordParams params = {}) {
+    cache.recordEventWithoutSampling(event, key, result, std::move(params));
   }
 };
 

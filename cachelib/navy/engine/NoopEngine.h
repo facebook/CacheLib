@@ -25,12 +25,19 @@ class NoopEngine final : public Engine {
  public:
   ~NoopEngine() override = default;
   uint64_t getSize() const override { return 0; }
-  Status insert(HashedKey /* hk */, BufferView /* value */) override {
+  Status insert(HashedKey /* hk */,
+                BufferView /* value */,
+                uint8_t /* poolId */,
+                uint32_t /* expiryTime */,
+                uint32_t /* lastAccessTimeSecs */ = 0) override {
     return Status::Rejected;
   }
   bool couldExist(HashedKey) override { return false; }
   uint64_t estimateWriteSize(HashedKey, BufferView) const override { return 0; }
-  Status lookup(HashedKey /* hk */, Buffer& /* value */) override {
+  Status lookup(HashedKey /* hk */,
+                Buffer& /* value */,
+                uint32_t& lastAccessTimeSecs) override {
+    lastAccessTimeSecs = 0;
     return Status::NotFound;
   }
   Status remove(HashedKey /* hk */) override { return Status::NotFound; }

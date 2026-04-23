@@ -101,7 +101,9 @@ class NavyRequestScheduler : public JobScheduler {
   std::vector<std::shared_ptr<NavyRequestDispatcher>> writerDispatchers_;
 
   // mutex per shard. mutex protects the pending jobs and spooling state
-  mutable std::vector<TimedMutex> mutexes_;
+  mutable std::vector<
+      trace::Profiled<TimedMutex, "cachelib:navy:req_scheduler">>
+      mutexes_;
 
   // list of jobs per shard if there is already a job pending for the shard
   std::vector<std::list<std::unique_ptr<NavyRequest>>> pendingReqs_;
@@ -118,7 +120,6 @@ class NavyRequestScheduler : public JobScheduler {
 
   // Thread to check the health of the scheduler and dispatchers
   std::unique_ptr<NavyThread> healthThread_;
-  TimedMutex healthMutex_;
 
   // The number of times health check failed
   uint64_t numUnhealthy_{0};

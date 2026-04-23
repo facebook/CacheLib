@@ -35,7 +35,7 @@ LruPolicy::LruPolicy(uint32_t expectedNumRegions)
 void LruPolicy::touch(RegionId rid) {
   XDCHECK(rid.valid());
   auto i = rid.index();
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   if (i >= array_.size()) {
     array_.resize(i + 1);
   }
@@ -51,7 +51,7 @@ void LruPolicy::track(const Region& region) {
   auto rid = region.id();
   XDCHECK(rid.valid());
   auto i = rid.index();
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   if (i >= array_.size()) {
     array_.resize(i + 1);
   }
@@ -70,7 +70,7 @@ RegionId LruPolicy::evict() {
   uint32_t hits{0};
 
   {
-    std::lock_guard<TimedMutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     if (tail_ == kInvalidIndex) {
       return RegionId{};
     }
@@ -88,7 +88,7 @@ RegionId LruPolicy::evict() {
 }
 
 void LruPolicy::reset() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   array_.clear();
   head_ = kInvalidIndex;
   tail_ = kInvalidIndex;
@@ -152,7 +152,7 @@ void LruPolicy::dump(uint32_t n) const {
 void LruPolicy::dumpList(const char* tag,
                          uint32_t n,
                          uint32_t first,
-                         uint32_t ListNode::*link) const {
+                         uint32_t ListNode::* link) const {
   if (first == kInvalidIndex) {
     XLOGF(ERR, "LRU {} is empty", tag);
     return;
@@ -184,16 +184,6 @@ void LruPolicy::getCounters(const CounterVisitor& v) const {
   secSinceAccessEstimator_.visitQuantileEstimator(
       v, "navy_bc_lru_secs_since_access");
   hitsEstimator_.visitQuantileEstimator(v, "navy_bc_lru_region_hits_estimate");
-}
-
-void LruPolicy::persist(RecordWriter& rw) const {
-  std::ignore = rw;
-  throw std::runtime_error("Not Implemented.");
-}
-
-void LruPolicy::recover(RecordReader& rr) {
-  std::ignore = rr;
-  throw std::runtime_error("Not Implemented.");
 }
 
 } // namespace facebook::cachelib::navy

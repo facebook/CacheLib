@@ -143,11 +143,17 @@ struct Stats {
 
   // attempts made from nvm cache to allocate an item for its destructor
   TLCounter numNvmAllocForItemDestructor{0};
-  // heap allocate errors for item destrutor
+  // heap allocate errors for item destructor
   TLCounter numNvmItemDestructorAllocErrors{0};
 
   // the number of allocated items that are permanent
   TLCounter numPermanentItems{0};
+
+  // Number of insertOrReplace calls that resulted in insert
+  AtomicCounter numInsertOrReplaceInserted{0};
+
+  // Number of insertOrReplace calls that resulted in replace
+  AtomicCounter numInsertOrReplaceReplaced{0};
 
   // the number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
@@ -193,6 +199,8 @@ struct Stats {
   mutable util::PercentileStats nvmLookupLatency_;
   mutable util::PercentileStats nvmInsertLatency_;
   mutable util::PercentileStats nvmRemoveLatency_;
+  mutable util::PercentileStats nvmMakeBlobCbLatency_;
+  mutable util::PercentileStats nvmMakeObjCbLatency_;
 
   // percentile stats for various cache statistics
   mutable util::PercentileStats ramEvictionAgeSecs_;
@@ -201,6 +209,7 @@ struct Stats {
   mutable util::PercentileStats nvmLargeLifetimeSecs_;
   mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
   mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
+  mutable util::PercentileStats nvmHitTTASecs_;
 
   // per-pool percentile stats for eviction age
   std::array<util::PercentileStats, MemoryPoolManager::kMaxPools>

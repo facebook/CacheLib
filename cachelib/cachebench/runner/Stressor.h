@@ -21,7 +21,7 @@
 #include <atomic>
 #include <memory>
 
-#include "cachelib/cachebench/cache/Cache.h"
+#include "cachelib/cachebench/cache/StatsBase.h"
 #include "cachelib/cachebench/util/Config.h"
 
 namespace facebook {
@@ -71,8 +71,10 @@ class Stressor {
 
   virtual ~Stressor() {}
 
-  // report the stats from the cache  while the stress test is being run.
-  virtual Stats getCacheStats() const = 0;
+  // report the stats from the cache while the stress test is being run.
+  // returns a unique_ptr to allow different stressor implementations to
+  // return different StatsBase implementations.
+  virtual std::unique_ptr<StatsBase> getCacheStats() const = 0;
 
   // aggregate the throughput related stats at any given point in time.
   virtual ThroughputStats aggregateThroughputStats() const = 0;

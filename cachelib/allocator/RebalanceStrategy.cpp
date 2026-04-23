@@ -16,7 +16,10 @@
 
 #include "cachelib/allocator/RebalanceStrategy.h"
 
+#include <folly/Random.h>
 #include <folly/logging/xlog.h>
+
+#include <algorithm>
 
 namespace facebook::cachelib {
 
@@ -32,11 +35,11 @@ void RebalanceStrategy::recordCurrentState(PoolId pid, const PoolStats& stats) {
   }
 }
 
-ClassId RebalanceStrategy::pickAnyClassIdForResizing(const CacheBase&,
-                                                     PoolId,
-                                                     const PoolStats& stats) {
+ClassId TotalSlabsStrategy::pickAllocClassForResizing(
+    const CacheBase&, PoolId, const PoolStats& stats) const {
   const auto& candidates = stats.mpStats.classIds;
-  // pick victim by maximum number of slabs.
+
+  // Pick victim by maximum number of slabs
   const auto ret = *std::max_element(
       candidates.begin(), candidates.end(), [&](ClassId a, ClassId b) {
         return stats.mpStats.acStats.at(a).totalSlabs() <
@@ -50,6 +53,39 @@ ClassId RebalanceStrategy::pickAnyClassIdForResizing(const CacheBase&,
   }
 
   return ret;
+}
+
+ClassId AllocationSizeStrategy::pickAllocClassForResizing(
+    const CacheBase& cache, PoolId pid, const PoolStats& stats) const {
+  const auto& candidates = stats.mpStats.classIds;
+
+  // Filter by minSlabsForResizing
+  std::vector<ClassId> eligibleClasses;
+  for (const auto& classId : candidates) {
+    if (stats.mpStats.acStats.at(classId).totalSlabs() >=
+        config_.minSlabsForResizing) {
+      eligibleClasses.push_back(classId);
+    }
+  }
+
+  if (!eligibleClasses.empty()) {
+    // Sort by allocation size (largest first)
+    std::sort(eligibleClasses.begin(), eligibleClasses.end(),
+              [&](ClassId a, ClassId b) {
+                return stats.allocSizeForClass(a) > stats.allocSizeForClass(b);
+              });
+
+    // Pick one randomly from the top numClassesToPickFrom classes
+    const size_t numToConsider =
+        std::min(static_cast<size_t>(config_.numClassesToPickFrom),
+                 eligibleClasses.size());
+    const size_t randomIndex = folly::Random::rand64(numToConsider);
+    return eligibleClasses[randomIndex];
+  }
+
+  // Fallback if no eligible classes: use TotalSlabs heuristic
+  TotalSlabsStrategy fallback;
+  return fallback.pickAllocClassForResizing(cache, pid, stats);
 }
 
 void RebalanceStrategy::initPoolState(PoolId pid, const PoolStats& stats) {
@@ -104,8 +140,8 @@ std::set<ClassId> RebalanceStrategy::filterByNumEvictableSlabs(
     const auto& acStat = poolStats.mpStats.acStats.at(id);
     return acStat.totalSlabs() <= minSlabs;
   };
-  return filter(
-      std::move(candidates), condition, "remove candidates by numSlabs");
+  return filter(std::move(candidates), condition,
+                "remove candidates by numSlabs");
 }
 
 std::set<ClassId> RebalanceStrategy::filterByAllocFailure(
@@ -245,7 +281,8 @@ RebalanceContext RebalanceStrategy::pickVictimAndReceiver(
         if (ctx.receiverClassId != Slab::kInvalidClassId) {
           ctx.victimClassId = pickVictimImpl(cache, pid, stats);
           if (ctx.victimClassId == cachelib::Slab::kInvalidClassId) {
-            ctx.victimClassId = pickAnyClassIdForResizing(cache, pid, stats);
+            ctx.victimClassId = pickVictimStrategy_->pickAllocClassForResizing(
+                cache, pid, stats);
           }
           if (ctx.victimClassId != Slab::kInvalidClassId &&
               ctx.victimClassId != ctx.receiverClassId &&
@@ -273,7 +310,8 @@ ClassId RebalanceStrategy::pickVictimForResizing(const CacheBase& cache,
 
   if (victimClassId == cachelib::Slab::kInvalidClassId) {
     const auto poolStats = cache.getPoolStats(pid);
-    victimClassId = pickAnyClassIdForResizing(cache, pid, poolStats);
+    victimClassId =
+        pickVictimStrategy_->pickAllocClassForResizing(cache, pid, poolStats);
   }
 
   return victimClassId;
