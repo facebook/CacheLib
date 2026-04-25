@@ -17,6 +17,8 @@
 #include "cachelib/cachebench/util/CacheConfig.h"
 
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
+#include "cachelib/allocator/MarginalHitsStrategyNew.h"
+#include "cachelib/allocator/MarginalHitsStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/RandomStrategy.h"
 
@@ -141,6 +143,12 @@ std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {
     auto config = HitsPerSlabStrategy::Config{
         rebalanceDiffRatio, static_cast<unsigned int>(rebalanceMinSlabs)};
     return std::make_shared<HitsPerSlabStrategy>(config);
+  } else if (rebalanceStrategy == "marginal-hits") {
+    return std::make_shared<MarginalHitsStrategy>(
+        MarginalHitsStrategy::Config{});
+  } else if (rebalanceStrategy == "marginal-hits-new") {
+    return std::make_shared<MarginalHitsStrategyNew>(
+        MarginalHitsStrategyNew::Config{});
   } else {
     // use random strategy to just trigger some slab release.
     return std::make_shared<RandomStrategy>(
