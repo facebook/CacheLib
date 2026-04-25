@@ -2697,6 +2697,7 @@ TEST(BlockCache, ExpiredItemDestructorCallback) {
 
   // Wait for eviction to complete
   EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
+  injectPauseClear("pause_do_eviction_done");
 
   // Wait for all scheduled jobs to complete
   exPtr->finish();
