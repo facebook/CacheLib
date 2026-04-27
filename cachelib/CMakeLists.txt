@@ -123,6 +123,7 @@ find_package(FBThrift REQUIRED) # must come after wangle
 find_package(NUMA REQUIRED)
 find_package(Sparsemap REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
+find_package(Xxhash REQUIRED)
 
 find_package(uring)
 if (NOT uring_FOUND)

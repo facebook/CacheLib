@@ -57,7 +57,7 @@ options:
   -v    verbose build
 
 NAME: the dependency to build supported values are:
-  zstd
+  zstd, xxhash,
   googlelog, googleflags, googletest,
   fmt, sparsemap,
   folly, fizz, wangle, mvfst, fbthrift,
@@ -193,6 +193,16 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
+    ;;
+
+  xxhash)
+    NAME=xxhash
+    REPO=https://github.com/Cyan4973/xxHash.git
+    REPODIR=cachelib/external/$NAME
+    SRCDIR=$REPODIR/cmake_unofficial
+    external_git_clone=yes
+    external_git_tag="v0.8.2"
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     ;;
 
   folly)
