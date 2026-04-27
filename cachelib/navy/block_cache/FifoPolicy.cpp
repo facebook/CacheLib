@@ -67,7 +67,7 @@ void FifoPolicy::persist(serialization::EvictionPolicyData& out) const {
     proto.trackTime() = queue_[i].trackTime.count();
   }
 
-  out.fifo_ref() = std::move(fifoPolicyData);
+  out.fifo() = std::move(fifoPolicyData);
 }
 
 void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {
@@ -76,7 +76,7 @@ void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {
     throw std::invalid_argument(
         "FifoPolicy::recover called with non-FIFO EvictionPolicyData variant");
   }
-  const auto& fifoPolicyData = *in.fifo_ref();
+  const auto& fifoPolicyData = *in.fifo();
   queue_.clear();
   for (const auto& proto : fifoPolicyData.queue().value()) {
     queue_.push_back(

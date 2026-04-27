@@ -604,7 +604,7 @@ void RegionManager::restoreUntrackedRegions(
   // requires extending this dispatch (and the EvictionPolicyData union).
   std::vector<bool> tracked(numRegions_, false);
   if (data.getType() == serialization::EvictionPolicyData::Type::fifo) {
-    for (const auto& node : data.fifo_ref()->queue().value()) {
+    for (const auto& node : data.fifo()->queue().value()) {
       auto idx = static_cast<uint32_t>(node.idx().value());
       if (idx >= numRegions_) {
         throw std::invalid_argument(
