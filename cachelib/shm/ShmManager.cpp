@@ -17,7 +17,6 @@
 #include "cachelib/shm/ShmManager.h"
 
 #include <folly/ScopeGuard.h>
-#include <folly/hash/Hash.h>
 #include <sys/stat.h>
 
 #pragma GCC diagnostic push
@@ -39,7 +38,9 @@ inline std::string pathName(const std::string& dir, const std::string& file) {
 
 ShmManager::ShmManager(const std::string& dir, bool usePosix)
     : controlDir_(dir),
-      dirHash_(std::to_string(folly::hash::fnv64_BROKEN(controlDir_))),
+      dirHash_(
+          std::to_string(XXH3_64bits(controlDir_.data(), controlDir_.size()))),
+      oldDirHash_(std::to_string(folly::hash::fnv64_BROKEN(controlDir_))),
       usePosix_(usePosix) {
   // check that the directory exists. If it does not exist, create
   // one. If it exists, extract the name to key mapping from the metadata
@@ -211,7 +212,9 @@ bool removeSegByName(bool posix, const std::string& uniqueName) {
 void ShmManager::removeByName(const std::string& dir,
                               const std::string& name,
                               bool posix) {
-  removeSegByName(posix, uniqueIdForName(name, dir));
+  if (!removeSegByName(posix, uniqueIdForName(name, dir))) {
+    removeSegByName(posix, oldUniqueIdForName(name, dir));
+  }
 }
 
 bool ShmManager::segmentExists(const std::string& cacheDir,
@@ -221,6 +224,11 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
     ShmSegment(ShmAttach, uniqueIdForName(shmName, cacheDir), posix);
     return true;
   } catch (const std::exception&) {
+  }
+  try {
+    ShmSegment(ShmAttach, oldUniqueIdForName(shmName, cacheDir), posix);
+    return true;
+  } catch (const std::exception&) {
     return false;
   }
 }
@@ -228,8 +236,14 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
 std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
     const std::string& dir, const std::string& name, bool posix, void* addr) {
   ShmSegmentOpts opts{PageSizeT::NORMAL, true /* read only */};
-  auto shm = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(name, dir),
-                                          posix, opts);
+  std::unique_ptr<ShmSegment> shm;
+  try {
+    shm = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(name, dir),
+                                       posix, opts);
+  } catch (const std::exception&) {
+    shm = std::make_unique<ShmSegment>(ShmAttach, oldUniqueIdForName(name, dir),
+                                       posix, opts);
+  }
   if (!shm->mapAddress(addr)) {
     throw std::invalid_argument(folly::sformat(
         "Error mapping shm {} under {}, addr: {}", name, dir, addr));
@@ -245,7 +259,9 @@ void ShmManager::cleanup(const std::string& dir, bool posix) {
 
 void ShmManager::removeAllSegments() {
   for (const auto& kv : nameToKey_) {
-    removeSegByName(usePosix_, uniqueIdForName(kv.first));
+    if (!removeSegByName(usePosix_, uniqueIdForName(kv.first))) {
+      removeSegByName(usePosix_, oldUniqueIdForName(kv.first));
+    }
   }
   nameToKey_.clear();
 }
@@ -256,7 +272,9 @@ void ShmManager::removeUnAttachedSegments() {
     const auto name = it->first;
     // check if the segment is attached.
     if (segments_.find(name) == segments_.end()) { // not attached
-      removeSegByName(usePosix_, uniqueIdForName(name));
+      if (!removeSegByName(usePosix_, uniqueIdForName(name))) {
+        removeSegByName(usePosix_, oldUniqueIdForName(name));
+      }
       it = nameToKey_.erase(it);
     } else {
       ++it;
@@ -306,7 +324,9 @@ ShmAddr ShmManager::createShm(const std::string& shmName,
   return ret;
 }
 
-void ShmManager::attachNewShm(const std::string& shmName, ShmSegmentOpts opts) {
+folly::F14FastMap<std::string, std::unique_ptr<ShmSegment>>::iterator
+ShmManager::attachNewShm(const std::string& shmName,
+                         const ShmSegmentOpts& opts) {
   const auto keyIt = nameToKey_.find(shmName);
   // if key is not known already, there is not much we can do to attach.
   if (keyIt == nameToKey_.end()) {
@@ -315,31 +335,36 @@ void ShmManager::attachNewShm(const std::string& shmName, ShmSegmentOpts opts) {
   }
 
   // This means the segment exists and we can try to attach it.
+  // Try xxhash3 first, then fall back to the old (BROKEN) hash for segments
+  // created before the migration.
   try {
-    segments_.emplace(shmName,
-                      std::make_unique<ShmSegment>(ShmAttach,
-                                                   uniqueIdForName(shmName),
-                                                   usePosix_, opts));
+    auto seg = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(shmName),
+                                            usePosix_, opts);
+    auto [it, _] = segments_.emplace(shmName, std::move(seg));
+    return it;
+  } catch (const std::system_error&) {
+    // Fall through to try old hash
+  }
+  try {
+    auto seg = std::make_unique<ShmSegment>(
+        ShmAttach, oldUniqueIdForName(shmName), usePosix_, opts);
+    auto [it, _] = segments_.emplace(shmName, std::move(seg));
+    return it;
   } catch (const std::system_error& e) {
-    // we are trying to attach. nothing can get invalid if an error happens
-    // here.
     throw std::invalid_argument(folly::sformat(
         "Unable to attach to shared memory segment: name: {}, error: {}",
         shmName, e.what()));
   }
-  DCHECK(segments_.find(shmName) != segments_.end());
-  DCHECK_EQ(segments_[shmName]->getKeyStr(), keyIt->second);
 }
 
 ShmAddr ShmManager::attachShm(const std::string& shmName,
                               void* addr,
                               ShmSegmentOpts opts) {
   // check if segment already exists.
-  if (segments_.find(shmName) == segments_.end()) {
-    attachNewShm(shmName, opts);
-  }
-
   auto shmIt = segments_.find(shmName);
+  if (shmIt == segments_.end()) {
+    shmIt = attachNewShm(shmName, opts);
+  }
   DCHECK(shmIt != segments_.end());
 
   auto& shm = *shmIt->second;
@@ -368,7 +393,8 @@ bool ShmManager::removeShm(const std::string& shmName) {
   } catch (const std::invalid_argument&) {
     // shm by this name is not attached.
     const bool wasPresent =
-        removeSegByName(usePosix_, uniqueIdForName(shmName));
+        removeSegByName(usePosix_, uniqueIdForName(shmName)) ||
+        removeSegByName(usePosix_, oldUniqueIdForName(shmName));
     if (!wasPresent) {
       DCHECK(segments_.end() == segments_.find(shmName));
       DCHECK(nameToKey_.end() == nameToKey_.find(shmName));
