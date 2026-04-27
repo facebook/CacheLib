@@ -43,11 +43,11 @@ You can install system dependencies to save building them:
     git clone https://github.com/facebook/CacheLib
     # Install dependencies
     cd CacheLib
-    sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
+    sudo python3 ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
 
 If you'd like to see the packages before installing them:
 
-    ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
+    python3 ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
 
 On other platforms or if on Linux and without system dependencies `getdeps.py` will mostly download and build them for you during the build step.
 
@@ -77,6 +77,13 @@ By default `getdeps.py` will build the tests for cachelib. To run them:
 
     python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
 
+### Locating build output
+
+`getdeps.py` installs build artifacts to a scratch directory. To find where CacheLib was installed:
+
+    python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib
+
+The install directory contains `bin/` (executables like `cachebench`), `lib/` (libraries), `include/` (headers), and `test_configs/` (sample configurations).
 
 
 ## Contributing
