@@ -142,6 +142,8 @@ class SparseMapIndex : public Index {
   // considering the current entry count and sparse_map's implementation)
   MemFootprintRange computeMemFootprintRange() const override;
 
+  Iterator begin() const override;
+
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
@@ -165,6 +167,9 @@ class SparseMapIndex : public Index {
   }
 
  private:
+  // Defined in SparseMapIndex.cpp.
+  class IteratorImpl;
+
   // Configuration related variables
   const uint32_t numBucketMaps_{64 * 1024};
   const uint32_t numBucketMapsPerMutex_{64};

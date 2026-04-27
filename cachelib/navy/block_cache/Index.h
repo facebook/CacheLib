@@ -19,6 +19,7 @@
 #include <folly/Portability.h>
 
 #include <cassert>
+#include <memory>
 
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/common/Types.h"
@@ -118,6 +119,65 @@ class Index {
   struct MemFootprintRange {
     size_t maxUsedBytes{0};
     size_t minUsedBytes{0};
+  };
+
+  struct Entry {
+    // Implementation-defined opaque token identifying this snapshotted entry.
+    // Callers should not interpret it; pass the Entry back to the owning index
+    // (e.g. isValid()) or BlockCache APIs to act on it.
+    uint64_t token{0};
+    ItemRecord record{};
+  };
+
+  class Iterator {
+   public:
+    class Impl {
+     public:
+      Impl() = default;
+      Impl(const Impl&) = default;
+      Impl& operator=(const Impl&) = default;
+      Impl(Impl&&) noexcept = default;
+      Impl& operator=(Impl&&) noexcept = default;
+      virtual ~Impl() = default;
+
+      virtual const Entry& entry() const = 0;
+      virtual void increment() = 0;
+      virtual bool atEnd() const = 0;
+    };
+
+    Iterator() = default;
+    explicit Iterator(std::unique_ptr<Impl> impl) : impl_{std::move(impl)} {
+      if (impl_ && impl_->atEnd()) {
+        impl_.reset();
+      }
+    }
+
+    const Entry& operator*() const {
+      XDCHECK(impl_);
+      return impl_->entry();
+    }
+
+    const Entry* operator->() const { return &(**this); }
+
+    Iterator& operator++() {
+      XDCHECK(impl_);
+      impl_->increment();
+      if (impl_->atEnd()) {
+        impl_.reset();
+      }
+      return *this;
+    }
+
+    // Equality is only defined for checking against end(). Non-end iterators
+    // are not generally comparable across implementations.
+    bool operator==(const Iterator& other) const {
+      return !impl_ && !other.impl_;
+    }
+
+    bool operator!=(const Iterator& other) const { return !(*this == other); }
+
+   private:
+    std::unique_ptr<Impl> impl_;
   };
 
   // Internally, FixedSizeIndex will maintain each entry as PackedItemRecord
@@ -294,6 +354,9 @@ class Index {
   // that it's difficult to get exact number with the memory footprint (ex.
   // sparse_map) this function should return max/min range of memory footprint
   virtual MemFootprintRange computeMemFootprintRange() const = 0;
+
+  virtual Iterator begin() const = 0;
+  Iterator end() const { return {}; }
 
   // Exports index stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;

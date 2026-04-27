@@ -380,6 +380,8 @@ void FixedSizeIndex::initWithBaseAddr(uint8_t* addr) {
   bucketDistInfo_.initWithBaseAddr(addr);
 }
 
+Index::Iterator FixedSizeIndex::begin() const { return {}; }
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

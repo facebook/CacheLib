@@ -179,6 +179,9 @@ class FixedSizeIndex : public Index {
   // currently use for the entries it currently has.
   MemFootprintRange computeMemFootprintRange() const override;
 
+  // TODO: Iteration is not yet implemented for FixedSizeIndex.
+  Iterator begin() const override;
+
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
