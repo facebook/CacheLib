@@ -200,6 +200,6 @@ BENCH_REL(runMemcmpRand, 1024bytes, 1024)
 } // namespace facebook
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
 }

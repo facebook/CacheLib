@@ -16,8 +16,6 @@
 
 #include "cachelib/shm/SysVShmSegment.h"
 
-#include <folly/ScopeGuard.h>
-#include <folly/hash/Hash.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -31,9 +29,8 @@
 namespace facebook {
 namespace cachelib {
 
-constexpr static uint32_t kHugePageSize = 1 << 21; // 2MB
-constexpr static uint32_t kModeRWFlags = 0666;     // octal rw for ugo
-constexpr static uint32_t kModeRFlags = 0444;      // octal ro for ugo
+constexpr static uint32_t kModeRWFlags = 0666; // octal rw for ugo
+constexpr static uint32_t kModeRFlags = 0444;  // octal ro for ugo
 
 namespace detail {
 
@@ -207,12 +204,6 @@ void mbindImpl(void* addr,
 }
 
 } // namespace detail
-
-void ensureSizeforHugePage(size_t size) {
-  if (size % kHugePageSize) {
-    util::throwSystemError(EINVAL, "Page not aligned to Huge page size");
-  }
-}
 
 int SysVShmSegment::createNewSegment(key_t key,
                                      size_t size,

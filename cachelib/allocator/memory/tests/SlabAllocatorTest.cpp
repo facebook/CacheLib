@@ -20,10 +20,10 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <memory>
 #include <random>
 #include <vector>
 
+#include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
@@ -645,7 +645,6 @@ void testAdvise(SlabAllocator& s,
                 const size_t numAdviseSlabs,
                 void* memory,
                 const size_t size) {
-  ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
   auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // Use up all but a few slabs so that we have a few free
@@ -671,8 +670,6 @@ void testRestoreAndAdvise(SlabAllocator& s,
                           const size_t numAdviseSlabs,
                           void* memory,
                           const size_t size) {
-  ASSERT_EQ(util::getNumResidentPages(memory, size),
-            util::getNumPages(size - numAdviseSlabs * Slab::kSize));
   auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // No free slabs available
@@ -719,8 +716,9 @@ TEST_F(SlabAllocatorTest, AdviseSaveRestore) {
   {
     SlabAllocator s(memory, size, config);
     // Wait until memory locking completes.
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    ASSERT_EVENTUALLY_TRUE([=]() {
+      return util::getNumResidentPages(memory, size) == util::getNumPages(size);
+    });
     testAdvise(s, numSlabs, numAdviseSlabs, memory, size);
     state = s.saveState();
   }
@@ -728,8 +726,10 @@ TEST_F(SlabAllocatorTest, AdviseSaveRestore) {
   {
     SlabAllocator r(state, memory, size, config);
     // Wait until memory locking completes.
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    ASSERT_EVENTUALLY_TRUE([=]() {
+      return util::getNumResidentPages(memory, size) ==
+             util::getNumPages(size - numAdviseSlabs * Slab::kSize);
+    });
     testRestoreAndAdvise(r, numAdviseSlabs, memory, size);
   }
 }
@@ -767,6 +767,18 @@ TEST_F(SlabAllocatorTest, TestAlignedSize) {
   }
 }
 
+TEST_F(SlabAllocatorTest, TestAlignedSizeDown) {
+  for (uint32_t i = 57; i <= 63; ++i) {
+    EXPECT_EQ(56, util::getAlignedSizeDown(i, 8));
+  }
+  for (uint32_t i = 65; i <= 71; ++i) {
+    EXPECT_EQ(64, util::getAlignedSizeDown(i, 8));
+  }
+  EXPECT_EQ(64, util::getAlignedSizeDown(64, 8));
+  EXPECT_EQ(0, util::getAlignedSizeDown(0, 8));
+  EXPECT_EQ(0, util::getAlignedSizeDown(7, 8));
+}
+
 TEST_F(SlabAllocatorTest, TestGenerateAllocSizesWithBadFactor) {
   uint32_t minSize = 64;
   uint32_t maxSize = 104;
@@ -779,4 +791,232 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesWithBadFactor) {
   ASSERT_THROW(
       MemoryAllocator::generateAllocSizes(0.90, maxSize, minSize, true),
       std::invalid_argument);
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2) {
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(6, 10);
+    std::set<uint32_t> expected = {64, 128, 256, 512, 1024};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(8, 12);
+    std::set<uint32_t> expected = {256, 512, 1024, 2048, 4096};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(6, 6);
+    std::set<uint32_t> expected = {64};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(Slab::kMinAllocPower,
+                                                       Slab::kNumSlabBits);
+    EXPECT_EQ(Slab::kMinAllocSize, *allocSizes.begin());
+    EXPECT_EQ(Slab::kSize, *allocSizes.rbegin());
+    EXPECT_EQ(17u, allocSizes.size());
+  }
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(10, Slab::kMinAllocPower),
+               std::invalid_argument);
+
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(Slab::kMinAllocPower - 1, 10),
+               std::invalid_argument);
+
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(Slab::kMinAllocPower,
+                                                Slab::kNumSlabBits + 1),
+               std::invalid_argument);
+}
+
+namespace {
+void expectAllAllocSizesValid(const std::set<uint32_t>& allocSizes) {
+  for (auto allocSize : allocSizes) {
+    EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
+  }
+}
+} // namespace
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {
+  {
+    auto allocSizes = MemoryAllocator::generateOptimalAllocSizesForItemRange(
+        Slab::kSize / 4, Slab::kSize);
+    EXPECT_EQ(allocSizes.size(), 4u);
+    EXPECT_NE(allocSizes.find(Slab::kSize), allocSizes.end());
+    EXPECT_NE(allocSizes.find(Slab::kSize / 4), allocSizes.end());
+    EXPECT_NE(allocSizes.find(Slab::kSize / 2), allocSizes.end());
+    EXPECT_NE(allocSizes.find(1398096), allocSizes.end());
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(500, 500);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), 504);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes = MemoryAllocator::generateOptimalAllocSizesForItemRange(
+        Slab::kSize, Slab::kSize);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kSize);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(33904, 103496);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(32, 40);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kMinAllocSize);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(64, 128);
+    EXPECT_EQ(allocSizes.size(), 9u);
+    for (int i = 64; i <= 128; i += 8) {
+      EXPECT_NE(allocSizes.find(i), allocSizes.end());
+    }
+    expectAllAllocSizesValid(allocSizes);
+  }
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRangeWithBadParams) {
+  // min size larger than max size
+  ASSERT_THROW(
+      MemoryAllocator::generateOptimalAllocSizesForItemRange(1000, 100),
+      std::invalid_argument);
+
+  // max size larger than slab size
+  ASSERT_THROW(MemoryAllocator::generateOptimalAllocSizesForItemRange(
+                   100, Slab::kSize + 1),
+               std::invalid_argument);
+
+  // requires too many allocation classes
+  ASSERT_THROW(MemoryAllocator::generateOptimalAllocSizesForItemRange(64, 2048),
+               std::runtime_error);
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateEvenlyDistributedAllocSizes) {
+  // Test with numClassesToAdd=1 (only max)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 1);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.begin(), 5000u);
+  }
+
+  // Test with numClassesToAdd=2 (max + 1 intermediate)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 2);
+    EXPECT_EQ(allocSizes.size(), 2u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), 5000u);
+    auto it = allocSizes.begin();
+    EXPECT_EQ(*it, 3000u);
+  }
+
+  // Test with numClassesToAdd=3 (max + 2 intermediates)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 4000, 3);
+    EXPECT_EQ(allocSizes.size(), 3u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), 4000u);
+    auto it = allocSizes.begin();
+    EXPECT_EQ(*it, 2000u);
+    ++it;
+    EXPECT_EQ(*it, 3000u);
+  }
+
+  // Test with min == max
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(5000, 5000, 1);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.begin(), 5000u);
+  }
+
+  // Test with small sizes (below kMinAllocSize)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(32, 40, 2);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+    // Should use kMinAllocSize for both min and max
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kMinAllocSize);
+  }
+
+  // Test with Slab::kSize as max
+  // This is just returning one class because the other size it tries to add is
+  // ~3MB which gets rounded up to 4MB
+  {
+    auto allocSizes = MemoryAllocator::generateEvenlyDistributedAllocSizes(
+        Slab::kSize / 2, Slab::kSize, 2);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), Slab::kSize);
+  }
+
+  {
+    auto allocSizes = MemoryAllocator::generateEvenlyDistributedAllocSizes(
+        103496, 963984, 14);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+  }
+}
+
+TEST_F(SlabAllocatorTest,
+       TestGenerateEvenlyDistributedAllocSizesWithBadParams) {
+  // min size larger than max size
+  ASSERT_THROW(
+      MemoryAllocator::generateEvenlyDistributedAllocSizes(5000, 1000, 2),
+      std::invalid_argument);
+
+  // max size larger than slab size
+  ASSERT_THROW(MemoryAllocator::generateEvenlyDistributedAllocSizes(
+                   100, Slab::kSize + 1, 2),
+               std::invalid_argument);
+
+  // numClassesToAdd < 1
+  ASSERT_THROW(
+      MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 0),
+      std::invalid_argument);
+
+  // numClassesToAdd exceeds kMaxClasses
+  ASSERT_THROW(MemoryAllocator::generateEvenlyDistributedAllocSizes(
+                   1000, 5000, MemoryAllocator::kMaxClasses + 1),
+               std::invalid_argument);
+}
+
+TEST_F(SlabAllocatorTest, TestTunedAllocationClassesValid) {
+  auto allocSizes = util::genAllocClassesTuned();
+  EXPECT_FALSE(allocSizes.empty());
+  expectAllAllocSizesValid(allocSizes);
+}
+
+TEST_F(SlabAllocatorTest, TestTunedAllocationClassesMaxAllocSize) {
+  auto allocClasses = util::genAllocClassesTuned();
+
+  // Ensure that Slab::kSize is included in the list of allocation classes
+  // Want to ensure that large items can be allocated
+  EXPECT_EQ(*allocClasses.rbegin(), Slab::kSize);
 }

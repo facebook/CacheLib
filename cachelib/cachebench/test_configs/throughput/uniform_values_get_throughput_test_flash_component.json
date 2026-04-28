@@ -1,0 +1,32 @@
+{
+  "cache_config" : {
+    "allocator" : "flash",
+    "cacheSizeMB" : 65536,
+    "navyBlockSize" : 4096,
+    "navyRegionSizeMB" : 16,
+    "navyCleanRegionThreads" : 16,
+    "navyCleanRegions" : 8,
+    "navyNumInmemBuffers" : 8,
+    "navyStackSizeKB" : 16,
+    "navyDataChecksum" : true
+  },
+  "test_config" :
+    {
+      "name" : "cache_component",
+
+      "numOps" : 2000000,
+      "numThreads" : 32,
+      "numKeys" : 1000000,
+
+
+      "keySizeRange" : [30, 32],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [1, 100000],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.99,
+      "setRatio" : 0.01
+    }
+
+}

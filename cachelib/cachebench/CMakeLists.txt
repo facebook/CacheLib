@@ -14,19 +14,26 @@
 
 add_library (cachelib_cachebench
   ./cache/Cache.cpp
+  ./cache/components/Components.cpp
+  ./cache/components/FlashComponent.cpp
+  ./cache/components/RAMComponent.cpp
   ./cache/TimeStampTicker.cpp
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
   ./consistency/ValueHistory.cpp
   ./consistency/ValueTracker.cpp
+  ./runner/CacheComponentStressor.cpp
+  ./runner/CacheStressorBase.cpp
   ./runner/FastShutdown.cpp
   ./runner/IntegrationStressor.cpp
   ./runner/ProgressTracker.cpp
   ./runner/Runner.cpp
   ./runner/Stressor.cpp
+  ./util/AggregateStats.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
+  ./util/Sleep.cpp
   ./workload/BlockChunkCache.cpp
   ./workload/BlockChunkReplayGenerator.cpp
   ./workload/PieceWiseCache.cpp
@@ -35,8 +42,10 @@ add_library (cachelib_cachebench
   ./workload/PieceWiseReplayGenerator.cpp
   ./workload/SimpleFlashBenchmarkGenerator.cpp
   )
+
 add_dependencies(cachelib_cachebench thrift_generated_files)
 target_link_libraries(cachelib_cachebench PUBLIC
+  cachelib_interface
   cachelib_datatype
   cachelib_allocator
   gflags

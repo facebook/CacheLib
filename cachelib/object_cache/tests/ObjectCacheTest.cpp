@@ -22,7 +22,9 @@
 #include <memory>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/KAllocation.h"
 #include "cachelib/allocator/tests/NvmTestUtils.h"
+#include "cachelib/common/TestUtils.h"
 #include "cachelib/object_cache/ObjectCache.h"
 #include "cachelib/object_cache/tests/gen-cpp2/test_object_types.h"
 
@@ -86,6 +88,7 @@ class ObjectCacheTest : public ::testing::Test {
     for (size_t i = 0; i < maxKeySizes.size(); i++) {
       EXPECT_TRUE(allocSizes[i] >= ObjectCache::kL1AllocSizeMin);
       EXPECT_TRUE(maxKeySizes[i] + sizeof(ObjectCacheItem) +
+                      ObjectCache::getValueAlignmentPadding(maxKeySizes[i]) +
                       sizeof(typename AllocatorT::Item) <=
                   allocSizes[i]);
       EXPECT_TRUE(allocSizes[i] % 8 == 0);
@@ -651,7 +654,7 @@ class ObjectCacheTest : public ::testing::Test {
          itr != objcache.getL1Cache().end();
          ++itr) {
       totalObjectSize +=
-          reinterpret_cast<const ObjectCacheItem*>(itr.asHandle()->getMemory())
+          ObjectCache::getAlignedItemPtr(itr.asHandle()->getMemory())
               ->objectSize;
     }
     EXPECT_EQ(totalObjectSize, objcache.getTotalObjectSize());
@@ -824,22 +827,32 @@ class ObjectCacheTest : public ::testing::Test {
         });
     config.objectSizeTrackingEnabled = true;
     auto objcache = ObjectCache::create(config);
+    size_t curCacheSize = 0;
 
-    auto [_, ptr, __] = objcache->insertOrReplace(
-        "foo", std::make_unique<ObjectType>(), sizeof(ObjectType));
-    EXPECT_EQ(sizeof(ObjectType), objcache->getObjectSize(ptr));
-    EXPECT_EQ(sizeof(ObjectType), objcache->getTotalObjectSize());
+    for (size_t keySize = 1; keySize < KAllocation::kKeyMaxLenSmall;
+         keySize++) {
+      std::string key(keySize, 'f');
+      auto [_, ptr, __] = objcache->insertOrReplace(
+          key, std::make_unique<ObjectType>(), sizeof(ObjectType));
+      EXPECT_EQ(sizeof(ObjectType), objcache->getObjectSize(ptr));
+      EXPECT_EQ(sizeof(ObjectType) + curCacheSize,
+                objcache->getTotalObjectSize());
 
-    auto found = objcache->template findToWrite<ObjectType>("foo");
-    ASSERT_NE(nullptr, found);
+      auto found = objcache->template findToWrite<ObjectType>(key);
+      ASSERT_NE(nullptr, found);
 
-    *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
-    const size_t newSize = sizeof(*found) + found->size();
-    const auto updated = objcache->updateObjectSize(ptr, newSize);
-    ASSERT_TRUE(updated);
+      *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
+      const size_t newSize = sizeof(*found) + found->size();
+      ASSERT_TRUE(objcache->updateObjectSize(ptr, newSize));
 
-    EXPECT_EQ(newSize, objcache->getObjectSize(ptr));
-    EXPECT_EQ(newSize, objcache->getTotalObjectSize());
+      EXPECT_EQ(newSize, objcache->getObjectSize(ptr));
+      EXPECT_EQ(newSize + curCacheSize, objcache->getTotalObjectSize());
+      curCacheSize += newSize;
+    }
+
+    util::StatsMap stats;
+    objcache->getObjectCacheCounters(stats.createCountVisitor());
+    EXPECT_GT(stats.getCounts().at("objcache.key_padding_bytes"), 0);
   }
 
   void testMultithreadObjectSizeTrackingWithMutation() {
@@ -876,8 +889,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> rs;
+    rs.reserve(10);
     for (int i = 0; i < 10; i++) {
-      rs.push_back(std::thread{runMutateObjectOps, i + 1});
+      rs.emplace_back(runMutateObjectOps, i + 1);
     }
     for (int i = 0; i < 10; i++) {
       rs[i].join();
@@ -1239,8 +1253,7 @@ class ObjectCacheTest : public ::testing::Test {
       auto evictItr = objcache.getEvictionIterator(poolId);
       std::vector<std::string> content;
       while (evictItr) {
-        auto* itemPtr = reinterpret_cast<typename ObjectCache::Item*>(
-            evictItr->getMemory());
+        auto* itemPtr = ObjectCache::getAlignedItemPtr(evictItr->getMemory());
         auto* objectPtr = reinterpret_cast<ThriftFoo*>(itemPtr->objectPtr);
         content.push_back(folly::sformat("{}: a {} b {} c {}",
                                          evictItr->getKey(),
@@ -1618,8 +1631,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runReplaceOps});
+      ts.emplace_back(runReplaceOps);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1643,8 +1657,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runInsertOps, i});
+      ts.emplace_back(runInsertOps, i);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1673,8 +1688,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runInsertOps, i});
+      ts.emplace_back(runInsertOps, i);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1813,8 +1829,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runUpdateTtlOps});
+      ts.emplace_back(runUpdateTtlOps);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -2274,5 +2291,228 @@ TEST(ObjectCacheTest, PeekToFindTest) {
 
   checkExist = objcache->find<Foo>("key_2");
   ASSERT_EQ(nullptr, checkExist);
+}
+
+TEST(ObjectCacheTest, AggregatePoolStatsWithTwoShards) {
+  ObjectCache::Config config;
+  config.setCacheName("test")
+      .setCacheCapacity(10'000)
+      .setNumShards(2)
+      .enableAggregatePoolStats()
+      .setItemDestructor(
+          [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+
+  auto objcache = ObjectCache::create(config);
+
+  auto poolIds = objcache->getL1Cache().getRegularPoolIds();
+  EXPECT_EQ(2, poolIds.size());
+
+  // Insert some items to generate stats
+  for (int i = 0; i < 10; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<Foo>());
+  }
+
+  // Test stats export to see what we actually get
+  bool foundAggregatedStats = false;
+  bool foundIndividualStats = false;
+
+  objcache->exportStats(
+      "test_prefix.", std::chrono::seconds{60},
+      [&](folly::StringPiece name, uint64_t value) {
+        std::string nameStr = name.str();
+        if (nameStr.find("pool.aggregated.") != std::string::npos) {
+          foundAggregatedStats = true;
+          XLOGF(INFO, "Found aggregated stat: {} = {}", name, value);
+        } else if (nameStr.find("pool.pool_0.") != std::string::npos ||
+                   nameStr.find("pool.pool_1.") != std::string::npos) {
+          foundIndividualStats = true;
+          XLOGF(INFO, "Found individual stat: {} = {}", name, value);
+        }
+      });
+
+  EXPECT_TRUE(foundAggregatedStats)
+      << "Should find aggregated stats with enableAggregatePoolStats()";
+  EXPECT_FALSE(foundIndividualStats) << "Should NOT find individual shard "
+                                        "stats with enableAggregatePoolStats()";
+}
+
+TEST(ObjectCacheTest, DynamicFreeMemorySizeControlTest) {
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;
+  uint64_t maxNumEntries = 1024 * 20;
+  int sizeControlIntervalMs = 50;
+
+  ObjectCache::Config config;
+  config.setCacheName("dynamic_free_mem_test");
+  config.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+
+  config.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                          sizeControlIntervalMs);
+
+  config.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemoryOnly,
+                                     upperLimitBytes, lowerLimitBytes);
+  config.memoryMode = FreeMemoryOnly;
+
+  static std::atomic<uint64_t> currentFreeMem{20 * kMB};
+  config.setFreeMemCb([]() {
+    auto val = currentFreeMem.load();
+    return val;
+  });
+
+  auto objcache = ObjectCache::create(config);
+
+  auto waitForEntriesLimitDecrease = [&](size_t initialLimit,
+                                         std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < timeout) {
+      if (objcache->getCurrentEntriesLimit() < initialLimit) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+  };
+
+  auto waitForEntriesLimitIncrease = [&](size_t initialLimit,
+                                         std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < timeout) {
+      if (objcache->getCurrentEntriesLimit() > initialLimit) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+  };
+
+  // Waits for entries limit to stabilize.
+  auto waitForEntriesLimitToSettle = [&]() {
+    size_t lastValue = objcache->getCurrentEntriesLimit();
+    return test_util::eventuallyTrue(
+        [&]() {
+          auto currentValue = objcache->getCurrentEntriesLimit();
+          if (currentValue != lastValue) {
+            lastValue = currentValue;
+            return false;
+          }
+          return true;
+        },
+        2 /* timeoutSecs */);
+  };
+
+  EXPECT_EQ(objcache->getCurrentEntriesLimit(), maxNumEntries);
+  EXPECT_EQ(objcache->getNumEntries(), 0);
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+
+  EXPECT_EQ(objcache->getNumEntries(), maxNumEntries);
+  EXPECT_GE(objcache->getCurrentEntriesLimit(), maxNumEntries);
+
+  // Test 1: Shrink when free memory is below lower limit
+  currentFreeMem.store(5 * kMB);
+
+  EXPECT_TRUE(
+      waitForEntriesLimitDecrease(maxNumEntries, std::chrono::seconds(2)));
+
+  auto entriesAfterShrink = objcache->getCurrentEntriesLimit();
+  auto numEntriesAfterShrink = objcache->getNumEntries();
+
+  EXPECT_LT(entriesAfterShrink, maxNumEntries);
+  EXPECT_LT(numEntriesAfterShrink, maxNumEntries);
+
+  // Test 2: Stable zone - verify cache stops oscillating
+  currentFreeMem.store(12 * kMB);
+  EXPECT_TRUE(waitForEntriesLimitToSettle());
+
+  // Test 3: Expand when free memory is above upper limit
+  currentFreeMem.store(20 * kMB);
+
+  for (size_t i = 0; i < 10; i++) {
+    auto key = folly::sformat("new_key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+
+  EXPECT_TRUE(
+      waitForEntriesLimitIncrease(entriesAfterShrink, std::chrono::seconds(2)));
+
+  auto entriesAfterExpand = objcache->getCurrentEntriesLimit();
+
+  EXPECT_GT(entriesAfterExpand, entriesAfterShrink);
+  EXPECT_LE(entriesAfterExpand, maxNumEntries);
+}
+
+TEST(ObjectCacheTest, ExpandNeverExceedsL1EntriesLimit) {
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;
+  uint64_t maxNumEntries = 1024 * 20;
+  int sizeControlIntervalMs = 50;
+
+  ObjectCache::Config config;
+  config.setCacheName("expand_ceiling_test");
+  config.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+  config.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                          sizeControlIntervalMs);
+  config.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemoryOnly,
+                                     upperLimitBytes, lowerLimitBytes);
+  config.memoryMode = FreeMemoryOnly;
+  // Large expand/shrink to trigger structural placeholder popping
+  config.expandCacheBy = 500;
+  config.shrinkCacheBy = 500;
+
+  static std::atomic<uint64_t> sExpandTestFreeMem{20 * kMB};
+  config.setFreeMemCb([]() { return sExpandTestFreeMem.load(); });
+
+  auto objcache = ObjectCache::create(config);
+
+  // Fill cache
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+  EXPECT_EQ(objcache->getCurrentEntriesLimit(), maxNumEntries);
+
+  // Run 3 shrink->expand cycles
+  for (int cycle = 0; cycle < 3; cycle++) {
+    // Shrink: set free memory below lower limit
+    sExpandTestFreeMem.store(5 * kMB);
+    auto shrunk = test_util::eventuallyTrue(
+        [&]() { return objcache->getCurrentEntriesLimit() < maxNumEntries; },
+        3 /* timeoutSecs */);
+    EXPECT_TRUE(shrunk) << "Shrink failed on cycle " << cycle;
+
+    // Expand: set free memory above upper limit
+    sExpandTestFreeMem.store(20 * kMB);
+    // Wait for expand to settle
+    size_t lastLimit = objcache->getCurrentEntriesLimit();
+    auto settled = test_util::eventuallyTrue(
+        [&]() {
+          auto cur = objcache->getCurrentEntriesLimit();
+          if (cur != lastLimit) {
+            lastLimit = cur;
+            return false;
+          }
+          return true;
+        },
+        3 /* timeoutSecs */);
+    EXPECT_TRUE(settled) << "Expand didn't settle on cycle " << cycle;
+
+    EXPECT_LE(objcache->getCurrentEntriesLimit(), maxNumEntries)
+        << "currentEntriesLimit exceeded l1EntriesLimit on cycle " << cycle;
+  }
 }
 } // namespace facebook::cachelib::objcache2::test

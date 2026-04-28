@@ -24,6 +24,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 #include "gtest/gtest_prod.h"
 
@@ -99,6 +100,9 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
     double probFactorUpperBound{kUpperBound_};
 
+    // Whether to putting out logs for more information
+    bool enableLogging{false};
+
     FnBypass fnBypass;
     // Throws if invalid config
     Config& validate();
@@ -112,6 +116,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   explicit DynamicRandomAP(Config&& config);
   DynamicRandomAP(const DynamicRandomAP&) = delete;
   DynamicRandomAP& operator=(const DynamicRandomAP&) = delete;
+  DynamicRandomAP(DynamicRandomAP&&) = delete;
+  DynamicRandomAP& operator=(DynamicRandomAP&&) = delete;
   ~DynamicRandomAP() override = default;
 
   // Whether to accept the given hashed key.
@@ -187,6 +193,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const FnBytesWritten fnBytesWritten_;
   const double lowerBound_{};
   const double upperBound_{};
+  const bool enableLogging_{};
   const FnBypass fnBypass_;
 
   mutable TLCounter acceptedBytes_;
@@ -197,7 +204,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const size_t deterministicKeyHashSuffixLength_{0};
 
   std::chrono::seconds startupTime_{0};
-  mutable SharedMutex mutex_;
+  mutable trace::Profiled<SharedMutex, "cachelib:navy:dynamic_random_ap">
+      mutex_;
   ThrottleParams params_;
   WriteStats writeStats_;
 

@@ -53,7 +53,7 @@ struct CACHELIB_PACKED_ATTR SListHook {
  * constant time i.e. O(1). However, this is not thread-safe and does not
  * prevent users from forming cycles.
  */
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 class SList {
  public:
   using CompressedPtrType = typename T::CompressedPtrType;
@@ -243,7 +243,7 @@ class SList {
   T* tail_{nullptr};
 };
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 void SList<T, HookPtr>::insert(T& node) noexcept {
   XDCHECK_NE(reinterpret_cast<uintptr_t>(head_),
              reinterpret_cast<uintptr_t>(&node));
@@ -263,7 +263,7 @@ void SList<T, HookPtr>::insert(T& node) noexcept {
   }
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 void SList<T, HookPtr>::pop() {
   if (empty()) {
     throw std::logic_error("Attempting to pop an empty list");
@@ -286,7 +286,7 @@ void SList<T, HookPtr>::pop() {
   setNext(node, nullptr);
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 void SList<T, HookPtr>::splice(SList<T, HookPtr>&& other) {
   if (other.empty()) {
     return;
@@ -314,13 +314,13 @@ void SList<T, HookPtr>::splice(SList<T, HookPtr>&& other) {
   XDCHECK(other.empty());
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 void SList<T, HookPtr>::Iterator::goForward() noexcept {
   prev_ = curr_;
   curr_ = slist_->getNext(*curr_);
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 typename SList<T, HookPtr>::Iterator&
 SList<T, HookPtr>::Iterator::operator++() noexcept {
   XDCHECK(curr_ != nullptr);
@@ -330,17 +330,17 @@ SList<T, HookPtr>::Iterator::operator++() noexcept {
   return *this;
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 typename SList<T, HookPtr>::Iterator SList<T, HookPtr>::begin() const noexcept {
   return SList<T, HookPtr>::Iterator(head_, *this);
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 typename SList<T, HookPtr>::Iterator SList<T, HookPtr>::end() const noexcept {
   return SList<T, HookPtr>::Iterator(nullptr, *this);
 }
 
-template <typename T, SListHook<T> T::*HookPtr>
+template <typename T, SListHook<T> T::* HookPtr>
 typename SList<T, HookPtr>::Iterator SList<T, HookPtr>::remove(
     const SList<T, HookPtr>::Iterator& it) {
   if (!it.belongsToList(this)) {

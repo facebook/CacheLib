@@ -16,6 +16,8 @@
 
 #include "cachelib/allocator/Cache.h"
 
+#include <folly/logging/xlog.h>
+
 #include <mutex>
 
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -89,6 +91,11 @@ void CacheBase::updateObjectCacheStats(const std::string& statPrefix) const {
 void CacheBase::updatePoolStats(const std::string& statPrefix,
                                 PoolId pid) const {
   const PoolStats stats = getPoolStats(pid);
+  updatePoolStats(statPrefix, stats);
+}
+
+void CacheBase::updatePoolStats(const std::string& statPrefix,
+                                const PoolStats& stats) const {
   const std::string prefix = statPrefix + "pool." + stats.poolName + ".";
 
   counters_.updateCount(prefix + "size", stats.poolSize);
@@ -171,6 +178,14 @@ void CacheBase::updateCompactCacheStats(const std::string& statPrefix,
                          counters_.getDelta(prefix + "get.miss"));
   counters_.updateCount(prefix + "hit_rate",
                         util::narrow_cast<uint64_t>(hitRate));
+}
+
+void CacheBase::updateLegacyEventTrackerStats(
+    const std::string& statPrefix) const {
+  const std::string prefix = statPrefix + "legacy_event_tracker.";
+  for (const auto& kv : getLegacyEventTrackerStatsMap()) {
+    counters_.updateCount(prefix + kv.first, kv.second);
+  }
 }
 
 void CacheBase::updateEventTrackerStats(const std::string& statPrefix) const {
@@ -460,8 +475,14 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                    statPrefix + "nvm.insert.latency_us");
     visitEstimates(uploadStatsNanoToMicro, stats.nvmRemoveLatencyNs,
                    statPrefix + "nvm.remove.latency_us");
+    visitEstimates(uploadStatsNanoToMicro, stats.nvmMakeBlobCbLatencyNs,
+                   statPrefix + "nvm.make_blob_cb.latency_us");
+    visitEstimates(uploadStatsNanoToMicro, stats.nvmMakeObjCbLatencyNs,
+                   statPrefix + "nvm.make_obj_cb.latency_us");
     visitEstimates(uploadStats, stats.nvmPutSize,
                    statPrefix + "nvm.incoming_item_size_bytes");
+    visitEstimates(uploadStats, stats.nvmHitTTASecs,
+                   statPrefix + "nvm.hit_tta_secs");
 
     if (stats.numNvmDestructorRefcountOverflow > 0) {
       counters_.updateCount(statPrefix + "nvm.destructors.refcount_overflow",
@@ -531,16 +552,30 @@ CacheBase::CacheHitRate CacheBase::calculateCacheHitRate(
   return {overall, ram, nvm};
 }
 
+void CacheBase::updateIndividualPoolStats(const std::string& statPrefix) const {
+  for (const auto pid : getRegularPoolIds()) {
+    updatePoolStats(statPrefix, pid);
+  }
+}
+
 void CacheBase::exportStats(
     const std::string& statPrefix,
     std::chrono::seconds aggregationInterval,
     std::function<void(folly::StringPiece, uint64_t)> cb) const {
   updateGlobalCacheStats(statPrefix);
   updateNvmCacheStats(statPrefix);
+  updateLegacyEventTrackerStats(statPrefix);
   updateEventTrackerStats(statPrefix);
 
-  for (const auto pid : getRegularPoolIds()) {
-    updatePoolStats(statPrefix, pid);
+  if (aggregatePoolStats_ && canAggregatePoolStats()) {
+    updateAggregatedPoolStats(statPrefix);
+  } else {
+    // Log warning when aggregation is enabled but not possible
+    if (aggregatePoolStats_) {
+      XLOG(WARN) << "Pool stats aggregation is enabled but cannot be performed "
+                    "due to too many allocation classes";
+    }
+    updateIndividualPoolStats(statPrefix);
   }
 
   for (const auto pid : getCCachePoolIds()) {
@@ -555,5 +590,46 @@ void CacheBase::exportStats(
   updateObjectCacheStats(statPrefix);
 
   return counters_.exportStats(aggregationInterval, cb);
+}
+
+bool CacheBase::canAggregatePoolStats() const {
+  const auto poolIds = getRegularPoolIds();
+  XDCHECK(!poolIds.empty(), "Regular pool IDs should not be empty");
+
+  // If we only have one pool, there is nothing to aggregate
+  if (poolIds.size() < 2) {
+    return false;
+  }
+
+  // Collect all unique allocation sizes from all pools
+  std::unordered_set<uint32_t> allAllocSizes;
+  for (const auto pid : poolIds) {
+    const auto& pool = getPool(pid);
+    for (const auto& allocSize : pool.getAllocSizes()) {
+      allAllocSizes.insert(allocSize);
+    }
+  }
+  return allAllocSizes.size() <= MemoryAllocator::kMaxClasses;
+}
+
+void CacheBase::updateAggregatedPoolStats(const std::string& statPrefix) const {
+  const auto poolIds = getRegularPoolIds();
+  XDCHECK(!poolIds.empty(), "Regular pool IDs should not be empty");
+  // Get the first pool stats to initialize the aggregated stats
+  auto poolIdsIter = poolIds.begin();
+  PoolStats aggregatedStats = getPoolStats(*poolIdsIter);
+  ++poolIdsIter;
+
+  // Aggregate all remaining pool stats
+  for (; poolIdsIter != poolIds.end(); ++poolIdsIter) {
+    const PoolStats stats = getPoolStats(*poolIdsIter);
+    aggregatedStats += stats;
+  }
+  aggregatedStats.poolName = "aggregated";
+  updatePoolStats(statPrefix, aggregatedStats);
+}
+
+void CacheBase::setEventTracker(EventTracker::Config&& config) {
+  eventTracker_ = std::make_unique<EventTracker>(std::move(config));
 }
 } // namespace facebook::cachelib

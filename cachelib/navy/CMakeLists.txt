@@ -23,7 +23,9 @@ add_library (cachelib_navy
   bighash/BucketStorage.cpp
   block_cache/Allocator.cpp
   block_cache/BlockCache.cpp
+  block_cache/CombinedEntryBlock.cpp
   block_cache/FifoPolicy.cpp
+  block_cache/FixedSizeIndex.cpp
   block_cache/HitsReinsertionPolicy.cpp
   block_cache/LruPolicy.cpp
   block_cache/Region.cpp
@@ -58,6 +60,8 @@ endif()
 
 target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
+  cachelib_shm
+  cachelib_nvmitem
   GTest::gmock
   )
 
@@ -78,13 +82,15 @@ if (BUILD_TESTS)
     glog::glog
     gflags
     GTest::gtest
-    GTest::gtest_main
     GTest::gmock
   )
 
 
   function (add_source_test SOURCE_FILE)
      generic_add_source_test("navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}")
+    get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
+    target_sources("navy-test-${TEST_NAME}" PRIVATE
+      "${CACHELIB_HOME}/common/tests/TestMain.cpp")
   endfunction()
 
   add_source_test (common/tests/BufferTest.cpp)
@@ -113,5 +119,6 @@ if (BUILD_TESTS)
   add_source_test (testing/tests/MockJobSchedulerTest.cpp)
   add_source_test (testing/tests/SeqPointsTest.cpp)
   add_source_test (block_cache/tests/BlockCacheTest.cpp)
+  add_source_test (block_cache/tests/CombinedEntryBlockTest.cpp)
   add_source_test (bighash/tests/BigHashTest.cpp)
 endif()

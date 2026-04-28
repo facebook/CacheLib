@@ -314,6 +314,10 @@ struct StressorConfig : public JSONConfig {
   uint64_t cachePieceSize{65536}; // 64KB
   uint64_t maxCachePieces{32000}; // 32000 * 64KB = 2GB
 
+  // Miss trace output configuration
+  // If set, outputs all cache misses to this file for multi-tier simulation
+  std::string missTraceFile{};
+
   // If enabled and using trace replay mode. We will repeat the trace file again
   // and again until the number of operations specified in the test config.
   bool repeatTraceReplay{false};
@@ -365,12 +369,22 @@ class CacheBenchConfig {
                             const CacheConfigCustomizer& c = {},
                             const StressorConfigCustomizer& s = {});
 
-  const CacheConfig& getCacheConfig() const { return cacheConfig_; }
-  const StressorConfig& getStressorConfig() const { return stressorConfig_; }
+  const CacheConfig& getCacheConfig(size_t instanceId) const {
+    return configs_[instanceId].cacheConfig_;
+  }
+  const StressorConfig& getStressorConfig(size_t instanceId) const {
+    return configs_[instanceId].stressorConfig_;
+  }
+
+  // Number of concurrent cachebench instances to run.
+  size_t getNumInstances() const { return configs_.size(); }
 
  private:
-  CacheConfig cacheConfig_;
-  StressorConfig stressorConfig_;
+  struct Config {
+    CacheConfig cacheConfig_;
+    StressorConfig stressorConfig_;
+  };
+  std::vector<Config> configs_;
 };
 
 } // namespace cachebench

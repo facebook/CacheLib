@@ -22,6 +22,8 @@
 #include <folly/fibers/TimedMutex.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/common/Profiled.h"
+
 namespace facebook {
 namespace cachelib {
 namespace util {
@@ -41,7 +43,7 @@ class ConditionVariable {
     Waiter() = default;
 
     // The baton will be signalled when this condition variable is notified
-    Baton baton_;
+    trace::Profiled<Baton, "cachelib:condvar"> baton_;
 
    private:
     friend ConditionVariable;
@@ -59,7 +61,8 @@ class ConditionVariable {
 
   size_t numWaiters() { return numWaiters_; }
 
-  void wait(std::unique_lock<TimedMutex>& lock) {
+  template <typename M>
+  void wait(std::unique_lock<M>& lock) {
     Waiter waiter;
     addWaiter(&waiter);
     lock.unlock();

@@ -17,14 +17,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <memory>
-#include <random>
 
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
-#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook::cachelib::navy::tests {
 namespace {
@@ -62,12 +59,11 @@ TEST(Allocator, RegionSyncInMemBuffers) {
 
   // Write to 3 regions
   RelAddress addr;
-  uint32_t slotSize = 0;
 
   // First allocation will fail with kicking a reclaim
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) =
+    std::tie(desc, std::ignore, std::ignore) =
         allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
     // Reclaim should have been started; complete the reclaim
@@ -79,7 +75,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     // tracks the current region that is full region if present.
     {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) =
+      std::tie(desc, addr, std::ignore) =
           allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(desc.isReady());
 
@@ -99,7 +95,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     // 15 allocs exhaust region's space,but no reclaims scheduled.
     for (uint32_t j = 0; j < 15; j++) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) =
+      std::tie(desc, addr, std::ignore) =
           allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
@@ -120,7 +116,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   // of region 0 again
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) =
+    std::tie(desc, addr, std::ignore) =
         allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
@@ -160,11 +156,9 @@ TEST(Allocator, TestInMemBufferStates) {
   injectPauseSet("pause_flush_detach_buffer");
   injectPauseSet("pause_flush_done");
 
-  RelAddress addr;
-  uint32_t slotSize = 0;
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) =
+    std::tie(desc, std::ignore, std::ignore) =
         allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
   }
@@ -177,7 +171,7 @@ TEST(Allocator, TestInMemBufferStates) {
     {
       RegionDescriptor wdesc{OpenStatus::Retry};
       // There should be clean region available
-      std::tie(wdesc, slotSize, addr) =
+      std::tie(wdesc, std::ignore, std::ignore) =
           allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(wdesc.isReady());
       EXPECT_EQ(0, wdesc.id().index());
@@ -190,7 +184,7 @@ TEST(Allocator, TestInMemBufferStates) {
       // Fill the remaining space in the first region
       for (uint32_t j = 0; j < 15; j++) {
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) =
+        std::tie(desc, std::ignore, std::ignore) =
             allocator.allocate(1024, kNoPriority, false, kKeyHash);
         EXPECT_TRUE(desc.isReady());
         EXPECT_EQ(0, desc.id().index());
@@ -202,7 +196,7 @@ TEST(Allocator, TestInMemBufferStates) {
         // Do another allocation to flush/close the first region.
         // A reclaim will also be triggered
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) =
+        std::tie(desc, std::ignore, std::ignore) =
             allocator.allocate(1024, kNoPriority, false, kKeyHash);
         EXPECT_EQ(OpenStatus::Ready, desc.status());
         EXPECT_EQ(1, desc.id().index());
@@ -252,14 +246,14 @@ TEST(Allocator, UsePriorities) {
   injectPauseSet("pause_reclaim_done");
 
   // Allocate to make sure a reclaim is triggered
-  auto [desc, slotSize, addr] = allocator.allocate(1024, 0, false, kKeyHash);
+  auto [desc, addr, view] = allocator.allocate(1024, 0, false, kKeyHash);
   EXPECT_EQ(OpenStatus::Retry, desc.status());
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   // Allocate one item from each priortiy, we should see each allocation
   // results in a new region being allocated for its priority
   for (uint16_t pri = 0; pri < 3; pri++) {
-    std::tie(desc, slotSize, addr) =
+    std::tie(desc, addr, std::ignore) =
         allocator.allocate(1024, pri, false, kKeyHash);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{pri}, addr.rid());
@@ -299,7 +293,7 @@ TEST(Allocator, UseDifferentAllocatorsForPriorities) {
   injectPauseSet("pause_reclaim_done");
 
   // Allocate to make sure a reclaim is triggered
-  auto [desc, slotSize, addr] = allocator.allocate(1024, 0, false, kKeyHash);
+  auto [desc, addr, view] = allocator.allocate(1024, 0, false, kKeyHash);
   EXPECT_EQ(OpenStatus::Retry, desc.status());
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
@@ -310,7 +304,7 @@ TEST(Allocator, UseDifferentAllocatorsForPriorities) {
     // For each priority, allocate one item per allocator
     for (uint32_t index = 0; index < allocatorsPerPriority[pri]; index++) {
       // Use index as keyhash to allocate via a specific allocator.
-      std::tie(desc, slotSize, addr) =
+      std::tie(desc, addr, std::ignore) =
           allocator.allocate(1024, pri, false, index);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{allocatedRegion++}, addr.rid());
@@ -325,7 +319,7 @@ TEST(Allocator, UseDifferentAllocatorsForPriorities) {
     // reclaim.
     for (uint32_t index = 0; index < allocatorsPerPriority[pri]; index++) {
       // Use index as keyhash to allocate via a specific allocator.
-      std::tie(desc, slotSize, addr) =
+      std::tie(desc, addr, std::ignore) =
           allocator.allocate(1024, pri, false, index);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());

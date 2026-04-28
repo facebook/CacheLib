@@ -62,15 +62,11 @@ uint64_t LruTailAgeStrategy::getProjectedAge(
   }
 }
 
-// The list of allocation classes to be rebalanced is determined by:
-//
-// 0. Filter out classes that have below minSlabThreshold_
-//
-// 1. Filter out classes that have just gained a slab recently
-//
-// 2. Compute weighted tail age from all the remaining ACs
-//
-// 3. Pick an AC with the oldest tail age higher than the weighted average
+// Filters candidates by config criteria and returns the class with highest
+// weighted projected tail age. Returns kInvalidClassId if no valid victim.
+// - Filter out classes with fewer than minSlabs slabs.
+// - Filter out classes that recently gained a slab.
+// - Prioritize classes with excessive free memory.
 ClassId LruTailAgeStrategy::pickVictim(
     const Config& config,
     PoolId pid,
@@ -83,8 +79,8 @@ ClassId LruTailAgeStrategy::pickVictim(
       filterByNumEvictableSlabs(poolStats, std::move(victims), config.minSlabs);
 
   // ignore allocation classes that recently gained a slab. These will be
-  // growing in their eviction age and we want to let the evicitons stabilize
-  // before we consider  them again.
+  // growing in their eviction age and we want to let the evictions stabilize
+  // before we consider them again.
   victims = filterVictimsByHoldOff(pid, poolStats, std::move(victims));
 
   if (victims.empty()) {
@@ -124,7 +120,7 @@ ClassId LruTailAgeStrategy::pickReceiver(
     return Slab::kInvalidClassId;
   }
 
-  // the youngest age among the potenital receivers
+  // the youngest age among the potential receivers
   return *std::min_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
         return (getOldestElementAge(poolEvictionAgeStats, a) *

@@ -17,7 +17,14 @@ fbthrift = thrift/lib/rust
 builder = cmake
 job_weight_mib = 2048
 
+[cmake.defines.all(not(os=windows),test=on)]
+enable_tests=ON
+
+[cmake.defines.any(os=windows,test=off)]
+enable_tests=OFF
+
 [dependencies]
+benchmark
 fizz
 fmt
 folly
@@ -40,3 +47,7 @@ xplat/thrift = thrift
 ^xplat/thrift/perf/canary.py$
 ^xplat/thrift/perf/loadtest.py$
 ^xplat/thrift/.castle/.*
+^xplat/thrift/lib/cpp2/fast_thrift/.*\.clang-tidy$
+^xplat/thrift/lib/cpp2/fast_thrift/(.*/)?\.llms(/.*)?$
+^xplat/thrift/lib/cpp2/fast_thrift/.*\.md$
+^xplat/thrift/lib/cpp2/fast_thrift/bench/perf_harness\.sh$

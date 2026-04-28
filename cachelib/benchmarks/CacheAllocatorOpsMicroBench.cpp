@@ -317,7 +317,7 @@ void runAllocateMultiThreads(int numThreads,
 using namespace facebook::cachelib;
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   printMsg("Benchmark Starting Now");
   printMsg("Becnhmarks (Different HT Sizes)");

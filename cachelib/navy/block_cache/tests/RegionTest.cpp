@@ -25,12 +25,12 @@ TEST(Region, ReadAndBlock) {
   auto desc = r.openForRead();
   EXPECT_EQ(desc.status(), OpenStatus::Ready);
 
-  EXPECT_FALSE(r.readyForReclaim(false));
+  EXPECT_FALSE(r.readyForReclaim(false, false));
   // Once readyForReclaim has been attempted, all future accesses will be
   // blocked.
   EXPECT_EQ(r.openForRead().status(), OpenStatus::Retry);
   r.close(std::move(desc));
-  EXPECT_TRUE(r.readyForReclaim(false));
+  EXPECT_TRUE(r.readyForReclaim(false, false));
 
   r.reset();
   EXPECT_EQ(r.openForRead().status(), OpenStatus::Ready);
@@ -38,19 +38,34 @@ TEST(Region, ReadAndBlock) {
 
 TEST(Region, WriteAndBlock) {
   Region r{RegionId(0), 1024};
+  r.attachBuffer(std::make_unique<Buffer>(1024));
 
-  auto [desc1, addr1] = r.openAndAllocate(1025);
+  auto [desc1, addr1, view1] = r.openAndAllocate(1025);
   EXPECT_EQ(desc1.status(), OpenStatus::Error);
 
-  auto [desc2, addr2] = r.openAndAllocate(100);
+  auto [desc2, addr2, view2] = r.openAndAllocate(100);
   EXPECT_EQ(desc2.status(), OpenStatus::Ready);
-  EXPECT_FALSE(r.readyForReclaim(false));
+  EXPECT_FALSE(r.readyForReclaim(false, false));
   r.close(std::move(desc2));
-  EXPECT_TRUE(r.readyForReclaim(false));
+  EXPECT_TRUE(r.readyForReclaim(false, false));
 
   r.reset();
-  auto [desc3, addr3] = r.openAndAllocate(1024);
+  auto [desc3, addr3, view3] = r.openAndAllocate(1024);
   EXPECT_EQ(desc3.status(), OpenStatus::Ready);
+}
+
+TEST(Region, AllowReadDuringReclaim) {
+  Region r{RegionId(0), 1024};
+
+  auto desc = r.openForRead();
+  EXPECT_EQ(desc.status(), OpenStatus::Ready);
+
+  EXPECT_TRUE(r.readyForReclaim(false, true /* allowRead */));
+  // With allowRead set, read won't be blocked during reclaim.
+  auto desc2 = r.openForRead();
+  EXPECT_EQ(desc2.status(), OpenStatus::Ready);
+  r.close(std::move(desc));
+  r.close(std::move(desc2));
 }
 
 TEST(Region, BufferAttachDetach) {
@@ -74,7 +89,7 @@ TEST(Region, BufferFlush) {
   r.attachBuffer(std::move(b));
   EXPECT_TRUE(r.hasBuffer());
 
-  auto [desc2, addr2] = r.openAndAllocate(100);
+  auto [desc2, addr2, view2] = r.openAndAllocate(100);
   EXPECT_EQ(desc2.status(), OpenStatus::Ready);
 
   EXPECT_EQ(Region::FlushRes::kRetryPendingWrites,

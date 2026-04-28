@@ -18,7 +18,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <future>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
@@ -46,7 +45,7 @@ namespace facebook::cachelib::navy::tests {
 namespace {
 constexpr uint64_t kDeviceSize{64 * 1024};
 constexpr uint64_t kRegionSize{16 * 1024};
-constexpr size_t kSizeOfEntryDesc{24};
+constexpr size_t kSizeOfEntryDesc{32};
 constexpr uint16_t kFlushRetryLimit{5};
 
 std::unique_ptr<JobScheduler> makeJobScheduler() {
@@ -54,12 +53,10 @@ std::unique_ptr<JobScheduler> makeJobScheduler() {
 }
 
 // 4x16k regions
-BlockCache::Config makeConfig(JobScheduler& scheduler,
-                              std::unique_ptr<EvictionPolicy> policy,
+BlockCache::Config makeConfig(std::unique_ptr<EvictionPolicy> policy,
                               Device& device,
                               uint64_t cacheSize = kDeviceSize) {
   BlockCache::Config config;
-  config.scheduler = &scheduler;
   config.regionSize = kRegionSize;
   config.cacheSize = cacheSize;
   config.device = &device;
@@ -71,6 +68,13 @@ BlockCacheReinsertionConfig makeHitsReinsertionConfig(
     uint8_t hitsReinsertThreshold) {
   BlockCacheReinsertionConfig config{};
   config.enableHitsBased(hitsReinsertThreshold);
+  return config;
+}
+
+BlockCacheReinsertionConfig makePctReinsertionConfig(
+    unsigned int pctThreshold) {
+  BlockCacheReinsertionConfig config{};
+  config.enablePctBased(pctThreshold);
   return config;
 }
 
@@ -144,17 +148,19 @@ class CollisionCreator {
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
     device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     if (configModifier) {
       configModifier(config);
     }
     auto engine = makeEngine(std::move(config));
     driver = makeDriver(std::move(engine), std::move(ex));
     CacheEntry e{strzBuffer(key), strzBuffer(val)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key), value, lat));
     EXPECT_EQ(makeView(val), value.view());
     driver->flush();
 
@@ -185,18 +191,21 @@ TEST(BlockCache, InsertLookup) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   BufferGen bg;
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     // Flush the first region
     driver->flush();
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
 
     driver->getCounters({[](folly::StringPiece name, double count,
                             CounterVisitor::CounterType type) {
@@ -215,14 +224,17 @@ TEST(BlockCache, InsertLookup) {
   // region to tracked.
   for (size_t i = 0; i < 16; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
 
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   EXPECT_EQ(2, hits[0]);
@@ -231,13 +243,48 @@ TEST(BlockCache, InsertLookup) {
   EXPECT_EQ(0, hits[3]);
 }
 
+TEST(BlockCache, LookupReturnsLastAccessTime) {
+  auto hits = std::make_unique<std::vector<uint32_t>>(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(hits.get());
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  // Case 1: Insert with lastAccessTimeSecs=1000
+  CacheEntry e{strzBuffer("key"), strzBuffer("value")};
+  EXPECT_EQ(Status::Ok,
+            driver->insert(e.key(), e.value(), 0 /* poolId */,
+                           0 /* expiryTime */, 1000 /* lastAccessTimeSecs */));
+  driver->flush();
+
+  Buffer value;
+  uint32_t lastAccessTimeSecs = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lastAccessTimeSecs));
+  EXPECT_EQ(e.value(), value.view());
+  EXPECT_EQ(1000, lastAccessTimeSecs);
+
+  // Case 2: Overwrite same key with lastAccessTimeSecs=2000
+  EXPECT_EQ(Status::Ok,
+            driver->insert(e.key(), e.value(), 0 /* poolId */,
+                           0 /* expiryTime */, 2000 /* lastAccessTimeSecs */));
+  driver->flush();
+
+  Buffer value2;
+  uint32_t lastAccessTimeSecs2 = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value2, lastAccessTimeSecs2));
+  EXPECT_EQ(e.value(), value2.view());
+  EXPECT_EQ(2000, lastAccessTimeSecs2);
+}
+
 TEST(BlockCache, InsertLookupSync) {
   std::vector<CacheEntry> log;
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 1;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
@@ -245,10 +292,12 @@ TEST(BlockCache, InsertLookupSync) {
   BufferGen bg;
   for (size_t i = 0; i < 17; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
     // Value is immediately available to query
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
     EXPECT_EQ(e.value(), value.view());
     log.push_back(std::move(e));
   }
@@ -263,7 +312,8 @@ TEST(BlockCache, InsertLookupSync) {
 
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   // Still zero hit in the second region, because we didn't fill it
@@ -281,7 +331,7 @@ TEST(BlockCache, CouldExist) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -289,7 +339,8 @@ TEST(BlockCache, CouldExist) {
   for (size_t i = 0; i < 17; i++) {
     CacheEntry e{bg.gen(8 + i), bg.gen(800)};
     EXPECT_FALSE(driver->couldExist(e.key()));
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
     EXPECT_TRUE(driver->couldExist(e.key()));
     EXPECT_EQ(Status::Ok, driver->remove(e.key()));
     EXPECT_FALSE(driver->couldExist(e.key()));
@@ -301,27 +352,32 @@ TEST(BlockCache, AsyncCallbacks) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
   MockInsertCB cbInsert;
   EXPECT_CALL(cbInsert, call(Status::Ok, makeHK("key")));
   EXPECT_EQ(Status::Ok,
             driver->insertAsync(makeHK("key"), makeView("value"),
-                                toCallback(cbInsert)));
+                                toCallback(cbInsert), 0 /* poolId */,
+                                0 /* expiryTime */));
   driver->flush();
 
   MockLookupCB cbLookup;
-  EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value")));
-  EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}));
+  EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value"), _));
+  EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}, _));
   driver->lookupAsync(makeHK("key"),
-                      [&cbLookup](Status status, HashedKey key, Buffer value) {
-                        cbLookup.call(status, key, value.view());
+                      [&cbLookup](Status status, HashedKey key, Buffer value,
+                                  uint32_t lastAccessTimeSecs) {
+                        cbLookup.call(status, key, value.view(),
+                                      lastAccessTimeSecs);
                       });
 
   driver->lookupAsync(makeHK("cat"),
-                      [&cbLookup](Status status, HashedKey key, Buffer value) {
-                        cbLookup.call(status, key, value.view());
+                      [&cbLookup](Status status, HashedKey key, Buffer value,
+                                  uint32_t lastAccessTimeSecs) {
+                        cbLookup.call(status, key, value.view(),
+                                      lastAccessTimeSecs);
                       });
   driver->flush();
 
@@ -340,37 +396,42 @@ TEST(BlockCache, Remove) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
   BufferGen bg;
   {
     CacheEntry e{strzBuffer("cat"), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   {
     CacheEntry e{strzBuffer("dog"), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[0].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(log[1].value(), value.view());
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("dog")));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[0].value(), value.view());
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("dog")));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("cat")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value, lat));
 }
 
 // Test precise remove flag works
@@ -438,8 +499,10 @@ TEST(BlockCache, PreciseRemove) {
 TEST(BlockCache, CollisionOverwrite) {
   auto collision = CollisionCreator("key", "value", "abc");
   Buffer value;
+  uint32_t lat = 0;
   // Original key is not found, because it didn't pass key equality check
-  EXPECT_EQ(Status::NotFound, collision.driver->lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound,
+            collision.driver->lookup(makeHK("key"), value, lat));
 }
 
 TEST(BlockCache, SimpleReclaim) {
@@ -447,7 +510,7 @@ TEST(BlockCache, SimpleReclaim) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -457,17 +520,21 @@ TEST(BlockCache, SimpleReclaim) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 16; i++) {
       CacheEntry e{bg.gen(8), bg.gen(800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
   }
 
-  // This insert will trigger reclamation because there are 4 regions in total
+  // This insert will trigger reclaim because there are 4 regions in total
   // and the device was configured to require 1 clean region at all times
   for (size_t i = 0; i < 16; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
@@ -475,11 +542,13 @@ TEST(BlockCache, SimpleReclaim) {
   // First 16 are reclaimed and so missing
   for (size_t i = 0; i < 16; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 16; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -489,7 +558,7 @@ TEST(BlockCache, HoleStats) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   // items which are accessed once will be reinserted on reclaim
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
@@ -501,7 +570,9 @@ TEST(BlockCache, HoleStats) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 16; i++) {
       CacheEntry e{bg.gen(8), bg.gen(800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
@@ -538,14 +609,17 @@ TEST(BlockCache, HoleStats) {
 
   // lookup this entry from region 0 that will be soon reclaimed
   Buffer val;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val, lat));
 
-  // Force reclamation on region 0. There are 4 regions and the device
+  // Force reclaim on region 0. There are 4 regions and the device
   // was configured to require 1 clean region at all times.
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->drain();
@@ -582,10 +656,11 @@ TEST(BlockCache, ReclaimCorruption) {
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1 /* ioAlignment */,
                                              nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.checksum = true;
-  // items which are accessed once will be reinserted on reclaim
-  config.reinsertionConfig = makeHitsReinsertionConfig(1);
+  // Use 100% reinsertion so all items are eligible for reinsertion
+  // so that value checksuming will occur
+  config.reinsertionConfig = makePctReinsertionConfig(100);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -621,7 +696,9 @@ TEST(BlockCache, ReclaimCorruption) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 16; i++) {
       CacheEntry e{bg.gen(8), bg.gen(800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
@@ -635,11 +712,13 @@ TEST(BlockCache, ReclaimCorruption) {
     }
   }});
 
-  // Force reclamation on region 0 by allocating region 3. There are 4 regions
+  // Force reclaim on region 0 by allocating region 3. There are 4 regions
   // and the device was configured to require 1 clean region at all times
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
@@ -668,30 +747,37 @@ TEST(BlockCache, StackAlloc) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = std::make_unique<MockSingleThreadJobScheduler>();
   auto exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.readBufferSize = 2048;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
   BufferGen bg;
   // Regular read case: read buffer size matches slot size
   CacheEntry e1{bg.gen(8), bg.gen(1800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e1.key(), e1.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e1.key(), e1.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
   // Buffer is too large (slot is smaller)
   CacheEntry e2{bg.gen(8), bg.gen(100)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e2.key(), e2.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e2.key(), e2.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
   // Buffer is too small
   CacheEntry e3{bg.gen(8), bg.gen(3000)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e3.key(), e3.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e3.key(), e3.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value, lat));
   EXPECT_EQ(e1.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value, lat));
   EXPECT_EQ(e2.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value, lat));
   EXPECT_EQ(e3.value(), value.view());
 
   EXPECT_EQ(0, exPtr->getQueueSize());
@@ -705,7 +791,7 @@ TEST(BlockCache, RegionUnderflow) {
   // Although 2k read buffer, shouldn't underflow the region!
   EXPECT_CALL(*device, readImpl(0, 1024, _));
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   config.readBufferSize = 2048;
 
@@ -715,11 +801,14 @@ TEST(BlockCache, RegionUnderflow) {
   BufferGen bg;
   // 1k entry
   CacheEntry e{bg.gen(8), bg.gen(800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
   EXPECT_EQ(e.value(), value.view());
 }
 
@@ -731,7 +820,7 @@ TEST(BlockCache, SmallReadBuffer) {
   EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _, _));
   EXPECT_CALL(*device, readImpl(0, 8192, _));
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   // Small read buffer. We will automatically align to 8192 when we read.
   // This is no longer useful with index saving the object sizes.
@@ -743,11 +832,14 @@ TEST(BlockCache, SmallReadBuffer) {
 
   BufferGen bg;
   CacheEntry e{bg.gen(8), bg.gen(5800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
   EXPECT_EQ(e.value(), value.view());
 }
 
@@ -760,7 +852,7 @@ TEST(BlockCache, SmallAllocAlignment) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
@@ -770,13 +862,15 @@ TEST(BlockCache, SmallAllocAlignment) {
   Status status;
   for (size_t i = 0; i < 96; i++) {
     CacheEntry e{bg.gen(8), bg.gen(200)};
-    status = driver->insert(e.key(), e.value());
+    status =
+        driver->insert(e.key(), e.value(), 0 /* poolId */, 0 /* expiryTime */);
     EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
   }
   for (size_t i = 0; i < 96; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   return;
@@ -784,7 +878,8 @@ TEST(BlockCache, SmallAllocAlignment) {
   // One more allocation should trigger reclaim
   {
     CacheEntry e{bg.gen(8), bg.gen(10)};
-    status = driver->insert(e.key(), e.value());
+    status =
+        driver->insert(e.key(), e.value(), 0 /* poolId */, 0 /* expiryTime */);
     EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
   }
@@ -793,11 +888,13 @@ TEST(BlockCache, SmallAllocAlignment) {
   // Verify the first 32 items are now reclaimed and the others are still there
   for (size_t i = 0; i < 32; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 32; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -812,7 +909,7 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
@@ -822,13 +919,15 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   Status status;
   for (size_t i = 0; i < 24; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1700)};
-    status = driver->insert(e.key(), e.value());
+    status =
+        driver->insert(e.key(), e.value(), 0 /* poolId */, 0 /* expiryTime */);
     EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
   }
   for (size_t i = 0; i < 24; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   return;
@@ -836,7 +935,8 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   // One more allocation should trigger reclaim
   {
     CacheEntry e{bg.gen(8), bg.gen(10)};
-    status = driver->insert(e.key(), e.value());
+    status =
+        driver->insert(e.key(), e.value(), 0 /* poolId */, 0 /* expiryTime */);
     EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
   }
@@ -845,11 +945,13 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   // Verify the first 8 items are now reclaimed and the others are still there
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 8; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -861,7 +963,7 @@ TEST(BlockCache, StackAllocReclaim) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -869,88 +971,95 @@ TEST(BlockCache, StackAllocReclaim) {
   // Fill region 0
   { // 2k
     CacheEntry e{bg.gen(8), bg.gen(2000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   { // 10k
     CacheEntry e{bg.gen(8), bg.gen(10'000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
   // Fill region 1
   { // 8k
     CacheEntry e{bg.gen(8), bg.gen(8000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   { // 6k
     CacheEntry e{bg.gen(8), bg.gen(6000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
   // Fill region 2
   { // 4k
     CacheEntry e{bg.gen(8), bg.gen(4000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   { // 4k
     CacheEntry e{bg.gen(8), bg.gen(4000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   { // 4k
     CacheEntry e{bg.gen(8), bg.gen(4000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
   // Fill region 3
-  // Triggers reclamation of region 0
+  // Triggers reclaim of region 0
   { // 15k
     CacheEntry e{bg.gen(8), bg.gen(15'000)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
 
   for (size_t i = 0; i < 2; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 2; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
 
-TEST(BlockCache, ReadRegionDuringEviction) {
+TEST(BlockCache, ReadRegionDuringReclaim) {
   std::vector<CacheEntry> log;
   SeqPoints sp;
 
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  // Region 0 eviction
-  EXPECT_CALL(*device, readImpl(0, 16 * 1024, _));
-  // Lookup log[2]
-  EXPECT_CALL(*device, readImpl(8192, 4096, _)).Times(2);
-  // Lookup log[1]
-  EXPECT_CALL(*device, readImpl(4096, 4096, _))
-      .WillOnce(Invoke([md = device.get(), &sp](uint64_t offset, uint32_t size,
-                                                void* buffer) {
-        sp.reached(0);
-        sp.wait(1);
-        return md->getRealDeviceRef().read(offset, size, buffer);
-      }));
 
   auto ex = std::make_unique<MockJobScheduler>();
   auto exPtr = ex.get();
   // Huge size class to fill a region in 4 allocs
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
+  config.numInMemBuffers = 2;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -958,12 +1067,15 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   // reclaimed to be the free region. First three regions will be tracked.
   BufferGen bg;
   for (size_t j = 0; j < 3; j++) {
-    for (size_t i = 0; i < 4; i++) {
-      CacheEntry e{bg.gen(8), bg.gen(3800)};
-      driver->insertAsync(e.key(), e.value(),
-                          [](Status status, HashedKey /*key */) {
-                            EXPECT_EQ(Status::Ok, status);
-                          });
+    // Each region will be filled with 32 items
+    for (size_t i = 0; i < 32; i++) {
+      CacheEntry e{bg.gen(8), bg.gen(256)};
+      driver->insertAsync(
+          e.key(), e.value(),
+          [](Status status, HashedKey /*key */) {
+            EXPECT_EQ(Status::Ok, status);
+          },
+          0 /* poolId */, 0 /* expiryTime */);
       log.push_back(std::move(e));
       finishAllJobs(*exPtr);
       driver->drain();
@@ -971,77 +1083,59 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   }
   driver->flush();
 
-  std::thread lookupThread([&driver, &log] {
-    Buffer value;
-    // Doesn't block, only checks
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-    EXPECT_EQ(log[2].value(), value.view());
-    // Blocks
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(log[1].value(), value.view());
-  });
+  bool reclaimFinished = false;
 
-  sp.wait(0);
+  std::thread lookupThread([&driver, &log, &sp, &reclaimFinished] {
+    Buffer value;
+    uint32_t lat = 0;
+    // Wait until the reclaim gets begun
+    sp.wait(0);
+
+    do {
+      for (auto i = 31; i > 0; i--) {
+        auto res = driver->lookup(log[i].key(), value, lat);
+        // lookup can return either Ok or NotFound since ongoing reclaim may
+        // discard the item
+        EXPECT_TRUE(res == Status::Ok || res == Status::NotFound);
+        if (res == Status::Ok) {
+          EXPECT_EQ(log[i].value(), value.view());
+        }
+      }
+      // Keep reading until the region reclaim is done
+    } while (!reclaimFinished);
+  });
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
   injectPauseSet("pause_reclaim_begin");
   injectPauseSet("pause_reclaim_done");
+  injectPauseSet("pause_do_eviction_start");
 
-  // Send insert. Will schedule a reclamation job. We will also track
+  // Send insert. Will schedule a reclaim job. We will also track
   // the third region as it had been filled up. We will also expect
   // to evict the first region eventually for the reclaim.
-  CacheEntry e{bg.gen(8), bg.gen(1000)};
+  CacheEntry e{bg.gen(8), bg.gen(256)};
   EXPECT_EQ(0, exPtr->getQueueSize());
+  // Start reading from lookupThread
+  sp.reached(0);
   driver->insertAsync(
       e.key(), e.value(),
-      [](Status status, HashedKey /*key */) { EXPECT_EQ(Status::Ok, status); });
+      [](Status status, HashedKey /*key */) { EXPECT_EQ(Status::Ok, status); },
+      0 /* poolId */, 0 /* expiryTime */);
   // Insert finds region is full and  puts region for tracking, resets allocator
   // and retries.
   EXPECT_TRUE(exPtr->runFirstIf("insert"));
 
   // The reclaim should have been started
-  EXPECT_TRUE(injectPauseWait("pause_reclaim_begin", 1 /* numThreads */,
-                              false /* wakeup */));
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_begin"));
+  EXPECT_TRUE(injectPauseWait("pause_do_eviction_start"));
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+  reclaimFinished = true;
 
-  Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-  EXPECT_EQ(log[2].value(), value.view());
-
-  // Now, let the eviction thread goes; this would block access to the region
-  // but reclaim cannot be done as there is still an active reader outstanding.
-  injectPauseClear("pause_reclaim_begin");
-  // Wait for 5s to confirm the reclaim has not been done
-  EXPECT_FALSE(injectPauseWait("pause_reclaim_done", 1, false, 5000));
-
-  std::thread lookupThread2([&driver, &log] {
-    Buffer value2;
-    // Can't access region 0: blocked. Will retry until unblocked.
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value2));
-  });
-
-  // To make sure that the reason for key not found is access block, but not
-  // evicted from the index, remove it manually and expect it was found.
-  EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
-
-  // Reclaim still fails as the last reader is still outstanding; wait for 5s
-  EXPECT_FALSE(injectPauseWait("pause_reclaim_done", 1, false, 5000));
-
-  // Finish read and let evict region 0 entries
-  sp.reached(1);
-
-  // Reclaim should have been completed now
-  EXPECT_TRUE(injectPauseWait("pause_reclaim_done", 1, true, 5000));
+  lookupThread.join();
 
   finishAllJobs(*exPtr);
   driver->drain();
-  EXPECT_EQ(Status::NotFound, driver->remove(log[1].key()));
-  EXPECT_EQ(Status::NotFound, driver->remove(log[2].key()));
-
-  lookupThread.join();
-  lookupThread2.join();
-
-  driver->flush();
 }
 
 TEST(BlockCache, DeviceFailure) {
@@ -1068,7 +1162,7 @@ TEST(BlockCache, DeviceFailure) {
   }
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -1077,18 +1171,22 @@ TEST(BlockCache, DeviceFailure) {
   auto value2 = bg.gen(800);
   auto value3 = bg.gen(800);
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key1"), value1.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key1"), value1.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
   driver->flush();
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key2"), value2.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key2"), value2.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
   driver->flush();
-  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key3"), value3.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key3"), value3.view(),
+                                       0 /* poolId */, 0 /* expiryTime */));
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key1"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key1"), value, lat));
   EXPECT_EQ(value1.view(), value.view());
-  EXPECT_EQ(Status::DeviceError, driver->lookup(makeHK("key2"), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key3"), value));
+  EXPECT_EQ(Status::DeviceError, driver->lookup(makeHK("key2"), value, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key3"), value, lat));
   EXPECT_EQ(value3.view(), value.view());
 }
 
@@ -1100,14 +1198,16 @@ TEST(BlockCache, Flush) {
   EXPECT_CALL(*device, flushImpl());
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   BufferGen bg;
   // 1k entry
   CacheEntry e{bg.gen(8), bg.gen(800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   driver->flush();
 }
 
@@ -1126,13 +1226,16 @@ void resetTestRun(Driver& cache) {
   // Fill up the first region and write one entry into the second region
   for (size_t i = 0; i < 17; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, cache.insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              cache.insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   cache.flush();
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, cache.lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, cache.lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1150,7 +1253,7 @@ TEST(BlockCache, Reset) {
   proxyPtr->setRealDevice(setupResetTestDevice(kDeviceSize));
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *proxyPtr);
+  auto config = makeConfig(std::move(policy), *proxyPtr);
   config.numInMemBuffers = 3;
   expectRegionsTracked(mp, {0, 1, 2, 3});
   auto engine = makeEngine(std::move(config));
@@ -1206,7 +1309,7 @@ TEST(BlockCache, DestructorCallback) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto* exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 9;
   config.destructorCb = toCallback(cb);
   auto engine = makeEngine(std::move(config));
@@ -1220,33 +1323,37 @@ TEST(BlockCache, DestructorCallback) {
   injectPauseSet("pause_do_eviction_done");
 
   for (size_t i = 0; i < 7; i++) {
-    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value()));
+    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value(),
+                                         0 /* poolId */, 0 /* expiryTime */));
   }
   EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
   // Next insertion should start the eviction
-  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value()));
-  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
+  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[5].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[5].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[5].key(), value, lat));
   EXPECT_EQ(log[5].value(), value.view());
 
-  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(log[1].value(), value.view());
 
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[3].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[3].key(), value, lat));
   EXPECT_EQ(log[6].value(), value.view());
 
   // Make sure that the eviction for the region 1 is completed
   EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[4].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[4].key(), value, lat));
 
-  EXPECT_EQ(Status::Ok, driver->lookup(log[7].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[7].key(), value, lat));
   EXPECT_EQ(log[7].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value, lat));
   EXPECT_EQ(log[8].value(), value.view());
 
   exPtr->finish();
@@ -1257,7 +1364,7 @@ TEST(BlockCache, RegionLastOffset) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -1267,16 +1374,20 @@ TEST(BlockCache, RegionLastOffset) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 7; i++) {
       CacheEntry e{bg.gen(8), bg.gen(1800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
   }
 
-  // Triggers reclamation
+  // Triggers reclaim
   for (size_t i = 0; i < 7; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
@@ -1284,11 +1395,13 @@ TEST(BlockCache, RegionLastOffset) {
   // First 7 are reclaimed and so are missing
   for (size_t i = 0; i < 7; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 7; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1299,7 +1412,7 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   auto& mp = *policy;
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -1313,7 +1426,8 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
     auto key = e.key();
     auto value = e.value();
     EXPECT_EQ(Status::Ok,
-              driver->insertAsync(key, value, saveEntryCb(std::move(e))));
+              driver->insertAsync(key, value, saveEntryCb(std::move(e)),
+                                  0 /* poolId */, 0 /* expiryTime */));
   }
   driver->flush();
   // We will reset eviction policy and also reinitialize by tracking all regions
@@ -1327,17 +1441,21 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 7; i++) {
       CacheEntry e{bg.gen(8), bg.gen(1800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
   }
 
-  // Triggers reclamation
+  // Triggers reclaim
   expectRegionsTracked(mp, {3});
   for (size_t i = 0; i < 7; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
@@ -1345,11 +1463,13 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   // First 7 (from after reset) are reclaimed and so are missing
   for (size_t i = 0; i < 7; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 7; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   driver->flush();
@@ -1366,7 +1486,7 @@ TEST(BlockCache, Recovery) {
   auto device =
       createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 2;
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
@@ -1379,7 +1499,8 @@ TEST(BlockCache, Recovery) {
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 4; j++) {
       CacheEntry e{bg.gen(8), bg.gen(3200)};
-      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                           0 /* expiryTime */));
       log.push_back(std::move(e));
     }
   }
@@ -1398,7 +1519,8 @@ TEST(BlockCache, Recovery) {
 
   for (auto& entry : log) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value, lat));
     EXPECT_EQ(entry.value(), value.view());
   }
 
@@ -1406,18 +1528,21 @@ TEST(BlockCache, Recovery) {
   // writing into region 3 means we should start evicting region 0
   for (size_t i = 0; i < 3; i++) {
     CacheEntry e{bg.gen(8), bg.gen(3200)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   driver->flush();
 
   for (size_t i = 0; i < 4; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 4; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1433,7 +1558,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
   folly::IOBufQueue originalMetadata;
   {
     auto config =
-        makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
+        makeConfig(std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
     auto engine = makeEngine(std::move(config), metadataSize);
 
     auto numItems = kDeviceSize / kRegionSize;
@@ -1444,7 +1569,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
             engine->insert(
                 makeHK(BufferView{key.size(),
                                   reinterpret_cast<uint8_t*>(key.data())}),
-                makeView("value"))) {
+                makeView("value"), 0 /* poolId */, 0 /* expiryTime */)) {
           break;
         }
         // Runs the async job to get a free region
@@ -1462,11 +1587,13 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
 
     for (auto& key : keys) {
       Buffer buffer;
+      uint32_t lat = 0;
       ASSERT_EQ(Status::Ok,
                 engine->lookup(
                     makeHK(BufferView{key.size(),
                                       reinterpret_cast<uint8_t*>(key.data())}),
-                    buffer));
+                    buffer,
+                    lat));
     }
 
     auto rw = createMemoryRecordWriter(originalMetadata);
@@ -1476,7 +1603,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
   // Recover with the right size
   {
     auto config =
-        makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
+        makeConfig(std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
     auto engine = makeEngine(std::move(config), metadataSize);
     auto rr = createMemoryRecordReader(originalMetadata);
     ASSERT_TRUE(engine->recover(*rr));
@@ -1484,18 +1611,20 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
     // All the keys should be present
     for (auto& key : keys) {
       Buffer buffer;
+      uint32_t lat = 0;
       ASSERT_EQ(Status::Ok,
                 engine->lookup(
                     makeHK(BufferView{key.size(),
                                       reinterpret_cast<uint8_t*>(key.data())}),
-                    buffer));
+                    buffer,
+                    lat));
     }
   }
 
   // Creat engine with larger size
   {
     auto config =
-        makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
+        makeConfig(std::make_unique<NiceMock<MockPolicy>>(&hits), *device);
     config.cacheSize += 4096;
     ASSERT_THROW(makeEngine(std::move(config), metadataSize),
                  std::invalid_argument);
@@ -1525,7 +1654,7 @@ TEST(BlockCache, SmallerSlotSizes) {
 
     size_t metadataSize = 3 * 1024 * 1024;
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     try {
       auto engine = makeEngine(std::move(config), metadataSize);
     } catch (const std::invalid_argument& e) {
@@ -1539,7 +1668,7 @@ TEST(BlockCache, SmallerSlotSizes) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   size_t metadataSize = 3 * 1024 * 1024;
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device, myDeviceSize);
+  auto config = makeConfig(std::move(policy), *device, myDeviceSize);
   config.numInMemBuffers = 4;
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
@@ -1550,24 +1679,28 @@ TEST(BlockCache, SmallerSlotSizes) {
   // Allocate 2 regions
   for (size_t j = 0; j < 5; j++) {
     CacheEntry e{bg.gen(8), bg.gen(2700)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   for (size_t j = 0; j < 3; j++) {
     CacheEntry e{bg.gen(8), bg.gen(5700)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                         0 /* expiryTime */));
     log.push_back(std::move(e));
   }
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
   driver->flush();
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   driver->persist();
@@ -1575,7 +1708,8 @@ TEST(BlockCache, SmallerSlotSizes) {
   EXPECT_TRUE(driver->recover());
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1590,7 +1724,7 @@ TEST(BlockCache, HoleStatsRecovery) {
   auto device =
       createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
                            metadataSize);
@@ -1601,7 +1735,8 @@ TEST(BlockCache, HoleStatsRecovery) {
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 4; j++) {
       CacheEntry e{bg.gen(8), bg.gen(3800)};
-      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                           0 /* expiryTime */));
       log.push_back(std::move(e));
     }
   }
@@ -1646,7 +1781,7 @@ TEST(BlockCache, RecoveryBadConfig) {
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     auto engine = makeEngine(std::move(config), metadataSize);
     auto driver = makeDriver(std::move(engine), std::move(ex),
                              std::move(device), metadataSize);
@@ -1657,7 +1792,9 @@ TEST(BlockCache, RecoveryBadConfig) {
     for (size_t i = 0; i < 3; i++) {
       for (size_t j = 0; j < 4; j++) {
         CacheEntry e{bg.gen(8), bg.gen(3200)};
-        EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+        EXPECT_EQ(Status::Ok,
+                  driver->insertAsync(e.key(), e.value(), nullptr,
+                                      0 /* poolId */, 0 /* expiryTime */));
         log.push_back(std::move(e));
       }
       driver->flush();
@@ -1673,7 +1810,7 @@ TEST(BlockCache, RecoveryBadConfig) {
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     config.regionSize = 8 * 1024; // Region size differs from original
     auto engine = makeEngine(std::move(config), metadataSize);
     auto driver = makeDriver(std::move(engine), std::move(ex),
@@ -1688,7 +1825,7 @@ TEST(BlockCache, RecoveryBadConfig) {
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     config.checksum = true;
     auto engine = makeEngine(std::move(config));
     auto driver = makeDriver(std::move(engine), std::move(ex),
@@ -1707,7 +1844,7 @@ TEST(BlockCache, RecoveryCorruptedData) {
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
     auto ex = makeJobScheduler();
-    auto config = makeConfig(*ex, std::move(policy), *device);
+    auto config = makeConfig(std::move(policy), *device);
     auto engine = makeEngine(std::move(config), metadataSize);
     auto rw = createMetadataRecordWriter(*device, metadataSize);
     driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
@@ -1734,7 +1871,7 @@ TEST(BlockCache, NoJobsOnStartup) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = std::make_unique<MockJobScheduler>();
   auto exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -1752,7 +1889,7 @@ TEST(BlockCache, Checksum) {
       createMemoryDevice(kDeviceSize, nullptr /* encryption */, kIOAlignSize);
   auto ex = std::make_unique<MockSingleThreadJobScheduler>();
   auto exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.readBufferSize = 2048;
   config.checksum = true;
   auto engine = makeEngine(std::move(config));
@@ -1762,34 +1899,41 @@ TEST(BlockCache, Checksum) {
   // Regular read case: read buffer size matches slot size
   // Located at offset 0
   CacheEntry e1{bg.gen(8), bg.gen(1800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e1.key(), e1.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e1.key(), e1.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
   // Buffer is too large (slot is smaller)
   // Located at offset 2 * kIOAlignSize
   CacheEntry e2{bg.gen(8), bg.gen(100)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e2.key(), e2.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e2.key(), e2.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
   // Buffer is too small
   // Located at offset 3 * kIOAlignSize
   CacheEntry e3{bg.gen(8), bg.gen(3000)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e3.key(), e3.value(), nullptr));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e3.key(), e3.value(), nullptr, 0 /* poolId */,
+                                0 /* expiryTime */));
   exPtr->finish();
 
   // Check everything is fine with checksumming before we corrupt data
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value, lat));
   EXPECT_EQ(e1.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value, lat));
   EXPECT_EQ(e2.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value, lat));
   EXPECT_EQ(e3.value(), value.view());
   driver->flush();
 
   // Corrupt e1: header
   Buffer buf{2 * kIOAlignSize, kIOAlignSize};
-  memcpy(buf.data() + buf.size() - 4, "hack", 4);
+  memset(buf.data(), 'X', buf.size());
   EXPECT_TRUE(device->write(0, std::move(buf)));
-  EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value, lat));
 
   const char corruption[kIOAlignSize]{"hack"};
   // Corrupt e2: key, reported as "key not found"
@@ -1798,14 +1942,14 @@ TEST(BlockCache, Checksum) {
       Buffer{BufferView{kIOAlignSize,
                         reinterpret_cast<const uint8_t*>(corruption)},
              kIOAlignSize}));
-  EXPECT_EQ(Status::NotFound, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(e2.key(), value, lat));
 
   // Corrupt e3: value
   EXPECT_TRUE(device->write(
       3 * kIOAlignSize,
       Buffer{BufferView{1024, reinterpret_cast<const uint8_t*>(corruption)},
              kIOAlignSize}));
-  EXPECT_EQ(Status::ChecksumError, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e3.key(), value, lat));
 
   EXPECT_EQ(0, exPtr->getQueueSize());
 }
@@ -1815,7 +1959,7 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
@@ -1861,7 +2005,9 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 4; i++) {
       CacheEntry e{bg.gen(8), bg.gen(800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     // flush region such that the regions are closed
@@ -1871,18 +2017,21 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   // Access the first three keys
   for (size_t i = 0; i < 3; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
   // Delete the first key
   EXPECT_EQ(Status::Ok, driver->remove(log[0].key()));
 
-  // This insert will trigger reclamation because there are 4 regions in total
+  // This insert will trigger reclaim because there are 4 regions in total
   // and the device was configured to require 1 clean region at all times
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    EXPECT_EQ(Status::Ok,
+              driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                  0 /* expiryTime */));
     log.push_back(std::move(e));
   }
 
@@ -1892,26 +2041,30 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   // First key was deleted so missing
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
   }
 
   // Second and third items are reinserted so lookup should succeed
   for (size_t i = 1; i < 3; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
   // Last item was never accessed so it was reclaimed and so missing
   for (size_t i = 3; i < 4; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
 
   // Remaining items are still in cache so lookup should succeed
   for (size_t i = 4; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1926,7 +2079,7 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
   auto device =
       createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
@@ -1938,7 +2091,8 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
   for (size_t i = 0; i < 3; i++) {
     for (size_t j = 0; j < 4; j++) {
       CacheEntry e{bg.gen(8), bg.gen(3200)};
-      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                           0 /* expiryTime */));
       log.push_back(std::move(e));
     }
   }
@@ -1949,7 +2103,8 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
 
   for (auto& entry : log) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value, lat));
     EXPECT_EQ(entry.value(), value.view());
   }
 }
@@ -1962,7 +2117,7 @@ TEST(BlockCache, UsePriorities) {
   auto deviceSize = metadataSize + kRegionSize * 6;
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
+  auto config = makeConfig(std::move(policy), *device, kRegionSize * 6);
   // 3 priorities
   config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
@@ -1985,29 +2140,33 @@ TEST(BlockCache, UsePriorities) {
     for (size_t j = 0; j < 4; j++) {
       // This should give us a 4KB payload due to 512 byte alignment
       CacheEntry e{bg.gen(8), bg.gen(3800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
     if (i == 0) {
       Buffer value;
+      uint32_t lat = 0;
       // Look up 2nd item twice, so we'll reinsert it with pri-1
-      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
       // Look up 3rd item three times, so we'll reinsert it with pri-2
       // Note that we reinsert with pri-2, because any hits larger than
       // max priority will be assigned the max priority.
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
     }
   }
 
   // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
   }
 }
 
@@ -2019,7 +2178,7 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
   auto deviceSize = metadataSize + kRegionSize * 6;
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
+  auto config = makeConfig(std::move(policy), *device, kRegionSize * 6);
   config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
@@ -2041,36 +2200,42 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
     for (size_t j = 0; j < 4; j++) {
       // This should give us a 4KB payload
       CacheEntry e{bg.gen(8), bg.gen(3800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
     for (size_t j = 0; j < 8; j++) {
       // This should give us a 2KB payload
       CacheEntry e{bg.gen(8), bg.gen(1800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), nullptr, 0 /* poolId */,
+                                    0 /* expiryTime */));
       log.push_back(std::move(e));
     }
     driver->flush();
     if (i == 0) {
       Buffer value;
+      uint32_t lat = 0;
       // Look up 2nd item twice, so we'll reinsert it with pri-1
-      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
       // Look up 3rd item three times, so we'll reinsert it with pri-2
       // Note that we reinsert with pri-2, because any hits larger than
       // max priority will be assigned the max priority.
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
     }
   }
 
   // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
   }
 }
 
@@ -2083,7 +2248,7 @@ TEST(BlockCache, DeviceFlushFailureSync) {
   EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   config.inMemBufFlushRetryLimit = kFlushRetryLimit;
   auto engine = makeEngine(std::move(config));
@@ -2095,7 +2260,9 @@ TEST(BlockCache, DeviceFlushFailureSync) {
 
   BufferGen bg;
   CacheEntry e{bg.gen(8), bg.gen(800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
   // Make sure that the insertion is scheduled and allocated a clean region
   EXPECT_TRUE(injectPauseWait("pause_blockcache_insert_done"));
 
@@ -2125,7 +2292,7 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
   EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 4;
   config.inMemBufFlushRetryLimit = kFlushRetryLimit;
   auto engine = makeEngine(std::move(config));
@@ -2138,13 +2305,17 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
 
   BufferGen bg;
   CacheEntry e{bg.gen(8), bg.gen(15 * 1024)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
   // Make sure that the insertion is scheduled and allocated a clean region
   EXPECT_TRUE(injectPauseWait("pause_blockcache_insert_done"));
 
   // The region size is 16KB, so the second insertions should allocate
   // a new region and start a flush async for the first region
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  EXPECT_EQ(Status::Ok,
+            driver->insertAsync(e.key(), e.value(), {}, 0 /* poolId */,
+                                0 /* expiryTime */));
   EXPECT_TRUE(injectPauseWait("pause_flush_failure"));
   EXPECT_TRUE(injectPauseWait("pause_blockcache_insert_done"));
 
@@ -2215,7 +2386,7 @@ TEST(BlockCache, testItemDestructor) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto* exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 9;
   config.destructorCb = toCallback(cb);
   config.itemDestructorEnabled = true;
@@ -2225,7 +2396,8 @@ TEST(BlockCache, testItemDestructor) {
   mockRegionsEvicted(mp, {0, 1, 2, 3, 1});
   for (size_t i = 0; i < 7; i++) {
     XLOG(ERR, "insert ") << log[i].key().key();
-    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value()));
+    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value(),
+                                         0 /* poolId */, 0 /* expiryTime */));
   }
 
   // remove with cb triggers destructor Immediately
@@ -2241,14 +2413,17 @@ TEST(BlockCache, testItemDestructor) {
   EXPECT_EQ(Status::NotFound, driver->remove(log[0].key()));
 
   XLOG(ERR, "insert ") << log[7].key().key();
-  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value()));
+  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
   // insert will trigger evictions
   XLOG(ERR, "insert ") << log[8].key().key();
-  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
+  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[5].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[5].key(), value, lat));
 
   exPtr->finish();
 }
@@ -2262,7 +2437,7 @@ TEST(BlockCache, RandomAlloc) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = std::make_unique<MockJobScheduler>();
   auto exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -2272,10 +2447,12 @@ TEST(BlockCache, RandomAlloc) {
     for (size_t i = 0; i < 4; i++) {
       auto key = folly::sformat("{}:{}", j, i);
       CacheEntry e{makeHK(key.c_str()), bg.gen(3800)};
-      driver->insertAsync(e.key(), e.value(),
-                          [](Status status, HashedKey /*key */) {
-                            EXPECT_EQ(Status::Ok, status);
-                          });
+      driver->insertAsync(
+          e.key(), e.value(),
+          [](Status status, HashedKey /*key */) {
+            EXPECT_EQ(Status::Ok, status);
+          },
+          0 /* poolId */, 0 /* expiryTime */);
       log.emplace(key, std::move(e));
       finishAllJobs(*exPtr);
     }
@@ -2322,7 +2499,7 @@ TEST(BlockCache, SizeAndAlignment) {
       alignSize * (static_cast<uint64_t>(1) << 32));
   auto ex = makeJobScheduler();
   // auto* exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 9;
 
   config.itemDestructorEnabled = true;
@@ -2332,14 +2509,14 @@ TEST(BlockCache, SizeAndAlignment) {
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, smallValue.view()),
             alignSize);
 
-  // assumption: the item descriptor size is 24.
+  // assumption: the item descriptor size is kSizeOfEntryDesc.
   // Make an item at the size of 1024.
-  auto largeValue = bg.gen(alignSize - 24 - 3);
+  auto largeValue = bg.gen(alignSize - kSizeOfEntryDesc - 3);
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, largeValue.view()),
             alignSize);
 
   // Add one more byte and need 2*alignSize
-  auto hugeValue = bg.gen(alignSize - 24 - 3 + 1);
+  auto hugeValue = bg.gen(alignSize - kSizeOfEntryDesc - 3 + 1);
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, hugeValue.view()),
             alignSize * 2);
 }
@@ -2351,14 +2528,15 @@ TEST(BlockCache, RetryRead) {
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
 
   auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto config = makeConfig(std::move(policy), *device);
   config.checksum = true;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   BufferGen bg;
   CacheEntry e{bg.gen(8), bg.gen(800)};
-  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 0 /* poolId */,
+                                       0 /* expiryTime */));
   driver->flush();
 
   EXPECT_CALL(*device, readImpl(_, 1024, _))
@@ -2377,7 +2555,8 @@ TEST(BlockCache, RetryRead) {
             return dev->getRealDeviceRef().read(offset, size, buffer);
           }));
   Buffer value;
-  driver->lookup(e.key(), value);
+  uint32_t lat = 0;
+  driver->lookup(e.key(), value, lat);
 
   // checking the counters.
   driver->getCounters({[](folly::StringPiece name, double count) {
@@ -2417,7 +2596,7 @@ TEST(BlockCache, RetryRead) {
             return true;
           }));
 
-  driver->lookup(e.key(), value);
+  driver->lookup(e.key(), value, lat);
 
   // checking the counters
   driver->getCounters({[](folly::StringPiece name, double count) {
@@ -2439,4 +2618,115 @@ TEST(BlockCache, RetryRead) {
     }
   }});
 }
+
+// Test that expired items during reinsertion trigger destructor callback
+// and properly update eviction count and usedSizeBytes.
+TEST(BlockCache, ExpiredItemDestructorCallback) {
+  std::vector<CacheEntry> log;
+  {
+    BufferGen bg;
+    // 1st region, 12k
+    log.emplace_back(bg.gen(8), bg.gen(5'000));
+    log.emplace_back(bg.gen(8), bg.gen(7'000));
+    // 2nd region, 14k
+    log.emplace_back(bg.gen(8), bg.gen(5'000));
+    log.emplace_back(bg.gen(8), bg.gen(3'000));
+    log.emplace_back(bg.gen(8), bg.gen(6'000));
+    // 3rd region, 16k
+    log.emplace_back(bg.gen(8), bg.gen(8'000));
+    log.emplace_back(bg.gen(8), bg.gen(8'000));
+    // 4th region, 15k - triggers reclaim
+    log.emplace_back(bg.gen(8), bg.gen(9'000));
+    log.emplace_back(bg.gen(8), bg.gen(6'000));
+    ASSERT_EQ(9, log.size());
+  }
+
+  // Track which items have been passed to destructor callback
+  std::vector<Buffer> destroyedKeys;
+
+  MockDestructor cb;
+  // Expect the destructor callback to be called for expired items
+  // during reclaim of the first region
+  EXPECT_CALL(cb, call(_, _, DestructorEvent::Recycled))
+      .WillRepeatedly(
+          [&destroyedKeys](HashedKey hk, BufferView, DestructorEvent) {
+            destroyedKeys.emplace_back(makeView(hk.key()));
+          });
+
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto* exPtr = ex.get();
+  auto config = makeConfig(std::move(policy), *device);
+  config.numInMemBuffers = 9;
+  config.destructorCb = toCallback(cb);
+
+  // Mark the first item as expired
+  // checkExpired is called with the value, so we check if the value matches
+  Buffer expiredValue = Buffer{log[0].value()};
+  config.checkExpired = [&expiredValue](BufferView value) {
+    return value == expiredValue.view();
+  };
+
+  // Enable reinsertion so that items are evaluated for expiration
+  config.reinsertionConfig = makePctReinsertionConfig(100);
+
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  mockRegionsEvicted(mp, {0, 1, 2, 3, 0});
+
+  ENABLE_INJECT_PAUSE_IN_SCOPE();
+  injectPauseSet("pause_do_eviction_done");
+
+  // Insert first 7 items to fill regions 0, 1, 2
+  for (size_t i = 0; i < 7; i++) {
+    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value(),
+                                         0 /* poolId */, 0 /* expiryTime */));
+  }
+
+  // Insert items 7 and 8 into region 3. There are 4 regions in total and the
+  // device was configured to require 1 clean region at all times, so this
+  // triggers reclaim of region 0.
+  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value(),
+                                       0 /* poolId */, 0 /* expiryTime */));
+
+  // Wait for eviction to complete
+  EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
+
+  // Wait for all scheduled jobs to complete
+  exPtr->finish();
+
+  // Verify the destructor callback was called for exactly one expired item
+  // (log[0]). The second item in region 0 (log[1]) should be reinserted since
+  // it's not expired and reinsertion policy is set to 100%.
+  ASSERT_EQ(1, destroyedKeys.size())
+      << "Only one item should be expired and destroyed";
+  EXPECT_EQ(destroyedKeys[0].view(), makeView(log[0].key().key()))
+      << "Destructor callback should be called for the expired item (log[0])";
+
+  // Verify the expired item is no longer in cache
+  Buffer value;
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+
+  // Verify eviction expired  count is properly updated
+  bool foundEvictionExpiredCounter = false;
+  driver->getCounters(
+      {[&foundEvictionExpiredCounter](folly::StringPiece name, double count,
+                                      CounterVisitor::CounterType type) {
+        if (name == "navy_bc_evictions_expired" &&
+            type == CounterVisitor::CounterType::RATE) {
+          foundEvictionExpiredCounter = true;
+          EXPECT_EQ(1, count) << "Eviction expired count should be 1";
+        }
+      }});
+  EXPECT_TRUE(foundEvictionExpiredCounter)
+      << "navy_bc_evictions_expired counter should be visited";
+}
+
 } // namespace facebook::cachelib::navy::tests

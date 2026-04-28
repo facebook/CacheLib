@@ -22,7 +22,7 @@
 
 namespace facebook::cachelib::navy {
 namespace detail {
-unsigned int accumulate(const std::vector<unsigned int> nums) {
+unsigned int accumulate(const std::vector<unsigned int>& nums) {
   return std::accumulate(
       nums.begin(), nums.end(), 0u, [](unsigned int a, unsigned int b) {
         if (b == 0) {
@@ -37,12 +37,12 @@ unsigned int accumulate(const std::vector<unsigned int> nums) {
 FifoPolicy::FifoPolicy() { XLOG(INFO, "FIFO policy"); }
 
 void FifoPolicy::track(const Region& region) {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   queue_.push_back(detail::Node{region.id(), getSteadyClockSeconds()});
 }
 
 RegionId FifoPolicy::evict() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   if (queue_.empty()) {
     return RegionId{};
   }
@@ -52,11 +52,12 @@ RegionId FifoPolicy::evict() {
 }
 
 void FifoPolicy::reset() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   queue_.clear();
 }
 
-void FifoPolicy::persist(RecordWriter& rw) const {
+void FifoPolicy::persist(serialization::EvictionPolicyData& out) const {
+  std::lock_guard lock{mutex_};
   serialization::FifoPolicyData fifoPolicyData;
   fifoPolicyData.queue()->resize(queue_.size());
 
@@ -66,14 +67,18 @@ void FifoPolicy::persist(RecordWriter& rw) const {
     proto.trackTime() = queue_[i].trackTime.count();
   }
 
-  serializeProto(fifoPolicyData, rw);
+  out.fifo_ref() = std::move(fifoPolicyData);
 }
 
-void FifoPolicy::recover(RecordReader& rr) {
-  auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
+void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {
+  std::lock_guard lock{mutex_};
+  if (in.getType() != serialization::EvictionPolicyData::Type::fifo) {
+    throw std::invalid_argument(
+        "FifoPolicy::recover called with non-FIFO EvictionPolicyData variant");
+  }
+  const auto& fifoPolicyData = *in.fifo_ref();
   queue_.clear();
-  for (uint32_t i = 0; i < fifoPolicyData.queue().value().size(); i++) {
-    const auto& proto = fifoPolicyData.queue().value()[i];
+  for (const auto& proto : fifoPolicyData.queue().value()) {
     queue_.push_back(
         detail::Node{RegionId{static_cast<uint32_t>(proto.idx().value())},
                      std::chrono::seconds{proto.trackTime().value()}});
@@ -81,7 +86,7 @@ void FifoPolicy::recover(RecordReader& rr) {
 }
 
 void FifoPolicy::getCounters(const CounterVisitor& v) const {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   v(folly::sformat("navy_bc_fifo_size"), queue_.size());
   v(folly::sformat("navy_bc_fifo_age"),
     queue_.empty() ? 0 : queue_.front().secondsSinceTracking().count());
@@ -100,14 +105,14 @@ SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)
 void SegmentedFifoPolicy::track(const Region& region) {
   auto priority = region.getPriority();
   XDCHECK_LT(priority, segments_.size());
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   segments_[priority].push_back(
       detail::Node{region.id(), getSteadyClockSeconds()});
   rebalanceLocked();
 }
 
 RegionId SegmentedFifoPolicy::evict() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   auto& lowestPri = segments_.front();
   if (lowestPri.empty()) {
     XDCHECK_EQ(0ul, numElementsLocked());
@@ -154,7 +159,7 @@ size_t SegmentedFifoPolicy::numElementsLocked() {
 }
 
 void SegmentedFifoPolicy::reset() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   for (auto& segment : segments_) {
     segment.clear();
   }
@@ -162,7 +167,7 @@ void SegmentedFifoPolicy::reset() {
 
 size_t SegmentedFifoPolicy::memorySize() const {
   size_t memSize = sizeof(*this);
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   for (const auto& segment : segments_) {
     memSize += sizeof(std::deque<detail::Node>) +
                sizeof(detail::Node) * segment.size();
@@ -172,23 +177,13 @@ size_t SegmentedFifoPolicy::memorySize() const {
 
 void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
   int idx = 0;
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   for (auto& segment : segments_) {
     v(folly::sformat("navy_bc_sfifo_segment_{}_size", idx), segment.size());
     v(folly::sformat("navy_bc_sfifo_segment_{}_age", idx),
       segment.empty() ? 0 : segment.front().secondsSinceTracking().count());
     idx++;
   }
-}
-
-void SegmentedFifoPolicy::persist(RecordWriter& rw) const {
-  std::ignore = rw;
-  throw std::runtime_error("Not Implemented.");
-}
-
-void SegmentedFifoPolicy::recover(RecordReader& rr) {
-  std::ignore = rr;
-  throw std::runtime_error("Not Implemented");
 }
 
 } // namespace facebook::cachelib::navy

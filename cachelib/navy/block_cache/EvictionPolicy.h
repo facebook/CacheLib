@@ -22,6 +22,7 @@
 #include "cachelib/navy/block_cache/Region.h"
 #include "cachelib/navy/block_cache/Types.h"
 #include "cachelib/navy/common/Types.h"
+#include "cachelib/navy/serialization/gen-cpp2/objects_types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -50,11 +51,21 @@ class EvictionPolicy {
   // Exports policy stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor&) const = 0;
 
-  // Persists metadata associated with this policy.
-  virtual void persist(RecordWriter& rw) const = 0;
+  // Persists metadata associated with this policy into the typed Thrift
+  // union. Implementations must populate the variant member that matches
+  // their policy type. The default implementation throws — override only
+  // in policies that support persistence. Caller is expected to handle the
+  // exception and fall back.
+  virtual void persist(serialization::EvictionPolicyData& /* out */) const {
+    throw std::runtime_error("EvictionPolicy::persist not implemented");
+  }
 
-  // Recovers from previously persisted metadata associated with this policy.
-  virtual void recover(RecordReader& rr) = 0;
+  // Recovers from previously persisted metadata. Implementations must read
+  // the variant member that matches their policy type. The default
+  // implementation throws — override only in policies that support recovery.
+  virtual void recover(const serialization::EvictionPolicyData& /* in */) {
+    throw std::runtime_error("EvictionPolicy::recover not implemented");
+  }
 };
 } // namespace navy
 } // namespace cachelib

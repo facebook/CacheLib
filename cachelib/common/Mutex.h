@@ -286,6 +286,18 @@ class BaseBucketLocks {
     return &getLock(key1) == &getLock(key2);
   }
 
+  size_t numLocks() const noexcept { return locksMask_ + 1; }
+
+  // Invoke 'func' for each bucket index in [0, numBuckets) that hashes to
+  // 'lockIdx'. Encapsulates the bucket-to-lock mapping so callers don't
+  // re-derive it.
+  template <typename F>
+  void forEachBucketForLock(size_t lockIdx, size_t numBuckets, F&& func) const {
+    for (size_t bucket = lockIdx; bucket < numBuckets; bucket += numLocks()) {
+      func(bucket);
+    }
+  }
+
  protected:
   // Get a reference to the lock for this key
   Lock& getLock(const void* data, size_t size) noexcept {
@@ -331,6 +343,11 @@ class BucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
   template <typename... Args>
   LockHolder tryLock(Args... args) noexcept {
     return LockHolder(Base::getLock(args...), std::try_to_lock);
+  }
+
+  template <typename... Args>
+  LockHolder deferLock(Args... args) noexcept {
+    return LockHolder(Base::getLock(args...), std::defer_lock);
   }
 };
 
@@ -383,9 +400,6 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
             : WriteLockHolder(Base::getLock(args...), timeout);
   }
 };
-using TimedMutexRWBuckets =
-    RWBucketLocks<folly::fibers::TimedRWMutex<folly::fibers::Baton>>;
-using SharedMutexBuckets = RWBucketLocks<folly::SharedMutex>;
 
 // a spinning mutex appearing as a rw mutex
 using SpinBuckets = RWBucketLocks<RWMockLock>;

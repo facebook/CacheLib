@@ -18,15 +18,10 @@
 
 #include <folly/fibers/TimedMutex.h>
 
-#include <atomic>
-#include <functional>
-#include <memory>
-#include <stdexcept>
 #include <vector>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
-#include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Types.h"
 
 namespace facebook {
@@ -46,6 +41,8 @@ class RegionAllocator {
   RegionAllocator& operator=(const RegionAllocator&) = delete;
   RegionAllocator(RegionAllocator&& other) noexcept
       : priority_{other.priority_}, rid_{other.rid_} {}
+  RegionAllocator& operator=(RegionAllocator&&) noexcept = delete;
+  ~RegionAllocator() = default;
 
   // Sets new region to allocate from. Region allocator has to be reset before
   // calling this.
@@ -61,7 +58,7 @@ class RegionAllocator {
   uint16_t priority() const { return priority_; }
 
   // Returns the mutex lock.
-  TimedMutex& getLock() const { return mutex_; }
+  auto& getLock() const { return mutex_; }
 
  private:
   const uint16_t priority_{};
@@ -69,7 +66,8 @@ class RegionAllocator {
   // The current region id from which we are allocating
   RegionId rid_;
 
-  mutable TimedMutex mutex_{TimedMutex::Options(false)};
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_region_allocator">
+      mutex_{TimedMutex::Options(false)};
 };
 
 // Size class or stack allocator. Thread safe. Syncs access
@@ -82,29 +80,28 @@ class Allocator {
   // @param allocatorsPerPriority   Number of allocators per priority
   explicit Allocator(RegionManager& regionManager,
                      const std::vector<uint32_t>& allocatorsPerPriority);
+  ~Allocator() = default;
 
   // Allocates and opens for writing.
   //
   // @param size          Allocation size
   // @param priority      Specifies how important this allocation is
   // @param canWait       If true, wait until allocation can be retried
-  // @param keyHash       Hash of the key to allocate for. Used for deciding the
-  // allocator if there's more than one for the priority.
+  // @param distKey       Distribution key to allocate for (ex. KeyHash). Used
+  //                      for deciding the allocator if there's more than one
+  //                      for the priority.
   //
-  // Returns a tuple containing region descriptor, allocated slotSize and
-  // allocated address
+  // Returns a pair containing region descriptor and allocated address
   // The region descriptor contains region id, open mode and status,
   // which is one of the following
-  //  - Ready   Fills @addr and @slotSize
-  //  - Retry   Retry later, reclamation is running
+  //  - Ready   Fills @addr
+  //  - Retry   Retry later, reclaim is running
   //  - Error   Can't allocate this size even later (hard failure)
   // When allocating with a priority, the priority must NOT exceed the
   // max priority which is (@numPriorities - 1) specified when constructing
   // this allocator.
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(uint32_t size,
-                                                              uint16_t priority,
-                                                              bool canWait,
-                                                              uint64_t keyHash);
+  std::tuple<RegionDescriptor, RelAddress, MutableBufferView> allocate(
+      uint32_t size, uint16_t priority, bool canWait, uint64_t distKey);
 
   // Closes the region.
   void close(RegionDescriptor&& rid);
@@ -122,14 +119,16 @@ class Allocator {
   using LockGuard = std::lock_guard<TimedMutex>;
   Allocator(const Allocator&) = delete;
   Allocator& operator=(const Allocator&) = delete;
+  Allocator(Allocator&&) = delete;
+  Allocator& operator=(Allocator&&) = delete;
 
   // Releases region associated with the region allocator by flushing the
   // in-memory buffers and resetting the ra.
   void flushAndReleaseRegionFromRALocked(RegionAllocator& ra, bool flushAsync);
 
   // Allocates @size bytes in region allocator @ra. If succeed (enough space),
-  // returns region descriptor, size and address.
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateWith(
+  // returns region descriptor and address.
+  std::tuple<RegionDescriptor, RelAddress, MutableBufferView> allocateWith(
       RegionAllocator& ra, uint32_t size, bool wait);
 
   RegionManager& regionManager_;

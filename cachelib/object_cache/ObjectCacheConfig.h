@@ -33,7 +33,7 @@ namespace objcache2 {
 template <typename ObjectCache>
 struct ObjectCacheConfig {
   using Key = KAllocation::Key;
-  using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
+  using LegacyEventTrackerSharedPtr = std::shared_ptr<LegacyEventTracker>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
   using RemoveCb = typename ObjectCache::RemoveCb;
   using SerializeCb = typename ObjectCache::SerializeCb;
@@ -99,7 +99,7 @@ struct ObjectCacheConfig {
       util::Throttler::Config config);
 
   // Enable event tracker. This will log all relevant cache events.
-  ObjectCacheConfig& setEventTracker(EventTrackerSharedPtr&& ptr);
+  ObjectCacheConfig& setEventTracker(LegacyEventTrackerSharedPtr&& ptr);
 
   // You MUST set this callback to release the removed/evicted/expired objects
   // memory; otherwise, memory leak will happen.
@@ -193,6 +193,33 @@ struct ObjectCacheConfig {
    */
   ObjectCacheConfig& enablePoolProvisioning();
 
+  // Enable aggregating pool stats to a single stat
+  //
+  // When enabled, pool stats from all pools will be aggregated into a single
+  // "aggregated" stat to reduce ODS counter inflation. For example, with two
+  // pools and this option disabled, you will have separate stats like:
+  // -
+  // cachelib.cache_name.pool.cache_name_0.items
+  // -
+  // cachelib.cache_name.pool.cache_name_1.items
+  // With this option enabled, it will be aggregated to:
+  // - cachelib.cache_name.pool.aggregated.items
+  //
+  // LIMITATIONS:
+  // 1. If the cache is using more than 128 distinct allocation sizes across
+  //    all pools, pool stats cannot be aggregated and will fall back to
+  //    separate stat logging.
+  // 2. Some statistics such as evictionAgeSecs (avg and quantiles) may not be
+  //    mathematically precise. These stats are aggregated using weighted
+  //    averages based on the relative number of evictions from each pool.
+  //    While this provides a reasonable approximation, it may not represent
+  //    the exact distribution that would result from treating all pools as
+  //    a single entity.
+  ObjectCacheConfig& enableAggregatePoolStats();
+
+  // @return whether pool stats aggregation is enabled
+  bool isAggregatePoolStatsEnabled() const noexcept;
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -239,8 +266,9 @@ struct ObjectCacheConfig {
   // Throttler config of size controller
   util::Throttler::Config sizeControllerThrottlerConfig{};
 
-  // Callback for initializing the eventTracker on CacheAllocator construction
-  EventTrackerSharedPtr eventTracker{nullptr};
+  // Callback for initializing the legacyEventTracker on CacheAllocator
+  // construction
+  LegacyEventTrackerSharedPtr legacyEventTracker{nullptr};
 
   // ItemDestructor which is invoked for each item that is evicted
   // or explicitly from cache
@@ -288,7 +316,6 @@ struct ObjectCacheConfig {
   // on top of Object Size mode guarantees.
   ObjCacheSizeControlMode memoryMode{ObjCacheSizeControlMode::ObjectSize};
 
-  // The number of entries to add or remove per iteration.
   // The limits means different things for different memory modes.
   // For Object Size mode,
   //   - upperLimitBytes: max total object size limit (shrink cache)
@@ -299,8 +326,19 @@ struct ObjectCacheConfig {
   // For RSS mode,
   //   - upperLimitBytes: max RSS limit (shrink cache)
   //   - lowerLimitBytes: min RSS limit (expand cache)
+  // For FreeMemoryOnly mode,
+  //   - upperLimitBytes: max free memory limit (expand cache)
+  //   - lowerLimitBytes: min free memory limit (shrink cache)
+  //   When free memory is between lowerLimitBytes and upperLimitBytes,
+  //   the cache size remains stable (no shrinking or expanding).
   uint64_t upperLimitBytes{0};
   uint64_t lowerLimitBytes{0};
+
+  // In FreeMemoryOnly mode where we do not have average object size
+  // to adjust the cache size by, we used fixed values to shrink and expand.
+  uint64_t shrinkCacheBy{8};
+  uint64_t expandCacheBy{2};
+
   GetFreeMemCb getFreeMemBytes = util::getMemAvailable;
   GetRSSMemCb getRSSMemBytes = util::getRSSBytes;
 
@@ -312,6 +350,10 @@ struct ObjectCacheConfig {
 
   // If true, we'll provision pools proactively upon creation.
   bool provisionPool{false};
+
+  // If true, pool stats will be aggregated across all pools to reduce ODS
+  // counter inflation.
+  bool aggregatePoolStats{false};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -416,8 +458,8 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enableFragmentationTracking() {
 
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEventTracker(
-    EventTrackerSharedPtr&& ptr) {
-  eventTracker = std::move(ptr);
+    LegacyEventTrackerSharedPtr&& ptr) {
+  legacyEventTracker = std::move(ptr);
   return *this;
 }
 
@@ -540,8 +582,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
       [blobCb = std::move(blobCb)](
           const typename T::CacheItem& item,
           folly::Range<typename T::NvmCache::ChainedItemIter>) {
-        uintptr_t ptr =
-            item.template getMemoryAs<typename T::Item>()->objectPtr;
+        uintptr_t ptr = T::getAlignedItemPtr(item.getMemory())->objectPtr;
         auto blob = blobCb(ptr);
         std::vector<BufferedBlob> blobs;
         if (blob == nullptr) {
@@ -563,7 +604,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
         if (ptr == reinterpret_cast<uintptr_t>(nullptr)) {
           return false;
         }
-        *it.template getMemoryAs<typename T::Item>() =
+        *T::getAlignedItemPtr(it.getMemory()) =
             typename T::Item{ptr, pBlob.data.size()};
 
         return true;
@@ -575,6 +616,17 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePoolProvisioning() {
   provisionPool = true;
   return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enableAggregatePoolStats() {
+  aggregatePoolStats = true;
+  return *this;
+}
+
+template <typename T>
+bool ObjectCacheConfig<T>::isAggregatePoolStatsEnabled() const noexcept {
+  return aggregatePoolStats;
 }
 
 template <typename T>

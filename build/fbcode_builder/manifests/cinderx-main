@@ -1,5 +1,11 @@
+# For building CinderX against CPython main.
+# Note that externally this can be broken  because in that environment we will
+# be checking out the head of the CPython repo. However CinderX is only built
+# and tested against our internal copy of CPython which updates ~daily, and so
+# may be behind CPython head.
+
 [manifest]
-name = cinderx-3_12mp
+name = cinderx-main
 fbsource_path = fbcode/cinderx
 shipit_project = facebookincubator/cinderx
 
@@ -14,7 +20,7 @@ builder = nop
 
 [dependencies]
 python-setuptools
-meta-python-3_12
+python-main
 
 [shipit.pathmap]
 fbcode/cinderx = cinderx
@@ -22,3 +28,7 @@ fbcode/cinderx/oss_toplevel = .
 
 [setup-py.test]
 python_script = cinderx/PythonLib/test_cinderx/test_oss_quick.py
+
+[setup-py.env]
+CINDERX_ENABLE_PGO=1
+CINDERX_ENABLE_LTO=1

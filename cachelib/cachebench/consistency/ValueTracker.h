@@ -61,6 +61,9 @@ class ValueTracker {
   explicit ValueTracker(std::vector<folly::StringPiece> keys);
   ValueTracker(const ValueTracker&) = delete;
   ValueTracker& operator=(const ValueTracker&) = delete;
+  ValueTracker(ValueTracker&&) = delete;
+  ValueTracker& operator=(ValueTracker&&) = delete;
+  ~ValueTracker() = default;
 
   // Philosophy here is beginXXX function marks operation begin and returns
   // the operation id, that will be used in endXXX call for internal purpose.
