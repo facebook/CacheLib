@@ -1,1 +1,0 @@
-"use strict";(globalThis.webpackChunkcachelib=globalThis.webpackChunkcachelib||[]).push([[7472],{55513(l){l.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"Welcome","permalink":"/blog/welcome"},{"title":"Hello","permalink":"/blog/hello-world"},{"title":"Hola","permalink":"/blog/hola"}]}')}}]);

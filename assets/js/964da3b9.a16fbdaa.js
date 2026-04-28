@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkcachelib=globalThis.webpackChunkcachelib||[]).push([[3793],{91606(l){l.exports=JSON.parse('{"permalink":"/blog/tags/blockcache","page":1,"postsPerPage":10,"totalPages":1,"totalCount":1,"blogDescription":"Blog","blogTitle":"Blog"}')}}]);
