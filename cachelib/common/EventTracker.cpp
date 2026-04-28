@@ -19,15 +19,13 @@
 namespace facebook {
 namespace cachelib {
 
-void EventTracker::setSamplingRate(uint32_t samplingRate) {
-  samplingRate_.store(samplingRate, std::memory_order_relaxed);
-}
-
 EventTracker::EventTracker(Config&& config)
     : eventInfoQueue_(config.queueSize),
-      samplingRate_(config.samplingRate),
       eventSink_(std::move(config.eventSink)),
-      eventInfoCallback_(std::move(config.eventInfoCallback)) {
+      sampler_(config.sampler ? std::move(config.sampler)
+                              : std::make_unique<FurcHashSampler>(0)),
+      preQueueCallback_(std::move(config.preQueueCallback)),
+      postQueueCallback_(std::move(config.postQueueCallback)) {
   validateConfig();
   backgroundThread_ = std::thread([this]() { runBackgroundThread(); });
 }
@@ -38,9 +36,6 @@ EventTracker::~EventTracker() {
 }
 
 void EventTracker::validateConfig() {
-  // We are allowing samplingRate_ to be 0 if users don't want to enable
-  // it immediately or want to turn it off without having to delete the config
-  // from configerator.
   // If config.queueSize < 1, then eventInfoQueue_ should throw.
   if (eventSink_ == nullptr) {
     throw std::invalid_argument(
@@ -50,10 +45,8 @@ void EventTracker::validateConfig() {
 
 bool EventTracker::sampleKey(folly::StringPiece key) {
   sampleAttemptCount_.inc();
-  if (samplingRate_ == 0) {
-    return false;
-  }
-  if (furcHash(key.data(), key.size(), samplingRate_) == 0) {
+
+  if (sampler_->shouldSample(key)) {
     sampleSuccessCount_.inc();
     return true;
   }
@@ -66,6 +59,9 @@ void EventTracker::runBackgroundThread() {
       EventInfo eventInfo;
       eventInfoQueue_.blockingRead(eventInfo);
       if (!eventInfo.key.empty()) {
+        if (postQueueCallback_) {
+          postQueueCallback_(eventInfo);
+        }
         eventSink_->recordEvent(eventInfo);
       } else {
         // received sentinel event
@@ -82,7 +78,7 @@ void EventTracker::runBackgroundThread() {
   }
 }
 
-RecordResult EventTracker::record(const EventInfo& eventInfo) {
+RecordResult EventTracker::record(EventInfo& eventInfo) {
   recordCount_.inc();
   if (!sampleKey(eventInfo.key)) {
     return RecordResult::NOT_SAMPLED;
@@ -90,8 +86,11 @@ RecordResult EventTracker::record(const EventInfo& eventInfo) {
   return recordWithoutSampling(eventInfo);
 }
 
-RecordResult EventTracker::recordWithoutSampling(const EventInfo& eventInfo) {
+RecordResult EventTracker::recordWithoutSampling(EventInfo& eventInfo) {
   addToQueueCount_.inc();
+  if (preQueueCallback_) {
+    preQueueCallback_(eventInfo);
+  }
   bool addedToQueue = eventInfoQueue_.write(eventInfo);
   if (!addedToQueue) {
     dropCount_.inc();

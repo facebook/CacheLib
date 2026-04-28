@@ -81,7 +81,7 @@ class MM2Q {
     // @param time      the refresh time in seconds to trigger an update in
     // position upon access. An item will be promoted only once in each lru
     // refresh time depite the number of accesses it gets.
-    // @param udpateOnW whether to promote the item on write
+    // @param updateOnW whether to promote the item on write
     // @param updateOnR whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
@@ -95,7 +95,7 @@ class MM2Q {
     // @param time      the LRU refresh time.
     // An item will be promoted only once in each lru refresh time depite the
     // number of accesses it gets.
-    // @param udpateOnW whether to promote the item on write
+    // @param updateOnW whether to promote the item on write
     // @param updateOnR whether to promote the item on read
     // @param hotPercent percentage number for the size of the hot queue in the
     // overall size.
@@ -118,7 +118,7 @@ class MM2Q {
     //                                An item will be promoted only once in each
     //                                lru refresh time depite the
     //                                number of accesses it gets.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     // update.
@@ -153,7 +153,7 @@ class MM2Q {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     // update.
@@ -190,7 +190,7 @@ class MM2Q {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     // update.
@@ -231,7 +231,7 @@ class MM2Q {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     // update.

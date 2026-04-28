@@ -54,23 +54,18 @@ TEST(EvictionPolicy, FifoReset) {
 }
 
 TEST(EvictionPolicy, FifoRecover) {
-  folly::IOBufQueue ioq;
+  serialization::EvictionPolicyData policyData;
   {
     FifoPolicy policy;
     policy.track(kRegion1);
     policy.track(kRegion2);
     policy.track(kRegion3);
-
-    {
-      auto rw = createMemoryRecordWriter(ioq);
-      policy.persist(*rw);
-    }
+    policy.persist(policyData);
   }
 
   {
     FifoPolicy policy;
-    auto rr = createMemoryRecordReader(ioq);
-    policy.recover(*rr);
+    policy.recover(policyData);
 
     EXPECT_EQ(kRegion1.id(), policy.evict());
     EXPECT_EQ(kRegion2.id(), policy.evict());

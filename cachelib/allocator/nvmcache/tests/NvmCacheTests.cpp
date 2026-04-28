@@ -17,6 +17,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <climits>
 #include <set>
 #include <thread>
@@ -215,11 +216,11 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
 
-  // read from ram cache first so that we will not cause evictions
+  // Read from ram cache first so that we will not cause evictions
   // to navy for items that are still in ram-cache until we start
-  // reading items from navy
+  // reading items from navy.
   for (unsigned int i = nKeys + 100; i-- > 0;) {
-    unsigned int index = i - 1;
+    unsigned int index = i;
     auto key = folly::sformat("key{}", index);
     auto hdl = this->fetch(key, false /* ramOnly */);
     hdl.wait();
@@ -247,6 +248,10 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
       ASSERT_EQ(nullptr, hdl);
     }
   }
+
+  // Flush to ensure all async navy callbacks (including GetCtx destruction
+  // which decrements handle counts) have fully completed.
+  nvm.flushNvmCache();
 
   // Reads are done. We should be at "0" active handle count across all threads.
   ASSERT_EQ(0, nvm.getNumActiveHandles());
@@ -1660,6 +1665,51 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_item_lifetime_secs_p9999"));
   EXPECT_TRUE(cs("navy_bc_item_lifetime_secs_p99999"));
   EXPECT_TRUE(cs("navy_bc_item_lifetime_secs_p999999"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_avg"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_min"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_max"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p5"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p10"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p25"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p75"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p95"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_bc_insert_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_avg"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_min"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_max"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p5"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p10"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p25"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p75"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p95"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_bc_lookup_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_avg"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_min"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_max"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p5"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p10"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p25"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p75"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p95"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_bc_remove_latency_us_p999999"));
 
   // navy::RegionManager
   EXPECT_TRUE(cs("navy_bc_reclaim"));
@@ -1847,6 +1897,16 @@ TEST_F(NvmCacheTest, NavyStats) {
 
   // item destructor
   EXPECT_TRUE(cs("items_tracked_for_destructor"));
+
+  // AccessTimeMap stats
+  EXPECT_TRUE(cs("navy_atm_sets"));
+  EXPECT_TRUE(cs("navy_atm_gets"));
+  EXPECT_TRUE(cs("navy_atm_get_and_removes"));
+  EXPECT_TRUE(cs("navy_atm_removes"));
+  EXPECT_TRUE(cs("navy_atm_hits"));
+  EXPECT_TRUE(cs("navy_atm_misses"));
+  EXPECT_TRUE(cs("navy_atm_evictions"));
+  EXPECT_TRUE(cs("navy_atm_size"));
 
   // there should be no additional stats
   if (nvmStats.size()) {
@@ -2880,6 +2940,329 @@ TEST_F(NvmCacheTest, DataCorruption) {
     EXPECT_EQ(nullptr, it);
   }
 }
+
+TEST_F(NvmCacheTest, NvmHitTTATracking) {
+  // Disable BigHash — it doesn't store lastAccessTimeSecs (returns 0).
+  // BlockCache tracks it, so TTA can be computed.
+  this->config_.bigHash().setSizePctAndMaxItemSize(0, 100);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = config_;
+  this->allocConfig_.enableNvmCache(nvmConfig);
+  this->makeCache();
+
+  auto& cache = this->cache();
+  auto pid = this->poolId();
+
+  std::string key = "tta_test_key";
+  std::string val = "tta_test_value";
+
+  // 1. Insert item into DRAM
+  {
+    auto it = cache.allocate(pid, key, val.length());
+    ASSERT_NE(nullptr, it);
+    ::memcpy(it->getMemory(), val.data(), val.length());
+    cache.insertOrReplace(it);
+  }
+
+  // 2. Push to NVM and remove from RAM
+  this->pushToNvmCacheFromRamForTesting(key);
+  this->removeFromRamForTesting(key);
+
+  // 3. Wait so TTA (currentTime - lastAccessTimeSecs) > 0
+  /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // 4. Fetch from NVM (triggers onGetComplete -> TTA tracking)
+  auto it = this->fetch(key, false /* ramOnly */);
+  ASSERT_NE(nullptr, it);
+
+  // 5. Verify NVM hit occurred
+  auto stats = this->getStats();
+  EXPECT_GT(stats.numNvmGets, 0);
+  EXPECT_GT(stats.numNvmGets - stats.numNvmGetMiss, 0);
+
+  // 6. Verify TTA was tracked (>= 1 second)
+  EXPECT_GE(stats.nvmHitTTASecs.p50, 1);
+}
+TEST_F(NvmCacheTest, NvmLargeItemFlagOnPromotion) {
+  // Verify that the NvmLargeItem flag is set correctly on promotion:
+  // - Items routed to BlockCache (large) should have the flag set.
+  // - Items routed to BigHash (small) should NOT have the flag set.
+  this->config_.setSimpleFile(cacheDir_ + "/navy", 200 * 1024ULL * 1024ULL,
+                              true /* truncateFile */);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = this->config_;
+  nvmConfig.truncateItemToOriginalAllocSizeInNvm = true;
+  auto& config = this->getConfig();
+  config.enableNvmCache(nvmConfig);
+  this->poolAllocsizes_ = {20 * 1024};
+  auto& cache = this->makeCache();
+  auto pid = this->poolId();
+
+  auto testNvmLargeItemFlag = [&](const std::string& key, uint32_t valSize,
+                                  char fillChar) -> bool {
+    {
+      auto it = cache.allocate(pid, key, valSize);
+      EXPECT_NE(nullptr, it);
+      ::memset(it->getMemory(), fillChar, it->getSize());
+      cache.insertOrReplace(it);
+    }
+    EXPECT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+    cache.flushNvmCache();
+    this->removeFromRamForTesting(key);
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    EXPECT_NE(nullptr, hdl);
+    EXPECT_TRUE(hdl->isNvmClean());
+    return hdl->isNvmLargeItem();
+  };
+
+  EXPECT_TRUE(testNvmLargeItemFlag("bc", 15 * 1024, 'L'));
+  EXPECT_FALSE(testNvmLargeItemFlag("bh", 50, 'S'));
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapPopulatedOnDramEviction) {
+  const int nKeys = 5;
+  const uint32_t allocSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("atm_multi", allocSize, nKeys, allocSize);
+
+  // ATM should now have entries for the NvmClean items that were evicted
+  // from DRAM (BlockCache items only).
+  auto* atm = this->getAccessTimeMap();
+  auto now = util::getCurrentTimeSec();
+  int populated = 0;
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("atm_multi_{}", i);
+    HashedKey hk{key};
+    auto ts = atm->get(hk.keyHash());
+    if (ts != std::nullopt) {
+      EXPECT_GT(*ts, 0);
+      EXPECT_LE(*ts, now);
+      ++populated;
+    }
+  }
+  EXPECT_GT(populated, 0);
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedForBigHashItems) {
+  // Enable truncation so small items route to BigHash instead of BlockCache.
+  this->config_.setSimpleFile(cacheDir_ + "/navy", 200 * 1024ULL * 1024ULL,
+                              true /* truncateFile */);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = this->config_;
+  nvmConfig.truncateItemToOriginalAllocSizeInNvm = true;
+  auto& config = this->getConfig();
+  config.enableNvmCache(nvmConfig);
+  this->poolAllocsizes_ = {20 * 1024};
+  this->makeCache();
+
+  const int nKeys = 5;
+  const uint32_t allocSize = 50;
+  const uint32_t fillerSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("bh", allocSize, nKeys, fillerSize);
+
+  // ATM should NOT have entries for the BigHash items — the isNvmLargeItem()
+  // bit is not set for BigHash items, preventing updateAccessTime().
+  auto* atm = this->getAccessTimeMap();
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("bh_{}", i);
+    HashedKey hk{key};
+    auto ts = atm->get(hk.keyHash());
+    EXPECT_EQ(std::nullopt, ts)
+        << "BigHash item " << key << " should not be in ATM";
+  }
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedOnRegularEviction) {
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  const uint32_t allocSize = 15 * 1024;
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+  EXPECT_EQ(0, atm->size());
+
+  // Insert many fresh items (never been to NVM, so NOT NvmClean).
+  // Evictions of these items go through the NVM put path, not
+  // the updateAccessTime path.
+  for (int i = 0; i < 1024; i++) {
+    auto key = folly::sformat("regular_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  ASSERT_GT(this->evictionCount(), 0);
+
+  // Non-NvmClean evictions should NOT populate the AccessTimeMap.
+  EXPECT_EQ(0, atm->size());
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapCleanupTest) {
+  // Verify ATM entries are cleaned up when items leave NVM via:
+  //   Group 0: remove() while only in NVM (Removed)
+  //   Group 1: promote to DRAM, then remove() (Removed)
+  //   Group 2: promote to DRAM, then insertOrReplace() (Removed)
+  //   Group 3: NVM eviction via region reclaim (Recycled)
+  auto& config = getConfig();
+  config.setRemoveCallback({});
+  config.setItemDestructor([](const DestructedData&) {});
+  this->makeCache();
+
+  const int nKeys = 16;
+  const uint32_t allocSize = 15 * 1024;
+
+  insertPromoteAndEvictNvmCleanItems("atm_cl", allocSize, nKeys, allocSize);
+
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+  EXPECT_EQ(std::nullopt, atm->get(HashedKey{"atm_cl"}.keyHash()));
+
+  auto expectAtmCleared = [&](const std::vector<std::string>& keys,
+                              const char* desc) {
+    for (const auto& key : keys) {
+      HashedKey hk{key};
+      EXPECT_EQ(std::nullopt, atm->get(hk.keyHash())) << desc << " " << key;
+    }
+  };
+
+  // Collect keys that have ATM entries after DRAM eviction.
+  // Split into four groups by index % 4.
+  constexpr int kNumGroups = 4;
+  std::array<std::vector<std::string>, kNumGroups> groups;
+  for (int i = 0; i < nKeys; i++) {
+    auto key = folly::sformat("atm_cl_{}", i);
+    HashedKey hk{key};
+    if (atm->get(hk.keyHash()) != std::nullopt) {
+      groups[i % kNumGroups].push_back(key);
+    }
+  }
+  size_t totalKeys = 0;
+  for (const auto& g : groups) {
+    totalKeys += g.size();
+  }
+  ASSERT_GT(totalKeys, 0);
+
+  // Group 0: remove items while they're only in NVM.
+  for (const auto& key : groups[0]) {
+    nvm.remove(key);
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[0], "NVM-only removed item");
+
+  // Group 1: promote back to DRAM, then remove.
+  for (const auto& key : groups[1]) {
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    nvm.remove(key);
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[1], "DRAM removed item");
+
+  // Group 2: promote back to DRAM, then replace via insertOrReplace.
+  for (const auto& key : groups[2]) {
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    this->insertOrReplace(it);
+  }
+  expectAtmCleared(groups[2], "Replaced item");
+
+  // Group 3: trigger NVM eviction by filling NVM with new items until
+  // BlockCache reclaims regions containing the group-3 items.
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+  for (int i = 0; i < 2048; i++) {
+    auto key = folly::sformat("nvm_evictor_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  expectAtmCleared(groups[3], "NVM-evicted item");
+}
+
+TEST_F(NvmCacheTest, AccessTimeMapSurvivesWarmRoll) {
+  // Verify that ATM entries persist across a warm restart cycle:
+  //   shutDown() persists ATM → SharedMemAttach recovers ATM
+  this->convertToShmCache();
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  const uint32_t allocSize = 15 * 1024;
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+
+  // Insert a target item and push it to NVM.
+  std::string targetKey = "atm_warm_roll_target";
+  {
+    auto it = nvm.allocate(pid, targetKey, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+  }
+  ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(targetKey));
+  nvm.flushNvmCache();
+  this->removeFromRamForTesting(targetKey);
+
+  // Promote target from NVM (making it NvmClean in DRAM).
+  {
+    auto hdl = this->fetch(targetKey, false /* ramOnly */);
+    ASSERT_NE(nullptr, hdl);
+    ASSERT_TRUE(hdl->isNvmClean());
+  }
+
+  HashedKey targetHk{targetKey};
+  auto* atm = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atm);
+
+  // ATM should be empty after promotion (entry is created on eviction).
+  EXPECT_EQ(std::nullopt, atm->get(targetHk.keyHash()));
+
+  // Insert filler items to trigger DRAM eviction of the NvmClean target.
+  auto timeBefore = util::getCurrentTimeSec();
+  auto evictBefore = this->evictionCount();
+  for (int i = 0; i < 1024; i++) {
+    auto key = folly::sformat("atm_warm_roll_filler_{}", i);
+    auto it = nvm.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+    cache_->insertOrReplace(it);
+    if (i % numKeysPerRegion == 0) {
+      nvm.flushNvmCache();
+    }
+  }
+  nvm.flushNvmCache();
+  ASSERT_LT(evictBefore, this->evictionCount());
+
+  // The target was NvmClean when evicted, so ATM should have its entry.
+  auto accessTime = atm->get(targetHk.keyHash());
+  ASSERT_NE(std::nullopt, accessTime);
+  EXPECT_GE(*accessTime, timeBefore);
+  auto savedTime = *accessTime;
+
+  // Warm restart: shutDown() persists ATM, SharedMemAttach recovers it.
+  this->warmRoll();
+
+  // Re-acquire the ATM pointer (NvmCache instance is recreated).
+  auto* atmAfter = this->getAccessTimeMap();
+  ASSERT_NE(nullptr, atmAfter);
+
+  // Verify the entry survived with the same timestamp.
+  auto recoveredTime = atmAfter->get(targetHk.keyHash());
+  ASSERT_NE(std::nullopt, recoveredTime)
+      << "ATM entry missing after warm restart";
+  EXPECT_EQ(savedTime, *recoveredTime);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

@@ -20,7 +20,6 @@
 
 #include <algorithm>
 #include <cstdlib>
-#include <memory>
 #include <random>
 #include <vector>
 
@@ -646,7 +645,6 @@ void testAdvise(SlabAllocator& s,
                 const size_t numAdviseSlabs,
                 void* memory,
                 const size_t size) {
-  ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
   auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // Use up all but a few slabs so that we have a few free
@@ -672,8 +670,6 @@ void testRestoreAndAdvise(SlabAllocator& s,
                           const size_t numAdviseSlabs,
                           void* memory,
                           const size_t size) {
-  ASSERT_EQ(util::getNumResidentPages(memory, size),
-            util::getNumPages(size - numAdviseSlabs * Slab::kSize));
   auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // No free slabs available
@@ -720,8 +716,9 @@ TEST_F(SlabAllocatorTest, AdviseSaveRestore) {
   {
     SlabAllocator s(memory, size, config);
     // Wait until memory locking completes.
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    ASSERT_EVENTUALLY_TRUE([=]() {
+      return util::getNumResidentPages(memory, size) == util::getNumPages(size);
+    });
     testAdvise(s, numSlabs, numAdviseSlabs, memory, size);
     state = s.saveState();
   }
@@ -729,8 +726,10 @@ TEST_F(SlabAllocatorTest, AdviseSaveRestore) {
   {
     SlabAllocator r(state, memory, size, config);
     // Wait until memory locking completes.
-    /* sleep override */
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    ASSERT_EVENTUALLY_TRUE([=]() {
+      return util::getNumResidentPages(memory, size) ==
+             util::getNumPages(size - numAdviseSlabs * Slab::kSize);
+    });
     testRestoreAndAdvise(r, numAdviseSlabs, memory, size);
   }
 }
@@ -835,11 +834,11 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
 }
 
 namespace {
-auto expectAllAllocSizesValid = [](const std::set<uint32_t>& allocSizes) {
+void expectAllAllocSizesValid(const std::set<uint32_t>& allocSizes) {
   for (auto allocSize : allocSizes) {
     EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
   }
-};
+}
 } // namespace
 
 TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {

@@ -20,95 +20,22 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/cachebench/cache/CacheStats.h"
+#include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/cachebench/util/Exceptions.h"
-#include "cachelib/interface/components/RAMCacheComponent.h"
 
 using namespace facebook::cachelib::interface;
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-namespace {
-void setupConfig(LruAllocatorConfig& allocatorConfig,
-                 RAMCacheComponent::PoolConfig& poolConfig,
-                 const CacheConfig& config) {
-  constexpr size_t MB = 1024ULL * 1024ULL;
-
-  allocatorConfig.enablePoolRebalancing(
-      config.getRebalanceStrategy(),
-      std::chrono::seconds(config.poolRebalanceIntervalSec));
-
-  if (config.allocSizes.empty()) {
-    XDCHECK(config.minAllocSize >= sizeof(CacheValue));
-    allocatorConfig.setDefaultAllocSizes(util::generateAllocSizes(
-        config.allocFactor, config.maxAllocSize, config.minAllocSize, true));
-  } else {
-    std::set<uint32_t> allocSizes;
-    for (uint64_t s : config.allocSizes) {
-      XDCHECK(s >= sizeof(CacheValue));
-      allocSizes.insert(s);
-    }
-    allocatorConfig.setDefaultAllocSizes(std::move(allocSizes));
-  }
-
-  // Set hash table config
-  allocatorConfig.setAccessConfig(typename LruAllocator::AccessConfig{
-      static_cast<uint32_t>(config.htBucketPower),
-      static_cast<uint32_t>(config.htLockPower)});
-
-  allocatorConfig.configureChainedItems(typename LruAllocator::AccessConfig{
-      static_cast<uint32_t>(config.chainedItemHtBucketPower),
-      static_cast<uint32_t>(config.chainedItemHtLockPower)});
-
-  allocatorConfig.setCacheSize(config.cacheSizeMB * (MB));
-
-  if (!config.cacheDir.empty()) {
-    allocatorConfig.cacheDir = config.cacheDir;
-  }
-
-  if (config.usePosixShm) {
-    allocatorConfig.usePosixForShm();
-  }
-
-  allocatorConfig.setMemoryLocking(config.lockMemory);
-
-  if (!config.memoryTierConfigs.empty()) {
-    allocatorConfig.configureMemoryTiers(config.memoryTierConfigs);
-  }
-
-  if (config.enableItemDestructor) {
-    auto removeCB = [&](const typename LruAllocator::DestructorData&) {};
-    allocatorConfig.setItemDestructor(removeCB);
-  }
-
-  allocatorConfig.cacheName = kCachebenchCacheName;
-
-  // Set up pool config
-  poolConfig.name_ = "pool_1";
-  poolConfig.size_ = (config.cacheSizeMB * MB) - (4 * MB);
-  poolConfig.mmConfig_ = makeMMConfig<typename LruAllocator::MMConfig>(config);
-  poolConfig.ensureProvisionable_ = true;
-}
-} // namespace
 
 CacheComponentStressor::CacheComponentStressor(
     const CacheConfig& cacheConfig,
     StressorConfig config,
     std::unique_ptr<GeneratorBase>&& generator)
-    : CacheStressorBase(std::move(config), std::move(generator)) {
-  validate(cacheConfig);
-
-  LruAllocatorConfig lruConfig;
-  RAMCacheComponent::PoolConfig poolConfig;
-  setupConfig(lruConfig, poolConfig, cacheConfig);
-
-  auto cache =
-      RAMCacheComponent::create(std::move(lruConfig), std::move(poolConfig));
-  XCHECK(cache.hasValue())
-      << "Error code: " << static_cast<int8_t>(cache.error().code_) << ": "
-      << cache.error().error_;
-  cache_ = std::make_unique<RAMCacheComponent>(std::move(cache).value());
-}
+    : CacheStressorBase(std::move(config), std::move(generator)),
+      cache_(createCacheComponent(validate(cacheConfig))) {}
 
 void CacheComponentStressor::start() {
   setStartTime();
@@ -133,84 +60,12 @@ void CacheComponentStressor::start() {
   });
 }
 
-// TODO use CacheStressor::getCacheStats()
-Stats CacheComponentStressor::getCacheStats() const {
-  auto& cache = reinterpret_cast<RAMCacheComponent*>(cache_.get())->get();
-  Stats ret;
-
-  const auto cacheStats = cache.getGlobalCacheStats();
-  auto poolId = *cache.getPoolIds().begin();
-  PoolStats aggregate = cache.getPoolStats(poolId);
-  auto usageFraction =
-      1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
-                aggregate.poolUsableSize;
-  ret.poolUsageFraction.push_back(usageFraction);
-
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats{};
-
-  auto poolStats = cache.getPoolStats(poolId);
-  for (auto [cid, stats] : poolStats.mpStats.acStats) {
-    allocationClassStats[poolId][cid] = stats;
-  }
-
-  const auto rebalanceStats = cache.getSlabReleaseStats();
-
-  ret.allocationClassStats = allocationClassStats;
-  ret.numEvictions = aggregate.numEvictions();
-  ret.numItems = aggregate.numItems();
-  ret.evictAttempts = cacheStats.evictionAttempts;
-  ret.allocAttempts = cacheStats.allocAttempts;
-  ret.allocFailures = cacheStats.allocFailures;
-
-  ret.backgndEvicStats.nEvictedItems = cacheStats.evictionStats.numMovedItems;
-  ret.backgndEvicStats.nTraversals = cacheStats.evictionStats.runCount;
-  ret.backgndEvicStats.nClasses = cacheStats.evictionStats.totalClasses;
-  ret.backgndEvicStats.evictionSize = cacheStats.evictionStats.totalBytesMoved;
-
-  ret.backgndPromoStats.nPromotedItems =
-      cacheStats.promotionStats.numMovedItems;
-  ret.backgndPromoStats.nTraversals = cacheStats.promotionStats.runCount;
-
-  ret.numCacheGets = cacheStats.numCacheGets;
-  ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
-  ret.numCacheEvictions = cacheStats.numCacheEvictions;
-  ret.numRamDestructorCalls = cacheStats.numRamDestructorCalls;
-  ret.numNvmGets = cacheStats.numNvmGets;
-  ret.numNvmGetMiss = cacheStats.numNvmGetMiss;
-  ret.numNvmGetCoalesced = cacheStats.numNvmGetCoalesced;
-  ret.numNvmRejectsByExpiry = cacheStats.numNvmRejectsByExpiry;
-  ret.numNvmRejectsByClean = cacheStats.numNvmRejectsByClean;
-
-  ret.numNvmPuts = cacheStats.numNvmPuts;
-  ret.numNvmPutErrs = cacheStats.numNvmPutErrs;
-  ret.numNvmAbortedPutOnTombstone = cacheStats.numNvmAbortedPutOnTombstone;
-  ret.numNvmAbortedPutOnInflightGet = cacheStats.numNvmAbortedPutOnInflightGet;
-  ret.numNvmPutFromClean = cacheStats.numNvmPutFromClean;
-  ret.numNvmUncleanEvict = cacheStats.numNvmUncleanEvict;
-  ret.numNvmCleanEvict = cacheStats.numNvmCleanEvict;
-  ret.numNvmCleanDoubleEvict = cacheStats.numNvmCleanDoubleEvict;
-  ret.numNvmDestructorCalls = cacheStats.numNvmDestructorCalls;
-  ret.numNvmEvictions = cacheStats.numNvmEvictions;
-
-  ret.numNvmDeletes = cacheStats.numNvmDeletes;
-  ret.numNvmSkippedDeletes = cacheStats.numNvmSkippedDeletes;
-
-  ret.slabsReleased = rebalanceStats.numSlabReleaseForRebalance;
-  ret.numAbortedSlabReleases = cacheStats.numAbortedSlabReleases;
-  ret.numReaperSkippedSlabs = cacheStats.numReaperSkippedSlabs;
-  ret.moveAttemptsForSlabRelease = rebalanceStats.numMoveAttempts;
-  ret.moveSuccessesForSlabRelease = rebalanceStats.numMoveSuccesses;
-  ret.evictionAttemptsForSlabRelease = rebalanceStats.numEvictionAttempts;
-  ret.evictionSuccessesForSlabRelease = rebalanceStats.numEvictionSuccesses;
-
-  ret.isNvmCacheDisabled = true;
-
-  ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
-
-  return ret;
+std::unique_ptr<StatsBase> CacheComponentStressor::getCacheStats() const {
+  return std::make_unique<ComponentStats>(cache_->getStats());
 }
 
-void CacheComponentStressor::validate(const CacheConfig& cacheConfig) const {
+const CacheConfig& CacheComponentStressor::validate(
+    const CacheConfig& cacheConfig) const {
   if (config_.usesChainedItems()) {
     throw std::invalid_argument(
         "CacheComponentStressor does not support chained items");
@@ -219,12 +74,7 @@ void CacheComponentStressor::validate(const CacheConfig& cacheConfig) const {
         "CacheComponentStressor does not support trace timestamps");
   } else if (cacheConfig.nvmCacheSizeMB > 0) {
     throw std::invalid_argument(
-        "CacheComponentStressor does not support NVM caching");
-  } else if (cacheConfig.numPools > 1 ||
-             config_.opPoolDistribution.size() != 1 ||
-             config_.keyPoolDistribution.size() != 1) {
-    throw std::invalid_argument(
-        "CacheComponentStressor does not support multiple pools");
+        "Use cacheSizeMB to set cache size, even for flash caching");
   } else if (config_.opRatePerSec > 0 || config_.opDelayBatch > 0 ||
              config_.opDelayNs > 0) {
     throw std::invalid_argument(
@@ -236,6 +86,7 @@ void CacheComponentStressor::validate(const CacheConfig& cacheConfig) const {
     throw std::invalid_argument(
         "CacheComponentStressor does not support item destructor checking");
   }
+  return cacheConfig;
 }
 
 folly::coro::Task<void> CacheComponentStressor::stressCoroutine(
@@ -251,19 +102,15 @@ folly::coro::Task<void> CacheComponentStressor::stressCoroutine(
 
       const auto pid = static_cast<PoolId>(opPoolDist(gen));
       const auto& req = wg_->getReq(pid, gen, lastRequestId);
-      OpType op = req.getOp();
-      std::string_view key = req.key;
-      std::string oneHitKey;
-      if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
-        oneHitKey = Request::getUniqueKey();
-        key = oneHitKey;
-      }
+      // Save requestId before co_await: req is a reference to a thread-local
+      // that can be overwritten if the coroutine migrates threads.
+      auto requestId = req.requestId;
 
       OpResultType result = co_await executeOperation(stats, req, gen);
 
-      lastRequestId = req.requestId;
-      if (req.requestId) {
-        wg_->notifyResult(*req.requestId, result);
+      lastRequestId = requestId;
+      if (requestId) {
+        wg_->notifyResult(*requestId, result);
       }
     } catch (const cachebench::EndOfTrace&) {
       break;
@@ -276,12 +123,18 @@ folly::coro::Task<void> CacheComponentStressor::stressCoroutine(
 folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
     ThroughputStats& stats, const Request& req, std::mt19937_64& gen) {
   OpType op = req.getOp();
-  std::string_view key = req.key;
-  std::string oneHitKey;
+  // Extract all fields from req before any co_await. The req reference points
+  // to a thread-local that can be overwritten after coroutine thread migration.
+  std::string ownedKey(req.key);
   if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
-    oneHitKey = Request::getUniqueKey();
-    key = oneHitKey;
+    ownedKey = Request::getUniqueKey();
   }
+  std::string_view key = ownedKey;
+
+  size_t size = *(req.sizeBegin);
+  uint32_t ttlSecs = req.ttlSecs;
+  auto admFeatureMap = req.admFeatureMap;
+  auto itemValue = req.itemValue;
 
   switch (op) {
   case OpType::kLoneSet:
@@ -292,13 +145,14 @@ folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
         co_return OpResultType::kNop;
       }
     }
-    co_return co_await setKey(stats, key, *(req.sizeBegin), req.ttlSecs,
-                              req.admFeatureMap, req.itemValue);
+    co_return co_await setKey(stats, key, size, ttlSecs, admFeatureMap,
+                              itemValue);
   }
 
   case OpType::kLoneGet:
   case OpType::kGet: {
-    co_return co_await getKey(stats, key, req);
+    co_return co_await getKey(stats, key, size, ttlSecs, admFeatureMap,
+                              itemValue);
   }
 
   case OpType::kDel: {
@@ -356,7 +210,12 @@ folly::coro::Task<OpResultType> CacheComponentStressor::setKey(
 }
 
 folly::coro::Task<OpResultType> CacheComponentStressor::getKey(
-    ThroughputStats& stats, const std::string_view key, const Request& req) {
+    ThroughputStats& stats,
+    const std::string_view key,
+    size_t size,
+    uint32_t ttlSecs,
+    const std::unordered_map<std::string, std::string>& featureMap,
+    const std::string& itemValue) {
   ++stats.get;
 
   auto result = co_await cache_->find(Key{key});
@@ -369,8 +228,7 @@ folly::coro::Task<OpResultType> CacheComponentStressor::getKey(
     ++stats.getMiss;
     if (config_.enableLookaside) {
       // Allocate and insert on miss
-      co_await setKey(stats, key, *(req.sizeBegin), req.ttlSecs,
-                      req.admFeatureMap, req.itemValue);
+      co_await setKey(stats, key, size, ttlSecs, featureMap, itemValue);
     }
     co_return OpResultType::kGetMiss;
   }
@@ -392,7 +250,7 @@ folly::coro::Task<OpResultType> CacheComponentStressor::deleteKey(
 void CacheComponentStressor::populateItem(AllocatedHandle& handle,
                                           const std::string& itemValue) {
   // For the generic interface, we'll just store the itemValue or hardcoded
-  // string Note: This is simplified compared to Cache<Allocator> which has
+  // string. NOTE: This is simplified compared to Cache<Allocator> which has
   // special methods for setting uint64 and string values with consistency
   // checking
   char* data = reinterpret_cast<char*>(handle->getMemory());
@@ -401,6 +259,7 @@ void CacheComponentStressor::populateItem(AllocatedHandle& handle,
   // Copy the item value into the handle's memory
   auto& value = itemValue.empty() ? hardcodedString_ : itemValue;
   size_t copySize = std::min(value.size(), static_cast<size_t>(dataSize));
+  XCHECK_GT(copySize, 0ULL);
   std::strncpy(data, value.c_str(), copySize);
   data[copySize - 1] = '\0';
 }

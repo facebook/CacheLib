@@ -30,6 +30,7 @@ namespace cachelib {
  * A content can be split and stored in multiple pieces in cache. The class
  * provides the utility to map content object to pieces.
  *
+ * This class handles single contiguous range requests.
  */
 class GenericPieces : public GenericPiecesBase {
  public:
@@ -49,110 +50,55 @@ class GenericPieces : public GenericPiecesBase {
                 uint64_t fullBodyLen,
                 const RequestRange* range);
 
-  void resetFromRequestRange(const RequestRange& range);
+  /**
+   * Overrides from GenericPiecesBase
+   */
+  uint64_t getStartPieceIndex() const override { return startPieceIndex_; }
+  uint64_t getEndPieceIndex() const override { return endPieceIndex_; }
 
-  bool morePiecesToFetch() const {
-    return curFetchingPieceIndex_ < endPieceIndex_;
+  uint64_t getTargetNumPieces() const override {
+    return getEndPieceIndex() - getStartPieceIndex() + 1;
   }
 
+  uint64_t getNumFetchedPieces() const override {
+    return curFetchingPieceIndex_ - startPieceIndex_;
+  }
+
+  void updateFetchIndex() override { curFetchingPieceIndex_ += 1; }
+
   /**
-   * Indicates we finished fetching a piece and are ready to fetch the
-   * next one.
+   * Reset piece range based on the given request range.
+   * If range is invalid, don't modify the piece range. Only reset the fetch
+   * index.
    */
-  void updateFetchIndex() { curFetchingPieceIndex_ += 1; }
+  void resetFromRequestRange(const RequestRange& range);
 
   void setFetchIndex(uint64_t pieceIndex) {
     curFetchingPieceIndex_ = pieceIndex;
   }
 
-  uint64_t getFirstByteOffsetOfCurPiece() const {
-    return curFetchingPieceIndex_ * getPieceSize();
-  }
-
-  uint64_t getLastByteOffsetOfLastPiece() const {
-    return std::min((endPieceIndex_ + 1) * pieceSize_ - 1, fullBodyLen_ - 1);
-  }
-
   uint64_t getRemainingBytes() const {
-    if (curFetchingPieceIndex_ > endPieceIndex_) {
+    if (curFetchingPieceIndex_ > getEndPieceIndex()) {
       return 0;
     }
     return getLastByteOffsetOfLastPiece() - getFirstByteOffsetOfCurPiece() + 1;
   }
 
   bool isPieceWithinBound(uint64_t pieceIndex) const {
-    return pieceIndex <= endPieceIndex_;
-  }
-
-  uint64_t getSizeOfAPiece(uint64_t pieceIndex) const {
-    // The size is full piece size when it's not the last piece
-    if (pieceIndex < endPieceIndex_) {
-      return pieceSize_;
-    } else {
-      return getLastByteOffsetOfLastPiece() % pieceSize_ + 1;
-    }
+    return pieceIndex <= getEndPieceIndex();
   }
 
   // Return the byte size of all pieces
   uint64_t getTotalSize() const {
-    return getLastByteOffsetOfLastPiece() - startPieceIndex_ * getPieceSize() +
-           1;
+    return getLastByteOffsetOfLastPiece() -
+           getStartPieceIndex() * getPieceSize() + 1;
   }
-
-  uint64_t getRequestedSizeOfAPiece(uint64_t pieceIndex) const {
-    if (startPieceIndex_ == endPieceIndex_) {
-      XDCHECK_EQ(pieceIndex, startPieceIndex_);
-      return requestedEndByte_ - requestedStartByte_ + 1;
-    }
-
-    if (pieceIndex == startPieceIndex_) {
-      // For the first piece, trim bytes before requestedStartByte_
-      return pieceSize_ - requestedStartByte_ % pieceSize_;
-    } else if (pieceIndex == endPieceIndex_) {
-      // For the last piece, trim bytes after requestedEndByte_
-      return requestedEndByte_ % pieceSize_ + 1;
-    } else {
-      return pieceSize_;
-    }
-  }
-
-  uint64_t getBytesToTrimAtStart() const {
-    return requestedStartByte_ - startPieceIndex_ * pieceSize_;
-  }
-
-  uint64_t getBytesToTrimAtEnd() const {
-    return getLastByteOffsetOfLastPiece() - requestedEndByte_;
-  }
-
-  uint64_t getRequestedSize() const {
-    return (requestedEndByte_ - requestedStartByte_ + 1);
-  }
-
-  uint64_t getStartPieceIndex() const { return startPieceIndex_; }
-  [[nodiscard]] uint64_t getStartPieceOffset() const {
-    return startPieceIndex_ * pieceSize_;
-  }
-  uint64_t getEndPieceIndex() const { return endPieceIndex_; }
-  uint64_t getRequestedStartByte() const { return requestedStartByte_; }
-  uint64_t getRequestedEndByte() const { return requestedEndByte_; }
-  uint64_t getFirstByteOffsetToFetch() const { return firstByteOffsetToFetch_; }
-
-  /**
-   * Get the number of pieces we need to fetch (excluding the header piece)
-   */
-  uint64_t getTargetNumPieces() const;
 
  protected:
-  // Start byte of the request content (or range)
-  uint64_t requestedStartByte_;
-  // End byte of the request content (or range)
-  uint64_t requestedEndByte_;
   // Start piece index of the request content (or range)
   uint64_t startPieceIndex_;
   // End piece index of the request content (or range)
   uint64_t endPieceIndex_;
-  // Starting byte offset of the first piece
-  uint64_t firstByteOffsetToFetch_;
 };
 
 } // namespace cachelib

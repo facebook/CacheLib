@@ -18,6 +18,8 @@
 
 #include <folly/Format.h>
 
+#include <vector>
+
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook::cachelib::navy {
@@ -31,6 +33,53 @@ uint8_t safeInc(uint8_t val) {
   return val;
 }
 } // namespace
+
+class SparseMapIndex::IteratorImpl final : public Index::Iterator::Impl {
+ public:
+  explicit IteratorImpl(const SparseMapIndex& index) : index_{&index} {
+    loadBucket(0);
+  }
+
+  const Entry& entry() const override {
+    XDCHECK(!atEnd());
+    XDCHECK_LT(entryIdx_, entries_.size());
+    return entries_.at(entryIdx_);
+  }
+
+  void increment() override {
+    XDCHECK(!atEnd());
+    ++entryIdx_;
+    if (entryIdx_ >= entries_.size()) {
+      loadBucket(bucketMap_ + 1);
+    }
+  }
+
+  bool atEnd() const override { return bucketMap_ >= index_->numBucketMaps_; }
+
+ private:
+  void loadBucket(uint32_t startBucketMap) {
+    entries_.clear();
+    entryIdx_ = 0;
+
+    for (bucketMap_ = startBucketMap; bucketMap_ < index_->numBucketMaps_;
+         ++bucketMap_) {
+      auto lock = std::shared_lock{index_->getMutexOfBucketMap(bucketMap_)};
+      entries_.reserve(index_->bucketMaps_[bucketMap_].size());
+      for (const auto& [subkey, record] : index_->bucketMaps_[bucketMap_]) {
+        entries_.push_back(
+            Entry{(static_cast<uint64_t>(bucketMap_) << 32) | subkey, record});
+      }
+      if (!entries_.empty()) {
+        return;
+      }
+    }
+  }
+
+  const SparseMapIndex* index_{nullptr};
+  uint32_t bucketMap_{0};
+  size_t entryIdx_{0};
+  std::vector<Entry> entries_{};
+};
 
 void SparseMapIndex::initialize() {
   XDCHECK(numBucketMaps_ != 0 && numBucketMapsPerMutex_ != 0);
@@ -110,6 +159,18 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
   }
   map.try_emplace(subkey(key), address, sizeHint);
 
+  return {};
+}
+
+Index::LookupResult SparseMapIndex::insertIfNotExists(uint64_t key,
+                                                      uint32_t address,
+                                                      uint16_t sizeHint) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+  auto [it, inserted] = map.try_emplace(subkey(key), address, sizeHint);
+  if (!inserted) {
+    return LookupResult{true, it->second};
+  }
   return {};
 }
 
@@ -268,6 +329,10 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
                                       entrySize);
   }
   return range;
+}
+
+Index::Iterator SparseMapIndex::begin() const {
+  return Iterator{std::make_unique<IteratorImpl>(*this)};
 }
 
 void SparseMapIndex::persist(

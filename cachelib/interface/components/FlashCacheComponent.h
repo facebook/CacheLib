@@ -17,9 +17,18 @@
 #pragma once
 
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/utils/CoroFiberAdapter.h"
+#include "cachelib/interface/utils/Persistence.h"
+#include "cachelib/interface/utils/ShardedSerializer.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 
 namespace facebook::cachelib::interface {
+class FlashCacheItem;
+class ConsistentFlashCacheItem;
+
+namespace test {
+class FlashCacheFactory;
+}
 
 /**
  * A cache component that uses Cachelib's BlockCache flash cache without RAM
@@ -32,19 +41,50 @@ namespace facebook::cachelib::interface {
  *
  * All APIs are cancellable.
  */
-class FlashCacheComponent : public CacheComponent {
+class FlashCacheComponent : public CacheComponentWithStats {
  public:
+  class PersistenceConfig : public utils::PersistenceConfigBase {
+   public:
+    static PersistenceConfig noPersistenceOrRecovery();
+    static PersistenceConfig persistenceAndRecovery(size_t metadataSize);
+    static PersistenceConfig persistenceButNoRecovery(size_t metadataSize);
+
+    FOLLY_ALWAYS_INLINE size_t metadataSize() const noexcept {
+      return metadataSize_;
+    }
+
+   private:
+    // Space reserved on the device for persistence and recovery. A good default
+    // is 0.5% of the cache size.
+    size_t metadataSize_;
+
+    PersistenceConfig(bool persist, bool recover, size_t metadataSize)
+        : PersistenceConfigBase(persist, recover),
+          metadataSize_(metadataSize) {}
+  };
+
   /**
    * Factory method to create a new FlashCacheComponent, i.e., wrapper around
    * BlockCache.  Validates the config before actually creating the cache.
    *
+   * Note: don't set config.device, config.checkExpired or
+   * config.cacheBaseOffset - create() will set them internally
+   *
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
+   * @param device the device to use for the cache
+   * @param executorConfig the config for the fiber worker executor
+   * @param persistenceConfig persistence/recovery configuration
    * @return FlashCacheComponent if the flash cache could be initialized, an
    * error otherwise.
    */
   static Result<FlashCacheComponent> create(
-      std::string name, navy::BlockCache::Config&& config) noexcept;
+      std::string name,
+      navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device,
+      const utils::CoroFiberAdapter::Config& executorConfig = {},
+      PersistenceConfig persistenceConfig =
+          PersistenceConfig::noPersistenceOrRecovery()) noexcept;
 
   // ------------------------------ Interface ------------------------------ //
 
@@ -59,16 +99,194 @@ class FlashCacheComponent : public CacheComponent {
       Key key) override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
+  UnitResult shutdown() override;
+  CacheComponentStats getStats() const noexcept override;
+
+ protected:
+  FlashCacheComponent(std::string&& name,
+                      navy::BlockCache::Config&& config,
+                      std::unique_ptr<navy::Device> device,
+                      const utils::CoroFiberAdapter::Config& executorConfig,
+                      PersistenceConfig persistenceConfig);
+
+  // Try to recover cache from persistent storage
+  void tryRecover();
+
+  // Helpers in which the returned cache item is templatized so we can share the
+  // implementation with child classes
+  template <typename CacheItemT>
+  folly::coro::Task<Result<AllocatedHandle>> allocateGeneric(
+      Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs);
+  template <typename CacheItemT>
+  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWriteGeneric(
+      Key key);
 
  private:
   std::string name_;
+  // Note: device_ must be declared before cache_ so that it outlives it
+  std::unique_ptr<navy::Device> device_;
   std::unique_ptr<navy::BlockCache> cache_;
+  std::unique_ptr<utils::CoroFiberAdapter> fiberWorkers_;
+  PersistenceConfig persistenceConfig_;
+  mutable std::unique_ptr<util::PercentileStats> coroToFiberLatency_;
 
-  FlashCacheComponent(std::string&& name, navy::BlockCache::Config&& config);
+  // Runs func() on a worker fiber
+  template <typename FuncT,
+            typename ReturnT = std::invoke_result_t<FuncT>,
+            typename CleanupFuncT = std::function<void(ReturnT)>>
+  folly::coro::Task<ReturnT> onWorkerThread(FuncT&& func,
+                                            CleanupFuncT&& cleanup = {});
+
+  // Helpers used by multiple other APIs
+  using AllocData = navy::BlockCache::AllocData;
+  folly::coro::Task<Result<AllocData>> allocateImpl(const HashedKey& key,
+                                                    uint32_t valueSize);
+  bool writeBackImpl(CacheItem& item, bool allowReplace);
+  folly::coro::Task<UnitResult> insertImpl(AllocatedHandle&& handle,
+                                           bool allowReplace);
 
   // ------------------------------ Interface ------------------------------ //
 
-  folly::coro::Task<void> release(CacheItem& item, bool inserted) override;
+  UnitResult writeBack(CacheItem& item) override;
+  void release(CacheItem& item, bool inserted) override;
+
+  friend class FlashCacheItem;
+  friend class ConsistentFlashCacheItem;
+  friend class test::FlashCacheFactory;
+};
+
+/**
+ * Same as FlashCacheComponent but provides strong consistency. Shards
+ * operations by key and serializes operations per shard to guarantee
+ * linearizability.
+ *
+ * allocate() and findToWrite() return a cache item that holds on to the lock
+ * after returning. The locks will get automatically released when the cache
+ * item gets destroyed (which should be when the handles get destroyed). This is
+ * because these APIs allocate space and store a region descriptor in order to
+ * allow writing back after the user has finished modifying the data
+ * (insert()/insertOrReplace() for AllocatedHandles, writeBack() for
+ * WriteHandles). Holding on to the locks prevents the following race:
+ *
+ *  - Coro A calls allocate()/findToWrite() and allocates the last space in a
+ *    region. It returns while holding on to the region descriptor.
+ *  - Coro B calls allocate()/findToWrite(), which grabs the lock. It launches
+ *    a fiber to allocate space and blocks waiting for the allocation.
+ *  - The fiber sees that the region is full and tries to flush the region. It
+ *    blocks, however, because Coro A still has an outstanding reference.
+ *  - Coro A tries to write the modified data back to the region. If we didn't
+ *    hold on to the lock, it would try to re-acquire the lock and deadlock
+ *    since Coro B already has the lock.
+ *
+ * Coro A holding on to the lock prevents Coro B from grabbing it and launching
+ * the allocation fiber (and creating the deadlock cycle).
+ *
+ * NOTE: ReadHandles returned from find() *do not* hold on to a region
+ * descriptor and therefore do not need to hold on to the lock.
+ */
+class ConsistentFlashCacheComponent : public FlashCacheComponent {
+ public:
+  /**
+   * Factory method to create a new ConsistentFlashCacheComponent.  Validates
+   * the config before actually creating the cache.
+   *
+   * Note: don't set config.device, config.checkExpired or
+   * config.cacheBaseOffset - create() will set them internally
+   *
+   * @param name name of the flash cache
+   * @param config the BlockCache::Config to use for the cache
+   * @param device the device to use for the cache
+   * @param hasher the hasher to use for sharding
+   * @param shardsPower the number of shards to use (2^shardsPower) when
+   * serializing operations, max is ShardedSerializer::kMaxShardsPower
+   * @param executorConfig the config for the fiber worker executor
+   * @param persistenceConfig persistence/recovery configuration
+   * @return ConsistentFlashCacheComponent if the flash cache could be
+   * initialized, an error otherwise.
+   */
+  static Result<ConsistentFlashCacheComponent> create(
+      std::string name,
+      navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device,
+      std::unique_ptr<Hash> hasher,
+      uint8_t shardsPower,
+      const utils::CoroFiberAdapter::Config& executorConfig = {},
+      PersistenceConfig persistenceConfig =
+          PersistenceConfig::noPersistenceOrRecovery()) noexcept;
+
+  // ------------------------------ Interface ------------------------------ //
+
+  // don't need to override getName()
+
+  /**
+   * Same as FlashCacheComponent::allocate() but runs while holding an exclusive
+   * lock. The returned handle holds the lock until it is either inserted or
+   * destroyed.
+   */
+  folly::coro::Task<Result<AllocatedHandle>> allocate(
+      Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) override;
+
+  // don't need to override insert() or insertOrReplace() since AllocatedHandle
+  // already holds the appropriate lock
+
+  /**
+   * Same as FlashCacheComponent::find() but runs while holding a shared lock.
+   * The returned handle *does not* hold on to the lock after returning.
+   */
+  folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override;
+
+  /**
+   * Same as FlashCacheComponent::findToWrite() but runs while holding an
+   * exclusive lock. The returned handle holds the lock until it is destroyed
+   * (after write back if the handle is marked dirty).
+   */
+  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+      Key key) override;
+
+  /**
+   * Same as FlashCacheComponent::remove() but runs while holding an exclusive
+   * lock.
+   */
+  folly::coro::Task<Result<bool>> remove(Key key) override;
+  folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
+
+  CacheComponentStats getStats() const noexcept override;
+
+ private:
+  // Per-operation latency counters for lock acquisition
+  struct LockLatencyCounters {
+    detail::LatencyMeasurementCounter allocate_;
+    detail::LatencyMeasurementCounter find_;
+    detail::LatencyMeasurementCounter findToWrite_;
+    detail::LatencyMeasurementCounter removeByKey_;
+    detail::LatencyMeasurementCounter removeByHandle_;
+  };
+
+  utils::ShardedSerializer serializer_;
+  std::unique_ptr<LockLatencyCounters> lockLatency_{
+      std::make_unique<LockLatencyCounters>()};
+
+  ConsistentFlashCacheComponent(
+      std::string&& name,
+      navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device,
+      const utils::CoroFiberAdapter::Config& executorConfig,
+      FlashCacheComponent::PersistenceConfig persistenceConfig,
+      std::unique_ptr<Hash> hasher,
+      uint8_t shardsPower);
+
+  // Helpers to time lock acquisition latency
+  folly::coro::Task<utils::ShardedSerializer::WriteLock> timedWlock(
+      Key key, detail::LatencyMeasurementCounter& counter);
+  folly::coro::Task<utils::ShardedSerializer::ReadLock> timedRlock(
+      Key key, detail::LatencyMeasurementCounter& counter);
+
+  // ------------------------------ Interface ------------------------------ //
+
+  // don't need to override writeBack() since WriteHandle already holds the
+  // appropriate lock; don't need to override release() either
+
+  using Base = FlashCacheComponent;
 };
 
 } // namespace facebook::cachelib::interface

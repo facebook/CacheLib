@@ -53,6 +53,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   GlobalCacheStats getGlobalCacheStats() const override { return {}; }
   SlabReleaseStats getSlabReleaseStats() const override { return {}; }
   void incrementAbortedSlabReleases() override {}
+  bool isShutdownInProgress() const override final { return false; }
   CacheMemoryStats getCacheMemoryStats() const override { return {}; }
   std::set<PoolId> getRegularPoolIdsForResize() const override { return {}; }
   std::set<PoolId> getRegularPoolIds() const override { return {}; }

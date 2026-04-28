@@ -22,8 +22,12 @@ namespace navy {
 
 CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     uint64_t bid, uint64_t key, const EntryRecord& record) {
+  if (readMode_) {
+    return CombinedEntryStatus::kError;
+  }
+
   bool update = false;
-  uint16_t keyIdx = numStoredEntries_;
+  uint16_t keyIdx = numStoredEntries();
 
   // Check if the key already exists
   auto it = storedKeys_.find(key);
@@ -41,14 +45,25 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     if (posInfo.flag.removed == 1) {
       // In case it was removed before
       posInfo.flag.removed = 0;
+      posInfo.bid = bid;
       numValidEntries_++;
-      // It's not actually updated since it had been removed before
+      increaseKeysForBid(bid);
+      // It's not actually 'updated' since it had been removed before
       return CombinedEntryStatus::kOk;
     }
+
+    // bid may have been changed if it's assigned to a different bucket
+    if (posInfo.bid != bid) {
+      decreaseKeysForBid(posInfo.bid);
+      increaseKeysForBid(bid);
+      posInfo.bid = bid;
+    }
     return CombinedEntryStatus::kUpdated;
+
   } else {
+    // It's not 'update' case.
     EntryPos pos = curPos_ - sizeof(EntryRecord);
-    if (pos < getEmptySpacePos(numStoredEntries_ + 1)) {
+    if (pos < getEmptySpacePos(numStoredEntries() + 1)) {
       // There's no space to add more entry here
       return CombinedEntryStatus::kFull;
     }
@@ -56,7 +71,8 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     // Add the entry info for the newly added entry
     entryPosInfoRef(keyIdx) = {bid, key, pos};
     storedKeys_.insert({key, keyIdx});
-    numStoredEntries_++;
+    increaseKeysForBid(bid);
+    headerPtr_->numStoredEntries++;
     numValidEntries_++;
     curPos_ = pos;
     return CombinedEntryStatus::kOk;
@@ -65,6 +81,12 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
 
 folly::Expected<EntryRecord, CombinedEntryStatus>
 CombinedEntryBlock::getIndexEntry(uint64_t key) {
+  if (readMode_ && !parsed_) {
+    // TODO: need to scan the buffer and find the given key
+    // Return kNotFound for now
+    return folly::makeUnexpected(CombinedEntryStatus::kNotFound);
+  }
+
   auto it = storedKeys_.find(key);
   if (it == storedKeys_.end() ||
       entryPosInfoRef(it->second).flag.removed == 1) {
@@ -75,6 +97,10 @@ CombinedEntryBlock::getIndexEntry(uint64_t key) {
 }
 
 CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
+  if (readMode_) {
+    return CombinedEntryStatus::kError;
+  }
+
   auto it = storedKeys_.find(key);
   if (it == storedKeys_.end() ||
       entryPosInfoRef(it->second).flag.removed == 1) {
@@ -89,15 +115,35 @@ CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
   // marked as removed. (When CombinedEntryBlock was already written to flash,
   // any modification including removing means new write to the different
   // CombinedEntryBlock anyway, so handling will be different for that)
+  auto bid = entryPosInfoRef(it->second).bid;
   entryPosInfoRef(it->second).flag.removed = 1;
+  decreaseKeysForBid(bid);
   numValidEntries_--;
   return CombinedEntryStatus::kOk;
 }
 
 bool CombinedEntryBlock::peekIndexEntry(uint64_t key) {
+  if (readMode_ && !parsed_) {
+    // TODO: need to scan the buffer and find the given key.
+    // Return false for now
+    return false;
+  }
   auto it = storedKeys_.find(key);
   return (it != storedKeys_.end() &&
           entryPosInfoRef(it->second).flag.removed == 0);
+}
+
+void CombinedEntryBlock::clear() {
+  if (!readMode_) {
+    // Clear all the contents of the block. Buffer itself will be reused.
+    storedKeys_.clear();
+    keysForBids_.clear();
+    numValidEntries_ = 0;
+    curPos_ = getSize();
+    initHeader();
+  } else {
+    XDCHECK(false);
+  }
 }
 
 } // namespace navy

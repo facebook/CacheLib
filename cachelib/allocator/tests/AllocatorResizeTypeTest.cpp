@@ -56,6 +56,10 @@ TYPED_TEST(AllocatorResizeTest, MemMonitorEmptySlabs) {
   this->testMemMonitorEmptySlabs();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisedCountsMatchReality) {
+  this->testMemMonitorAdvisedCountsMatchReality();
+}
+
 TYPED_TEST(AllocatorResizeTest, MemoryAdviseWithSaveRestore) {
   this->testMemoryAdviseWithSaveRestore();
 }
@@ -76,8 +80,20 @@ TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit3) {
   this->testMemMonitorAdvisesAwayOverLimit3();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayAllCacheBug) {
+  this->testMemMonitorAdvisesAwayAllCacheBug();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesTimeout) {
+  this->testMemMonitorAdvisesTimeout();
+}
+
 TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
+}
+
+TYPED_TEST(AllocatorResizeTest, PoolResizerWithSlabReleaseTimeouts) {
+  this->testPoolResizerWithSlabReleaseTimeouts();
 }
 
 } // end of namespace tests

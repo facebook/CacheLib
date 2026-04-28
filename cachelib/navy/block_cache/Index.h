@@ -19,6 +19,7 @@
 #include <folly/Portability.h>
 
 #include <cassert>
+#include <memory>
 
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/common/Types.h"
@@ -120,6 +121,65 @@ class Index {
     size_t minUsedBytes{0};
   };
 
+  struct Entry {
+    // Implementation-defined opaque token identifying this snapshotted entry.
+    // Callers should not interpret it; pass the Entry back to the owning index
+    // (e.g. isValid()) or BlockCache APIs to act on it.
+    uint64_t token{0};
+    ItemRecord record{};
+  };
+
+  class Iterator {
+   public:
+    class Impl {
+     public:
+      Impl() = default;
+      Impl(const Impl&) = default;
+      Impl& operator=(const Impl&) = default;
+      Impl(Impl&&) noexcept = default;
+      Impl& operator=(Impl&&) noexcept = default;
+      virtual ~Impl() = default;
+
+      virtual const Entry& entry() const = 0;
+      virtual void increment() = 0;
+      virtual bool atEnd() const = 0;
+    };
+
+    Iterator() = default;
+    explicit Iterator(std::unique_ptr<Impl> impl) : impl_{std::move(impl)} {
+      if (impl_ && impl_->atEnd()) {
+        impl_.reset();
+      }
+    }
+
+    const Entry& operator*() const {
+      XDCHECK(impl_);
+      return impl_->entry();
+    }
+
+    const Entry* operator->() const { return &(**this); }
+
+    Iterator& operator++() {
+      XDCHECK(impl_);
+      impl_->increment();
+      if (impl_->atEnd()) {
+        impl_.reset();
+      }
+      return *this;
+    }
+
+    // Equality is only defined for checking against end(). Non-end iterators
+    // are not generally comparable across implementations.
+    bool operator==(const Iterator& other) const {
+      return !impl_ && !other.impl_;
+    }
+
+    bool operator!=(const Iterator& other) const { return !(*this == other); }
+
+   private:
+    std::unique_ptr<Impl> impl_;
+  };
+
   // Internally, FixedSizeIndex will maintain each entry as PackedItemRecord
   // which is reduced size version of Index::ItemRecord, and there is missing
   // precision or info due to the smaller size, but those missing details are
@@ -148,6 +208,11 @@ class Index {
     // address (for the entry), so it will be always the address of the end of
     // entry descriptor. See BlockCache.h for more details)
     static constexpr uint32_t kInvalidAddress{0};
+    // Likewise, address '1' won't be used for index address with current BC
+    // implementation/design. So we are using it to indicate it's in active
+    // Combined entry block (Still in memory and not written to region yet, so
+    // no region address was assigned yet).
+    static constexpr uint32_t kActiveCebAddress{1};
 
     PackedItemRecord() {}
 
@@ -212,11 +277,19 @@ class Index {
 
     bool isValid() const { return isValidAddress(address); }
     uint16_t getSizeHint() const { return sizeExpToHint(info.sizeExp); }
+    bool isCombinedEntry() const {
+      return info.sizeExp == kCombinedEntrySizeExp;
+    }
+    void setCombinedEntry() {
+      info.sizeExp = kCombinedEntrySizeExp;
+      address = kActiveCebAddress;
+      // reset the current hits to 0
+      // This hit count will be for the combined entry itself
+      info.curHits = 0;
+    }
 
-    int bumpCurHits() {
-      if (info.curHits < 3) {
-        info.curHits++;
-      }
+    int bumpCurHits(uint8_t hits = 1) {
+      info.curHits = (uint8_t)(std::min(info.curHits + hits, 3));
       return info.curHits;
     }
   };
@@ -246,6 +319,10 @@ class Index {
   virtual LookupResult insert(uint64_t key,
                               uint32_t address,
                               uint16_t sizeHint) = 0;
+  // Same as above but fails if the key already exists
+  virtual LookupResult insertIfNotExists(uint64_t key,
+                                         uint32_t address,
+                                         uint16_t sizeHint) = 0;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
@@ -278,8 +355,23 @@ class Index {
   // sparse_map) this function should return max/min range of memory footprint
   virtual MemFootprintRange computeMemFootprintRange() const = 0;
 
+  virtual Iterator begin() const = 0;
+  Iterator end() const { return {}; }
+
   // Exports index stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
+
+  /////////////////////////////////////////////////////////////////////////////
+  // APIs only for the index supporting Combined Entry Block.
+  //
+
+  // Return true if the given bucket is in active combined entry block.
+  // Should be called under proper lock is held.
+  virtual bool isActiveCombinedEntryBucketLocked(uint64_t bid) const = 0;
+  // Update the combined entry bucket's address to the given one.
+  // Should be called under proper lock is held.
+  virtual void updateCombinedEntryBucketLocked(uint64_t bid,
+                                               uint32_t address) = 0;
 
  protected:
   // Updates hits information of a key.

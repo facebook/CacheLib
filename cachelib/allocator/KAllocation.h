@@ -133,6 +133,15 @@ class CACHELIB_PACKED_ATTR KAllocation {
     return Key{reinterpret_cast<char*>(getData()), keySize};
   }
 
+  // same as getKey() but ensures we don't create a key that could extend
+  // outside the given allocation size (safe to call on unallocated data)
+  const Key getKeySized(uint32_t allocSize) const noexcept {
+    uint32_t headerSize = isSmallKey() ? sizeof(PackedSize)
+                                       : sizeof(PackedSize) + sizeof(LargeKey);
+    auto keySize = std::min(allocSize - headerSize, getKeySize());
+    return Key{reinterpret_cast<char*>(getData()), keySize};
+  }
+
   // updates the current key with the new one. The key size must match.
   void changeKey(Key key) {
     if (key.size() != getKeySize()) {
@@ -202,8 +211,21 @@ class CACHELIB_PACKED_ATTR KAllocation {
       //    internal representation
       auto badKey =
           (key.start()) ? std::string(key.start(), key.size()) : std::string{};
+
+      std::string reason;
+      if (!key.start()) {
+        reason = "key has null data pointer";
+      } else if (key.empty()) {
+        reason = "key is empty";
+      } else if (key.size() > kKeyMaxLen) {
+        reason = folly::sformat(
+            "key size {} exceeds maximum allowed {}", key.size(), kKeyMaxLen);
+      }
+
       throw std::invalid_argument{
-          folly::sformat("Invalid cache key : {}", folly::humanify(badKey))};
+          folly::sformat("Invalid cache key: {} (reason: {})",
+                         folly::humanify(badKey),
+                         reason)};
     }
   }
 
@@ -216,8 +238,23 @@ class CACHELIB_PACKED_ATTR KAllocation {
     if (!isSmallKeyValid(key)) {
       auto badKey =
           (key.start()) ? std::string(key.start(), key.size()) : std::string{};
+
+      std::string reason;
+      if (!key.start()) {
+        reason = "key has null data pointer";
+      } else if (key.empty()) {
+        reason = "key is empty";
+      } else if (key.size() > kKeyMaxLenSmall) {
+        reason = folly::sformat(
+            "key size {} exceeds maximum allowed for small keys {}",
+            key.size(),
+            kKeyMaxLenSmall);
+      }
+
       throw std::invalid_argument{
-          folly::sformat("Invalid cache key : {}", folly::humanify(badKey))};
+          folly::sformat("Invalid cache key: {} (reason: {})",
+                         folly::humanify(badKey),
+                         reason)};
     }
   }
 

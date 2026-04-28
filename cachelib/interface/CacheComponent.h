@@ -21,9 +21,21 @@
 #include "cachelib/interface/CacheItem.h"
 #include "cachelib/interface/Handle.h"
 #include "cachelib/interface/Result.h"
+#include "cachelib/interface/Stats.h"
 
 namespace facebook::cachelib::interface {
 
+/**
+ * A cache that manages a section of storage.
+ *
+ * The interface is as generic as possible to give components maximum
+ * implementation flexibility.  APIs are coro-compatible so components can run
+ * work asynchronously (some components may run synchronously under the hood).
+ *
+ * NOTE: most APIs take the key argument as a Key (essentially a string view).
+ * This allows maximum performance, but users *must* ensure the string view is
+ * constant across coroutine suspension points.
+ */
 class CacheComponent {
  public:
   virtual ~CacheComponent() = default;
@@ -43,7 +55,7 @@ class CacheComponent {
    * Allocate space for a new item. Returns an AllocatedHandle that can be used
    * to access the allocated memory.
    *
-   * Note: the item *must* be inserted before it is visible for lookups.
+   * NOTE: the item *must* be inserted before it is visible for lookups.
    * Allocated items that are not inserted into cache will be freed when the
    * returned AllocatedHandle goes out of scope.  In other words if you've got
    * an AllocatedHandle, it's not yet in cache!
@@ -61,7 +73,9 @@ class CacheComponent {
 
   /**
    * Insert an item into cache using an AllocatedHandle returned by allocate().
-   * If inserted, the AllocatedHandle is no longer usable (moved out).
+   * If inserted, the AllocatedHandle is no longer usable (moved out).  If not
+   * inserted, the handle *may or may not* be usable; the behavior is
+   * implementation-defined.  You can check by using `if (handle)`.
    *
    * @param handle AllocatedHandle returned by allocate()
    * @return folly::unit or an error result otherwise
@@ -72,6 +86,9 @@ class CacheComponent {
    * Same as above, but replaces the item if it was already inserted into cache.
    * Returns an AllocatedHandle to the old item if it was replaced. The input
    * AllocatedHandle is no longer usable (moved out).
+   *
+   * NOTE: it may be too expensive for some implementations to return the old
+   * item; they'll just return std::nullopt.
    *
    * @param handle AllocatedHandle returned by allocate()
    * @return an empty optional if the item was inserted, an AllocatedHandle to
@@ -84,6 +101,10 @@ class CacheComponent {
   /**
    * Find an item in cache. Returns a handle if found, std::nullopt otherwise.
    * find() is for read-only access, findToWrite() is for write access.
+   *
+   * NOTE: if you write to the handle returned by findToWrite(), you must *must*
+   * mark the handle as dirty in order for the cache component to flush the
+   * write to the underlying storage.
    *
    * @param key cache item key
    * @return a handle if found, std::nullopt if not found or an error result
@@ -109,7 +130,31 @@ class CacheComponent {
    */
   virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
 
+  /**
+   * Shut down the cache component. Persists state if the component was
+   * configured for persistence and stops all background workers. The component
+   * is no longer usable after calling shutdown().
+   *
+   * @return folly::unit on success or an error result otherwise
+   */
+  virtual UnitResult shutdown() = 0;
+
+  /**
+   * Get stats for the cache component.
+   * @return stats for the cache component
+   */
+  virtual CacheComponentStats getStats() const noexcept = 0;
+
  protected:
+  /**
+   * Mark an item as inserted into cache.
+   * @param handle handle to the cache item
+   * @param inserted whether the item was inserted into cache
+   */
+  FOLLY_ALWAYS_INLINE void setInserted(Handle& handle, bool inserted) {
+    handle.inserted_ = inserted;
+  }
+
   /**
    * Release a handle (make unusable) without adjusting refcounts. Useful when
    * CacheComponent takes an rvalue ref to a handle that needs to be destroyed.
@@ -118,21 +163,59 @@ class CacheComponent {
    */
   FOLLY_ALWAYS_INLINE void releaseHandle(Handle&& handle) { handle.release(); }
 
+  /**
+   * Get a pointer to the inline buffer in the handle, suitable for placement
+   * new of a CacheItem subclass.
+   */
+  static void* getInlineBuf(Handle& handle) noexcept { return handle.buf_; }
+
  private:
   // ------------------------------ Interface ------------------------------ //
+
+  /**
+   * Write a dirty cache item back to the cache.
+   *
+   * Called by WriteHandle destructor when the handle is marked dirty.
+   * Implementations should flush any buffered writes to the underlying storage.
+   *
+   * @param item cache item to write back
+   * @return folly::unit on success or an error result otherwise
+   */
+  virtual UnitResult writeBack(CacheItem& item) = 0;
 
   /**
    * Release the item from the cache. Frees the associated allocation and
    * executes any necessary callbacks. Only meant to be called by the component
    * or cache item handles.
    *
+   * NOTE: the component is responsible for destroying the item!
+   *
    * @param item the item to release
    * @param inserted whether the item was previously inserted into the cache
    * (callbacks are typically only called when it was inserted)
    */
-  virtual folly::coro::Task<void> release(CacheItem& item, bool inserted) = 0;
+  virtual void release(CacheItem& item, bool inserted) = 0;
 
   friend class Handle;
+  friend class WriteHandle;
+};
+
+/**
+ * A cache component that provides stats. Your implementation still needs to
+ * bump them!
+ */
+class CacheComponentWithStats : public CacheComponent {
+ public:
+  CacheComponentWithStats(
+      const CacheComponentStatsCollector::LatencySamplingConfig& config = {})
+      : stats_(std::make_unique<CacheComponentStatsCollector>(config)) {}
+
+  CacheComponentStats getStats() const noexcept override {
+    return CacheComponentStats(*stats_);
+  }
+
+ protected:
+  std::unique_ptr<CacheComponentStatsCollector> stats_;
 };
 
 } // namespace facebook::cachelib::interface

@@ -19,6 +19,8 @@
 #include <folly/Optional.h>
 #include <folly/logging/xlog.h>
 
+#include <magic_enum/magic_enum.hpp>
+
 #include "cachelib/allocator/KAllocation.h"
 
 namespace facebook {
@@ -49,54 +51,6 @@ enum class AllocatorApiEvent : uint8_t {
   NVM_REINSERT = 19
 };
 
-inline const char* toString(AllocatorApiEvent event) {
-  switch (event) {
-  case AllocatorApiEvent::INVALID:
-    return "INVALID";
-  case AllocatorApiEvent::FIND:
-    return "FIND";
-  case AllocatorApiEvent::FIND_FAST:
-    return "FIND_FAST";
-  case AllocatorApiEvent::ALLOCATE:
-    return "ALLOCATE";
-  case AllocatorApiEvent::INSERT:
-    return "INSERT";
-  case AllocatorApiEvent::INSERT_FROM_NVM:
-    return "INSERT_FROM_NVM";
-  case AllocatorApiEvent::INSERT_OR_REPLACE:
-    return "INSERT_OR_REPLACE";
-  case AllocatorApiEvent::REMOVE:
-    return "REMOVE";
-  case AllocatorApiEvent::ALLOCATE_CHAINED:
-    return "ALLOCATE_CHAINED";
-  case AllocatorApiEvent::ADD_CHAINED:
-    return "ADD_CHAINED";
-  case AllocatorApiEvent::POP_CHAINED:
-    return "POP_CHAINED";
-  case AllocatorApiEvent::DRAM_EVICT:
-    return "DRAM_EVICT";
-  case AllocatorApiEvent::NVM_REMOVE:
-    return "NVM_REMOVE";
-  case AllocatorApiEvent::NVM_EVICT:
-    return "NVM_EVICT";
-  case AllocatorApiEvent::PEEK:
-    return "PEEK";
-  case AllocatorApiEvent::NVM_INSERT:
-    return "NVM_INSERT";
-  case AllocatorApiEvent::NVM_FIND:
-    return "NVM_FIND";
-  case AllocatorApiEvent::NVM_FIND_FAST:
-    return "NVM_FIND_FAST";
-  case AllocatorApiEvent::NVM_ADMIT:
-    return "NVM_ADMIT";
-  case AllocatorApiEvent::NVM_REINSERT:
-    return "NVM_REINSERT";
-  default:
-    XDCHECK(false);
-    return "** CORRUPT EVENT **";
-  }
-}
-
 // Enum to describe possible outcomes of Allocator API calls.
 enum class AllocatorApiResult : uint8_t {
   FAILED = 0,              // Hard failure.
@@ -117,44 +71,6 @@ enum class AllocatorApiResult : uint8_t {
   REJECTED = 15,   // Negative result for admission and reinsertion policies
   INVALIDATED = 16 // Item invalidated (newer item for the key exist in NVM.)
 };
-
-inline const char* toString(AllocatorApiResult result) {
-  switch (result) {
-  case AllocatorApiResult::FAILED:
-    return "FAILED";
-  case AllocatorApiResult::FOUND:
-    return "FOUND";
-  case AllocatorApiResult::NOT_FOUND:
-    return "NOT_FOUND";
-  case AllocatorApiResult::NOT_FOUND_IN_MEMORY:
-    return "NOT_FOUND_IN_MEMORY";
-  case AllocatorApiResult::ALLOCATED:
-    return "ALLOCATED";
-  case AllocatorApiResult::INSERTED:
-    return "INSERTED";
-  case AllocatorApiResult::REPLACED:
-    return "REPLACED";
-  case AllocatorApiResult::REMOVED:
-    return "REMOVED";
-  case AllocatorApiResult::EVICTED:
-    return "EVICTED";
-  case AllocatorApiResult::EXPIRED:
-    return "EXPIRED";
-  case AllocatorApiResult::REINSERTED:
-    return "REINSERTED";
-  case AllocatorApiResult::NVM_ADMITTED:
-    return "NVM_ADMITTED";
-  case AllocatorApiResult::CORRUPTED:
-    return "CORRUPTED";
-  case AllocatorApiResult::ABORTED:
-    return "ABORTED";
-  case AllocatorApiResult::INVALIDATED:
-    return "INVALIDATED";
-  default:
-    XDCHECK(false);
-    return "** CORRUPT RESULT **";
-  }
-}
 
 namespace EventInterfaceTypes {
 using SizeT = folly::Optional<uint32_t>;

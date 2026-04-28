@@ -20,8 +20,6 @@
 
 #include <memory>
 
-#include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/CacheStressorBase.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Config.h"
@@ -49,12 +47,12 @@ class CacheComponentStressor : public CacheStressorBase {
   void start() override;
 
   // Obtain stats from the cache instance
-  Stats getCacheStats() const override;
+  std::unique_ptr<StatsBase> getCacheStats() const override;
 
  private:
   // Validate the test config (implicitly validates the StressorConfig in
   // CacheStressorBase::config_)
-  void validate(const CacheConfig& config) const;
+  const CacheConfig& validate(const CacheConfig& config) const;
 
   // Main stress coroutine that runs operations
   folly::coro::Task<void> stressCoroutine(ThroughputStats& stats);
@@ -83,9 +81,13 @@ class CacheComponentStressor : public CacheStressorBase {
       const std::string& itemValue);
 
   // Get operation implementation
-  folly::coro::Task<OpResultType> getKey(ThroughputStats& stats,
-                                         const std::string_view key,
-                                         const Request& req);
+  folly::coro::Task<OpResultType> getKey(
+      ThroughputStats& stats,
+      const std::string_view key,
+      size_t size,
+      uint32_t ttlSecs,
+      const std::unordered_map<std::string, std::string>& featureMap,
+      const std::string& itemValue);
 
   // Delete operation implementation
   folly::coro::Task<OpResultType> deleteKey(ThroughputStats& stats,

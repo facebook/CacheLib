@@ -651,7 +651,7 @@ struct VariableLruBucket {
       EntryHdr* entryHeader = getEntryHeader(bucket, handle.pos_);
       EntryDataOffset dataOffset = entryHeader->dataOffset;
       EntryDataSize dataSize = entryHeader->dataSize;
-      entryDataSeen.push_back(std::make_pair(dataOffset, dataSize));
+      entryDataSeen.emplace_back(dataOffset, dataSize);
 
       handle.next();
       nEntries++;

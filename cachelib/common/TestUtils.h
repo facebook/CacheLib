@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <set>
 #include <string>
 
 namespace facebook {

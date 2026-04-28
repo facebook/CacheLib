@@ -67,9 +67,8 @@ class DeviceMetaDataWriter final : public RecordWriter {
   explicit DeviceMetaDataWriter(Device& dev, size_t metadataSize)
       : dev_(dev),
         metadataSize_{metadataSize},
-        blockSize_{dev_.getIOAlignmentSize() >= kBlockSizeDefault
-                       ? dev_.getIOAlignmentSize()
-                       : kBlockSizeDefault} {}
+        blockSize_{
+            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)} {}
 
   ~DeviceMetaDataWriter() override {
     uint8_t* bufferData = buffer_.data();
@@ -174,9 +173,8 @@ class DeviceMetaDataReader final : public RecordReader {
   explicit DeviceMetaDataReader(Device& dev, size_t metadataSize)
       : dev_{dev},
         metadataSize_{metadataSize},
-        blockSize_{dev_.getIOAlignmentSize() >= kBlockSizeDefault
-                       ? dev_.getIOAlignmentSize()
-                       : kBlockSizeDefault} {}
+        blockSize_{
+            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)} {}
   ~DeviceMetaDataReader() override = default;
 
   std::unique_ptr<folly::IOBuf> readRecord() override {

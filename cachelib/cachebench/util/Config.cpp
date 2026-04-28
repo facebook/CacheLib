@@ -120,29 +120,42 @@ CacheBenchConfig::CacheBenchConfig(
   std::cout << "===JSON Config===" << std::endl;
   std::cout << configString << std::endl;
 
-  auto configJson = folly::parseJson(folly::json::stripComments(configString));
-  auto& testConfigJson = configJson["test_config"];
-  if (testConfigJson.getDefault("configPath", "").empty()) {
-    // strip out the file name at the end to get  the directory if the path
-    // contains /  and if not, the path is present directory. Assume the file
-    // does not have any escaped '/'
-    auto pos = path.find_last_of('/');
-    const std::string configDir =
-        (pos != std::string::npos)
-            ? std::string{path.begin(), path.begin() + pos}
-            : ".";
-    testConfigJson["configPath"] = configDir;
-  }
+  // Parse a single instance config
+  auto parseInstanceConfig = [&, this](folly::dynamic& configJson) {
+    auto& [cacheConfig, stressorConfig] = configs_.emplace_back();
 
-  // if present, customize the configuration.
-  auto stressorConfig = StressorConfig{testConfigJson};
-  stressorConfig_ = stressorConfigCustomizer
-                        ? stressorConfigCustomizer(stressorConfig)
-                        : stressorConfig;
-  if (configJson.count("cache_config")) {
-    auto cacheConfig = CacheConfig{configJson["cache_config"]};
-    cacheConfig_ = cacheConfigCustomizer ? cacheConfigCustomizer(cacheConfig)
-                                         : cacheConfig;
+    auto& testConfigJson = configJson["test_config"];
+    if (testConfigJson.getDefault("configPath", "").empty()) {
+      // strip out the file name at the end to get the directory if the path
+      // contains / and if not, the path is present directory. Assume the file
+      // does not have any escaped '/'
+      auto pos = path.find_last_of('/');
+      const std::string configDir =
+          (pos != std::string::npos)
+              ? std::string{path.begin(), path.begin() + pos}
+              : ".";
+      testConfigJson["configPath"] = configDir;
+    }
+
+    // if present, customize the configuration.
+    stressorConfig = StressorConfig{testConfigJson};
+    stressorConfig = stressorConfigCustomizer
+                         ? stressorConfigCustomizer(stressorConfig)
+                         : stressorConfig;
+    if (configJson.count("cache_config")) {
+      cacheConfig = CacheConfig{configJson["cache_config"]};
+      cacheConfig = cacheConfigCustomizer ? cacheConfigCustomizer(cacheConfig)
+                                          : cacheConfig;
+    }
+  };
+
+  auto configJson = folly::parseJson(folly::json::stripComments(configString));
+  if (configJson.isArray()) {
+    for (auto& instanceConfigJson : configJson) {
+      parseInstanceConfig(instanceConfigJson);
+    }
+  } else {
+    parseInstanceConfig(configJson);
   }
 }
 

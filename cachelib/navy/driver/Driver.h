@@ -19,7 +19,6 @@
 #include <gtest/gtest_prod.h>
 
 #include <memory>
-#include <stdexcept>
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"
@@ -28,7 +27,6 @@
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
-#include "cachelib/navy/engine/Engine.h"
 #include "cachelib/navy/engine/EnginePair.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
@@ -83,27 +81,43 @@ class Driver final : public AbstractCache {
   bool couldExist(HashedKey key) override;
 
   // insert a key and value into the cache
-  // @param key    the item key
-  // @param value  the item value
+  // @param key                 the item key
+  // @param value               the item value
+  // @param poolId              the DRAM cache pool this item belongs to
+  // @param expiryTime          expiry time in seconds (0 means no expiry)
+  // @param lastAccessTimeSecs  last access time in seconds
   // @return a status indicates success or failure, and the reason for failure
-  Status insert(HashedKey key, BufferView value) override;
+  Status insert(HashedKey key,
+                BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
+                uint32_t lastAccessTimeSecs = 0) override;
 
   // insert a key and value into the cache asynchronously.
-  // @param key    the item key
-  // @param value  the item value
-  // @param cb     a callback function be triggered when the insertion complete
+  // @param key                 the item key
+  // @param value               the item value
+  // @param cb                  a callback function be triggered when the
+  //                            insertion complete
+  // @param poolId              the DRAM cache pool this item belongs to
+  // @param expiryTime          expiry time in seconds (0 means no expiry)
+  // @param lastAccessTimeSecs  last access time in seconds
   // @return       a status indicates success or failure enqueued, and the
   //               reason for failure
   Status insertAsync(HashedKey key,
                      BufferView value,
-                     InsertCallback cb) override;
+                     InsertCallback cb,
+                     uint8_t poolId = 0,
+                     uint32_t expiryTime = 0,
+                     uint32_t lastAccessTimeSecs = 0) override;
 
   // lookup a key in the cache.
   // @param key    the item key to lookup
   // @param value  the returned value for the key if found
   // @return       a status indicates success or failure, and the reason for
   //               failure
-  Status lookup(HashedKey key, Buffer& value) override;
+  Status lookup(HashedKey key,
+                Buffer& value,
+                uint32_t& lastAccessTimeSecs) override;
 
   // lookup a key in the cache asynchronously.
   // @param key  the item key to lookup
@@ -121,10 +135,10 @@ class Driver final : public AbstractCache {
   // @param cb   a callback function be triggered when the remove complete.
   void removeAsync(HashedKey key, RemoveCallback cb) override;
 
-  // ensure all pending job have been completed
+  // ensure all pending jobs have been completed
   void drain() override;
 
-  // ensure all pending job have been completed and data has been flush to
+  // ensure all pending jobs have been completed and data has been flushed to
   // device(s).
   void flush() override;
 
@@ -161,6 +175,9 @@ class Driver final : public AbstractCache {
   void updateEvictionStats(HashedKey key,
                            BufferView value,
                            uint32_t lifetime) override;
+
+  // Set the EventTracker for all underlying engines
+  void setEventTracker(EventTracker* tracker) override;
 
  private:
   struct ValidConfigTag {};

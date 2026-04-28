@@ -18,17 +18,17 @@
 
 #include <folly/File.h>
 #include <folly/container/F14Map.h>
+#include <folly/hash/Hash.h>
+#include <xxhash.h>
 
 #include <fstream>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 #include "cachelib/common/Utils.h"
-#include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
-#include "cachelib/shm/SysVShmSegment.h"
+
+class ShmManagerTest;
 
 namespace facebook {
 namespace cachelib {
@@ -157,6 +157,7 @@ class ShmManager {
       void* addr = nullptr);
 
  private:
+  friend class ::ShmManagerTest;
   enum class ShmVal : int8_t { SHM_SYS_V = 1, SHM_POSIX, SHM_INVALID };
 
   // if metadata file exists, truncates it. If it does not exist, creates an
@@ -205,21 +206,36 @@ class ShmManager {
   //          existed.
   bool removeUnattached(const std::string& shmName);
 
-  void attachNewShm(const std::string& name, ShmSegmentOpts opts);
+  folly::F14FastMap<std::string, std::unique_ptr<ShmSegment>>::iterator
+  attachNewShm(const std::string& name, const ShmSegmentOpts& opts);
 
   std::string uniqueIdForName(const std::string& name) const {
     return name + dirHash_;
   }
 
+  // Returns the segment identifier using the old (BROKEN) hash. Used during
+  // migration to find segments created before the xxhash3 switch.
+  std::string oldUniqueIdForName(const std::string& name) const {
+    return name + oldDirHash_;
+  }
+
+  // Static overloads used by static methods that don't have access to the
+  // precomputed dirHash_/oldDirHash_ members.
   static std::string uniqueIdForName(const std::string& name,
                                      const std::string& cacheDir) {
-    const std::string dirHash =
-        std::to_string(folly::hash::fnv64_BROKEN(cacheDir));
-    return name + dirHash;
+    return name + std::to_string(XXH3_64bits(cacheDir.data(), cacheDir.size()));
+  }
+
+  static std::string oldUniqueIdForName(const std::string& name,
+                                        const std::string& cacheDir) {
+    return name + std::to_string(folly::hash::fnv64_BROKEN(cacheDir));
   }
 
   std::string controlDir_{};
   std::string dirHash_{};
+  // Hash computed with fnv64_BROKEN for backward compatibility. Can be removed
+  // once all segments have been recreated with xxhash3.
+  std::string oldDirHash_{};
 
   // current segment being managed by this instance
   folly::F14FastMap<std::string, std::unique_ptr<ShmSegment>> segments_{};

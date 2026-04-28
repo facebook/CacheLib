@@ -22,6 +22,7 @@
 #include <chrono>
 #include <ctime>
 #include <future>
+#include <magic_enum/magic_enum.hpp>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -42,11 +43,11 @@ namespace facebook {
 namespace cachelib {
 
 std::ostream& operator<<(std::ostream& str, AllocatorApiEvent ev) {
-  return str << toString(ev);
+  return str << magic_enum::enum_name(ev);
 }
 
 std::ostream& operator<<(std::ostream& str, AllocatorApiResult result) {
-  return str << toString(result);
+  return str << magic_enum::enum_name(result);
 }
 
 namespace tests {

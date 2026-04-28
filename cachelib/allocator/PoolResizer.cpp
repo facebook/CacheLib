@@ -40,9 +40,11 @@ void PoolResizer::work() {
   const auto pools = cache_.getRegularPoolIdsForResize();
   for (auto poolId : pools) {
     const PoolStats poolStats = cache_.getPoolStats(poolId);
-    for (unsigned int i = 0; i < numSlabsPerIteration_; i++) {
+    unsigned int numIterations = 0;
+    while (numIterations < numSlabsPerIteration_) {
       // check if the pool still needs resizing after each iteration.
       if (!cache_.getPool(poolId).overLimit()) {
+        numIterations++;
         continue;
       }
       // if user had supplied a rebalance stategy for the pool,
@@ -74,18 +76,28 @@ void PoolResizer::work() {
             poolStats.allocSizeForClass(classId), 0,
             poolStats.evictionAgeForClass(classId), 0,
             poolStats.mpStats.acStats.at(classId).freeAllocs);
+        numIterations++;
       } catch (const exception::SlabReleaseAborted& e) {
         cache_.incrementAbortedSlabReleases();
+        if (cache_.isShutdownInProgress()) {
+          XLOGF(WARN,
+                "Shutdown in progress, aborted trying to resize pool {} for "
+                "allocation class {}. "
+                "Error: {}",
+                static_cast<int>(poolId), static_cast<int>(classId), e.what());
+          return;
+        }
+        // It's a timeout, log and continue with next slab
         XLOGF(WARN,
-              "Aborted trying to resize pool {} for allocation class {}. "
-              "Error: {}",
+              "PoolResizer: Timeout while releasing slab for pool {} for "
+              "allocation class {}. Error: {}",
               static_cast<int>(poolId), static_cast<int>(classId), e.what());
-        return;
       } catch (const std::exception& e) {
         XLOGF(
             CRITICAL,
             "Error trying to resize pool {} for allocation class {}. Error: {}",
             static_cast<int>(poolId), static_cast<int>(classId), e.what());
+        numIterations++;
       }
     }
   }

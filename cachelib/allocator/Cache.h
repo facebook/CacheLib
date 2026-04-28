@@ -16,9 +16,10 @@
 
 #pragma once
 
-#include <folly/concurrency/AtomicSharedPtr.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest_prod.h>
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
@@ -147,6 +148,10 @@ class CacheBase {
   // Increment the number of aborted slab releases stat
   virtual void incrementAbortedSlabReleases() = 0;
 
+  // Check if shutdown is in progress
+  // @return true if shutdown is in progress, false otherwise
+  virtual bool isShutdownInProgress() const = 0;
+
   // export stats via callback. This function is not thread safe
   //
   // @param statPrefix prefix to be added for stat names
@@ -226,8 +231,10 @@ class CacheBase {
   // Whether to aggregate pool stats to reduce ODS counter inflation
   bool aggregatePoolStats_{false};
 
-  std::shared_ptr<EventTracker> getEventTracker() const;
-  void setEventTracker(EventTracker::Config&& config);
+  FOLLY_ALWAYS_INLINE EventTracker* getEventTracker() const {
+    return eventTracker_.get();
+  }
+  virtual void setEventTracker(EventTracker::Config&& config);
 
  protected:
   // move bytes from one pool to another. The source pool should be at least
@@ -371,7 +378,7 @@ class CacheBase {
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
 
-  folly::atomic_shared_ptr<EventTracker> eventTracker_;
+  std::unique_ptr<EventTracker> eventTracker_;
 
   // Enable aggregating pool stats
   void enableAggregatePoolStats() { aggregatePoolStats_ = true; }

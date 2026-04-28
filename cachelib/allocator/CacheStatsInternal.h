@@ -199,6 +199,8 @@ struct Stats {
   mutable util::PercentileStats nvmLookupLatency_;
   mutable util::PercentileStats nvmInsertLatency_;
   mutable util::PercentileStats nvmRemoveLatency_;
+  mutable util::PercentileStats nvmMakeBlobCbLatency_;
+  mutable util::PercentileStats nvmMakeObjCbLatency_;
 
   // percentile stats for various cache statistics
   mutable util::PercentileStats ramEvictionAgeSecs_;
@@ -207,6 +209,7 @@ struct Stats {
   mutable util::PercentileStats nvmLargeLifetimeSecs_;
   mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
   mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
+  mutable util::PercentileStats nvmHitTTASecs_;
 
   // per-pool percentile stats for eviction age
   std::array<util::PercentileStats, MemoryPoolManager::kMaxPools>

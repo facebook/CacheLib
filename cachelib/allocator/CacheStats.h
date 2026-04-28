@@ -518,6 +518,8 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmLookupLatencyNs{};
   util::PercentileStats::Estimates nvmInsertLatencyNs{};
   util::PercentileStats::Estimates nvmRemoveLatencyNs{};
+  util::PercentileStats::Estimates nvmMakeBlobCbLatencyNs{};
+  util::PercentileStats::Estimates nvmMakeObjCbLatencyNs{};
   util::PercentileStats::Estimates ramEvictionAgeSecs{};
   util::PercentileStats::Estimates ramItemLifeTimeSecs{};
   util::PercentileStats::Estimates nvmSmallLifetimeSecs{};
@@ -525,6 +527,7 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmEvictionSecondsPastExpiry{};
   util::PercentileStats::Estimates nvmEvictionSecondsToExpiry{};
   util::PercentileStats::Estimates nvmPutSize{};
+  util::PercentileStats::Estimates nvmHitTTASecs{};
 
   // time when CacheAllocator structure is created. Whenever a process restarts
   // and even if cache content is persisted, this will be reset. It's similar

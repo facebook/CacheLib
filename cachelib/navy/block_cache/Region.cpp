@@ -48,17 +48,21 @@ uint32_t Region::activeOpenLocked(bool writersOnly) const {
              : (activePhysReaders_ + activeInMemReaders_ + activeWriters_);
 }
 
-std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
-    uint32_t size) {
+std::tuple<RegionDescriptor, RelAddress, MutableBufferView>
+Region::openAndAllocate(uint32_t size) {
   std::lock_guard l{lock_};
   XDCHECK(!((flags_ & kBlockAccess) || (flags_ & kBeingReclaimed)));
   if (!canAllocateLocked(size)) {
-    return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{});
+    return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{},
+                           MutableBufferView{});
   }
   activeWriters_++;
+  auto addr = allocateLocked(size);
+  XDCHECK(buffer_);
+  MutableBufferView view(size, buffer_->data() + addr.offset());
   return std::make_tuple(
-      RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, regionId_),
-      allocateLocked(size));
+      RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, regionId_), addr,
+      view);
 }
 
 RegionDescriptor Region::openForRead() {
@@ -78,8 +82,8 @@ RegionDescriptor Region::openForRead() {
   } else {
     activeInMemReaders_++;
   }
-  return RegionDescriptor::makeReadDescriptor(
-      OpenStatus::Ready, regionId_, physReadMode);
+  return RegionDescriptor::makeReadDescriptor(OpenStatus::Ready, regionId_,
+                                              physReadMode);
 }
 
 std::unique_ptr<Buffer> Region::detachBuffer() {

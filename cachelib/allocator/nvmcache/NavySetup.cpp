@@ -178,6 +178,12 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                                   blockCacheConfig.getCleanRegionThreads());
   blockCache->setRegionManagerFlushAsync(
       blockCacheConfig.isRegionManagerFlushAsync());
+
+  blockCache->setCleanRegionFastPath(blockCacheConfig.isCleanRegionFastPath());
+  blockCache->setRecoverEvictionPolicy(
+      blockCacheConfig.isRecoverEvictionPolicy());
+  blockCache->setUseCombinedEntryBlock(
+      blockCacheConfig.isCombinedEntryBlockEnabled());
   blockCache->setNumAllocatorsPerPriority(
       blockCacheConfig.getNumAllocatorsPerPriority());
 
@@ -323,9 +329,12 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   auto maxNumWrites = config.getMaxNumWrites();
   auto stackSize = config.getStackSize();
   auto reqOrderShardsPower = config.getNavyReqOrderingShards();
+  auto readerPriority = config.getReaderThreadsPriority();
+  auto writerPriority = config.getWriterThreadsPriority();
   if (maxNumReads == 0 && maxNumWrites == 0) {
     return cachelib::navy::createOrderedThreadPoolJobScheduler(
-        readerThreads, writerThreads, reqOrderShardsPower);
+        readerThreads, writerThreads, reqOrderShardsPower, readerPriority,
+        writerPriority);
   }
 
   return cachelib::navy::createNavyRequestScheduler(readerThreads,

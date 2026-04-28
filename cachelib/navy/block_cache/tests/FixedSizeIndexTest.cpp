@@ -321,4 +321,84 @@ TEST(FixedSizeIndex, ComputeSize) {
   EXPECT_EQ(numItems - numToRemove, index.computeSize());
 }
 
+TEST(FixedSizeIndex, InsertIfNotExists) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Insert should succeed when key doesn't exist
+  auto result = index.insertIfNotExists(111, 100, 123);
+  EXPECT_FALSE(result.found());
+  auto lr = index.lookup(111);
+  EXPECT_TRUE(lr.found());
+  EXPECT_EQ(100, lr.address());
+  EXPECT_LE(123, lr.sizeHint());
+  EXPECT_EQ(1, lr.currentHits());
+
+  // Insert should fail when key already exists, should not modify hits and
+  // should return existing value.
+  result = index.insertIfNotExists(111, 200, 456);
+  EXPECT_TRUE(result.found());
+  EXPECT_EQ(100, result.address());
+  EXPECT_LE(123, result.sizeHint());
+  EXPECT_EQ(1, result.currentHits());
+
+  // Verify existing value is unchanged
+  lr = index.lookup(111);
+  EXPECT_TRUE(lr.found());
+  EXPECT_EQ(100, lr.address());
+  EXPECT_LE(123, lr.sizeHint());
+  EXPECT_EQ(2, lr.currentHits());
+}
+
+TEST(FixedSizeIndex, InsertIfNotExistsThreadSafe) {
+  FixedSizeIndex index{1, 8, 16};
+  const uint64_t key = 1314;
+
+  std::atomic<int> successCount{0};
+  auto tryInsert = [&]() {
+    for (size_t i = 0; i < 100; i++) {
+      auto result = index.insertIfNotExists(key, 123, 200);
+      if (!result.found()) {
+        successCount++;
+      }
+    }
+  };
+
+  std::vector<std::thread> threads;
+  threads.reserve(8);
+  for (int i = 0; i < 8; i++) {
+    threads.emplace_back(tryInsert);
+  }
+
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  // Only one thread should have successfully inserted
+  EXPECT_EQ(1, successCount);
+  EXPECT_TRUE(index.lookup(key).found());
+  EXPECT_EQ(123, index.lookup(key).address());
+}
+
+TEST(FixedSizeIndex, InsertIfNotExistsMultipleKeys) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Test multiple different keys can all be inserted successfully
+  for (uint64_t i = 0; i < 100; i++) {
+    auto result = index.insertIfNotExists(i, i + 1000, i + 500);
+    EXPECT_FALSE(result.found());
+    EXPECT_TRUE(index.lookup(i).found());
+    EXPECT_EQ(i + 1000, index.lookup(i).address());
+  }
+
+  // Verify attempting to re-insert fails for all keys
+  for (uint64_t i = 0; i < 100; i++) {
+    auto result = index.insertIfNotExists(i, i + 2000, i + 600);
+    EXPECT_TRUE(result.found());
+    EXPECT_EQ(i + 1000, result.address());
+
+    // Verify original values are unchanged
+    EXPECT_EQ(i + 1000, index.lookup(i).address());
+  }
+}
+
 } // namespace facebook::cachelib::navy::tests
