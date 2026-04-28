@@ -121,8 +121,9 @@ void testAllocForPool(MemoryAllocator& m,
 
   // allocating with 0 or more than Slab::kSize or sizes.rbegin() should throw
   ASSERT_THROW(m.allocate(pid, 0), std::invalid_argument);
-  ASSERT_THROW(m.allocate(pid, Slab::kSize + folly::Random::rand32()),
-               std::invalid_argument);
+  ASSERT_THROW(
+      m.allocate(pid, Slab::kSize + folly::Random::rand32(1, UINT32_MAX)),
+      std::invalid_argument);
   ASSERT_THROW(m.allocate(pid, *sizes.rbegin() + 1), std::invalid_argument);
 
   uint32_t prev = 1;

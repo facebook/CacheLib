@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/runner/Runner.h"
 
+#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/ProgressTracker.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 
@@ -28,7 +29,8 @@ Runner::Runner(size_t instanceId, const CacheBenchConfig& config)
                                        config.getStressorConfig(instanceId))} {}
 
 bool Runner::run(std::chrono::seconds progressInterval,
-                 const std::string& progressStatsFile) {
+                 const std::string& progressStatsFile,
+                 bool alsoPrintResultsToConsole) {
   ProgressTracker tracker{instanceId_, *stressor_, progressStatsFile};
 
   stressor_->start();
@@ -39,17 +41,20 @@ bool Runner::run(std::chrono::seconds progressInterval,
 
   stressor_->finish();
 
-  uint64_t durationNs = stressor_->getTestDurationNs();
-  auto cacheStats = stressor_->getCacheStats();
-  auto opsStats = stressor_->aggregateThroughputStats();
+  durationNs_ = stressor_->getTestDurationNs();
+  cacheStats_ = stressor_->getCacheStats();
+  opsStats_ = stressor_->aggregateThroughputStats();
   tracker.stop();
 
-  bool passed = true;
+  bool passed;
   if (progressStatsFile.empty()) {
-    passed = render(cacheStats, opsStats, durationNs, std::cout);
+    passed = render(std::cout);
   } else {
     std::ofstream ofs{progressStatsFile, std::ios::app};
-    passed = render(cacheStats, opsStats, durationNs, ofs);
+    passed = render(ofs);
+    if (alsoPrintResultsToConsole) {
+      render(std::cout);
+    }
   }
 
   stressor_.reset();
@@ -71,15 +76,17 @@ bool Runner::run(folly::UserCounters& counters) {
     auto opsStats = stressor_->aggregateThroughputStats();
 
     // Allocator Stats
-    cacheStats.render(counters);
+    cacheStats->render(counters);
 
     // Throughput
     opsStats.render(durationNs, counters);
 
     stressor_->renderWorkloadGeneratorStats(durationNs, counters);
 
-    counters["nvm_disable"] = cacheStats.isNvmCacheDisabled ? 100 : 0;
-    counters["inconsistency_count"] = cacheStats.inconsistencyCount * 100;
+    if (auto* statsPtr = cacheStats->asPtr<const Stats>()) {
+      counters["nvm_disable"] = statsPtr->isNvmCacheDisabled ? 100 : 0;
+      counters["inconsistency_count"] = statsPtr->inconsistencyCount * 100;
+    }
 
     stressor_.reset();
   }
@@ -91,20 +98,17 @@ bool Runner::run(folly::UserCounters& counters) {
   return true;
 }
 
-bool Runner::render(Stats& cacheStats,
-                    ThroughputStats& opsStats,
-                    uint64_t durationNs,
-                    std::ostream& os) const {
+bool Runner::render(std::ostream& os) {
   os << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats.render(os);
+  cacheStats_->render(os);
 
   os << "\n== Throughput Stats ==\n";
-  opsStats.render(durationNs, os);
+  opsStats_.render(durationNs_, os);
 
-  stressor_->renderWorkloadGeneratorStats(durationNs, os);
+  stressor_->renderWorkloadGeneratorStats(durationNs_, os);
   os << std::endl;
 
-  return cacheStats.renderIsTestPassed(os);
+  return cacheStats_->renderIsTestPassed(os);
 }
 
 } // namespace cachebench

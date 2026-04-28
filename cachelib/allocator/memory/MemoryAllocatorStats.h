@@ -19,7 +19,6 @@
 #include <folly/container/F14Map.h>
 
 #include <set>
-#include <unordered_map>
 
 #include "cachelib/allocator/memory/Slab.h"
 
@@ -29,25 +28,25 @@ namespace cachelib {
 // structure to query the stats corresponding to an AllocationClass.
 struct ACStats {
   // the allocation size for this allocation class
-  uint32_t allocSize;
+  uint32_t allocSize{0};
 
   // number of allocations per slab
-  unsigned long long allocsPerSlab;
+  unsigned long long allocsPerSlab{0};
 
   // number of slabs that are currently used for active allocations.
-  unsigned long long usedSlabs;
+  unsigned long long usedSlabs{0};
 
   // number of free slabs in this allocation class.
-  unsigned long long freeSlabs;
+  unsigned long long freeSlabs{0};
 
   // number of freed allocations in this allocation class.
-  unsigned long long freeAllocs;
+  unsigned long long freeAllocs{0};
 
   // number of active allocations in this class.
-  unsigned long long activeAllocs;
+  unsigned long long activeAllocs{0};
 
   // true if the allocation class is full.
-  bool full;
+  bool full{false};
 
   constexpr unsigned long long totalSlabs() const noexcept {
     return freeSlabs + usedSlabs;
@@ -55,6 +54,21 @@ struct ACStats {
 
   constexpr size_t getTotalFreeMemory() const noexcept {
     return Slab::kSize * freeSlabs + freeAllocs * allocSize;
+  }
+
+  ACStats& operator+=(const ACStats& other) {
+    if (allocSize != other.allocSize) {
+      XDCHECK(allocSize == 0 && allocsPerSlab == 0);
+      // this is an empty ACStats object, copy the other one
+      allocSize = other.allocSize;
+      allocsPerSlab = other.allocsPerSlab;
+    }
+    usedSlabs += other.usedSlabs;
+    freeSlabs += other.freeSlabs;
+    freeAllocs += other.freeAllocs;
+    activeAllocs += other.activeAllocs;
+    full |= other.full;
+    return *this;
   }
 };
 

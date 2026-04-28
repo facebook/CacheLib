@@ -24,6 +24,7 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/navy/block_cache/Allocator.h"
+#include "cachelib/navy/block_cache/CombinedEntryManager.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
@@ -77,9 +78,6 @@ class BlockCache final : public Engine {
     std::optional<std::reference_wrapper<LegacyEventTracker>>
         legacyEventTracker;
 
-    std::shared_ptr<EventTracker> eventTracker;
-
-    // Maximum number of retry times for in-mem buffer flushing.
     // When exceeding the limit, we will not reschedule any flushing job but
     // directly fail it.
     uint16_t inMemBufFlushRetryLimit{10};
@@ -95,6 +93,23 @@ class BlockCache final : public Engine {
     bool preciseRemove{false};
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
+
+    // Whether to enable the clean region fast path in getCleanRegion().
+    bool cleanRegionFastPath{false};
+    // Whether to use Combined entry block (For index entries and small sized
+    // items)
+    bool useCombinedEntryBlock{false};
+
+    // Whether to persist and recover eviction policy ordering across restarts.
+    // When enabled, the FIFO queue order is preserved, avoiding the hit rate
+    // regression caused by resetting the write position on restart.
+    //
+    // NOTE: Only FifoPolicy currently supports persistence. LruPolicy and
+    // SegmentedFifoPolicy gracefully fall back to resetEvictionPolicy() on
+    // recover (a WARN is logged); enabling this flag with those policies has
+    // no effect on eviction ordering.
+    bool recoverEvictionPolicy{false};
+
     // name of this BC instance
     std::string name{};
 
@@ -111,6 +126,10 @@ class BlockCache final : public Engine {
     Config& validate();
   };
 
+  // Random but unique value to be used as the key hash value for Combined Entry
+  // Block
+  static constexpr uint64_t kCombinedEntrySignatureValue = 0xCEBB0FFE80000001;
+
   // Contructor can throw std::exception if config is invalid.
   //
   // @param config  config that was validated with Config::validate
@@ -119,7 +138,7 @@ class BlockCache final : public Engine {
   explicit BlockCache(Config&& config);
   BlockCache(const BlockCache&) = delete;
   BlockCache& operator=(const BlockCache&) = delete;
-  ~BlockCache() override = default;
+  ~BlockCache() override;
 
   // return the size of usable space
   uint64_t getSize() const override { return regionManager_.getSize(); }
@@ -144,7 +163,11 @@ class BlockCache final : public Engine {
   // @return  Status::Ok on success,
   //          Status::Rejected on error,
   //          Status::Retry on no space available for now.
-  Status insert(HashedKey hk, BufferView value) override;
+  Status insert(HashedKey hk,
+                BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
+                uint32_t lastAccessTimeSecs = 0) override;
 
   // Looks up a key in BlockCache.
   //
@@ -156,7 +179,9 @@ class BlockCache final : public Engine {
   //          Status::Retry read cannot be served and needs to be retried again.
   //          Status::ChecksumError if the internal checksum does not match,
   //          Status::DeviceError otherwise.
-  Status lookup(HashedKey hk, Buffer& value) override;
+  Status lookup(HashedKey hk,
+                Buffer& value,
+                uint32_t& lastAccessTimeSecs) override;
 
   // Removes a key from BlockCache.
   //
@@ -227,7 +252,7 @@ class BlockCache final : public Engine {
 
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 12;
+  static constexpr uint32_t kFormatVersion = 13;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache
@@ -238,12 +263,16 @@ class BlockCache final : public Engine {
     uint32_t keySize{};
     uint32_t valueSize{};
     uint64_t keyHash{};
+    uint32_t lastAccessTimeSecs{};
     uint32_t csSelf{};
     uint32_t cs{};
 
     EntryDesc() = default;
-    EntryDesc(uint32_t ks, uint32_t vs, uint64_t kh)
-        : keySize{ks}, valueSize{vs}, keyHash{kh} {
+    EntryDesc(uint32_t ks, uint32_t vs, uint64_t kh, uint32_t accessTime = 0)
+        : keySize{ks},
+          valueSize{vs},
+          keyHash{kh},
+          lastAccessTimeSecs{accessTime} {
       csSelf = computeChecksum();
     }
 
@@ -255,48 +284,58 @@ class BlockCache final : public Engine {
 
   // Instead of unportable packing, we make sure that struct size is equal to
   // the size of its members.
-  static_assert(sizeof(EntryDesc) == 24, "packed struct required");
+  static_assert(sizeof(EntryDesc) == 32, "packed struct required");
 
   struct ValidConfigTag {};
   BlockCache(Config&& config, ValidConfigTag);
 
-  static std::unique_ptr<Index> createIndex(
-      const BlockCacheIndexConfig& indexConfig,
-      const NavyPersistParams& persistParams,
-      const std::string& name);
+  std::unique_ptr<Index> createIndex(const BlockCacheIndexConfig& indexConfig,
+                                     const NavyPersistParams& persistParams,
+                                     bool useCombinedEntryBlock,
+                                     const std::string& name);
+  std::unique_ptr<CombinedEntryManager> createCombinedEntryManager(
+      const Config& config);
 
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
+
+  using AllocData = std::tuple<navy::RegionDescriptor,
+                               uint32_t,
+                               navy::RelAddress,
+                               navy::MutableBufferView>;
 
   // Allocate a slot from the allocator
   // @param hk          key to be inserted
   // @param valueSize   size of the value
   // @param priority    priority of async operation
   // @param canWait     whether to wait if space isn't currently available
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateImpl(
-      const HashedKey& hk,
-      const uint32_t valueSize,
-      const uint16_t priority,
-      const bool canWait);
+  AllocData allocateImpl(const HashedKey& hk,
+                         const uint32_t valueSize,
+                         const uint16_t priority,
+                         const bool canWait);
 
   // Allocate a slot for inserting into cache
   // @param hk          key to be inserted
   // @param valueSize   size of the value
-  folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
-  allocateForInsert(const HashedKey& hk, const uint32_t valueSize);
+  // @param canWait     whether to wait if space isn't currently available
+  folly::Expected<AllocData, Status> allocateForInsert(const HashedKey& hk,
+                                                       const uint32_t valueSize,
+                                                       bool canWait = true);
 
   // Write the entry descriptor and cache item key into the item buffer
   // @param buffer      buffer to write into
   // @param hk          key to be inserted
   // @param valueSize   size of the value to be inserted
-  static EntryDesc* writeEntryDescAndKey(Buffer& buffer,
+  static EntryDesc* writeEntryDescAndKey(MutableBufferView buffer,
                                          const HashedKey& hk,
-                                         uint32_t valueSize);
+                                         uint32_t valueSize,
+                                         uint32_t lastAccessTimeSecs = 0);
 
   struct LookupData {
     Buffer buffer_;
     RegionDescriptor desc_;
     uint32_t valueSize_{0};
+    uint32_t lastAccessTimeSecs_{0};
     Status status_{Status::Ok};
   };
 
@@ -309,12 +348,15 @@ class BlockCache final : public Engine {
   // especially the CPU time spent in std::memcpy.
   // @param addr        Address to write this entry into
   // @param size        Number of bytes this entry will take up on the device
-  // @param hk          Key of the entry
+  // @param hk          Key of the entry. Only when combinedEntry == false
   // @param value       Payload of the entry
-  void writeEntry(RelAddress addr,
-                  uint32_t size,
-                  HashedKey hk,
-                  BufferView value);
+  // @param combinedEntry whether it's combined entry block or not
+  //
+  void writeEntry(MutableBufferView buffer,
+                  std::optional<HashedKey> hk,
+                  BufferView value,
+                  bool combinedEntry,
+                  uint32_t lastAccessTimeSecs = 0);
   // @param ld          LookupData containing the entry metadata for reading
   // @param addrEnd     End of the entry since the item layout is backward
   // @param approxSize  Approximate size since we got this size from index
@@ -340,7 +382,7 @@ class BlockCache final : public Engine {
   // @param hk          key to be removed
   // @param value       value populated with data read from lookup used for
   //                    precise remove and item destructor callback
-  Status removeImpl(const HashedKey& hk, const Buffer& value);
+  Status removeImpl(const HashedKey& hk, BufferView value);
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
@@ -363,6 +405,19 @@ class BlockCache final : public Engine {
   // condition within this function, and here it will just assume the proper
   // location was given by the caller.
   std::optional<uint64_t> onKeyHashRetrievalFromLocation(uint32_t address);
+
+  // To write the combined entry block to currently open region
+  Status onWriteCombinedEntryBlock(uint64_t stream,
+                                   const CombinedEntryBlock& ceb);
+
+  // To read the combined entry block from the given address.
+  // @param address  address to read from
+  // @param readSize  size to read, which will be the size of CEB
+  // @param cebBuffer  buffer to be filled with combined entry block content
+  //
+  Status onReadCombinedEntryBlock(uint32_t address,
+                                  uint32_t readSize,
+                                  Buffer& cebBuffer);
 
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
@@ -455,6 +510,9 @@ class BlockCache final : public Engine {
   // whether preciseRemove is enabled
   const bool preciseRemove_{false};
 
+  // combinedEntryMgr_ should be initialized before index_
+  std::unique_ptr<CombinedEntryManager> combinedEntryMgr_;
+
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset
   // 0 of the slot and header (EntryDescriptor) at the end.
@@ -468,11 +526,11 @@ class BlockCache final : public Engine {
   std::unique_ptr<Index> index_;
   RegionManager regionManager_;
   Allocator allocator_;
+
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
   std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
-  std::shared_ptr<EventTracker> eventTracker_;
 
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;

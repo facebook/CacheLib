@@ -232,7 +232,7 @@ void SlabAllocator::lockMemoryAsync() noexcept {
         // to mlock for that and require the caller to set the appropriate
         // rlimits. Use volatile to fool the compiler to not optimize this away
         // in opt mode.
-        volatile const uint8_t val = *pageAddr;
+        volatile const uint8_t val = *pageAddr; // NOLINT(facebook-hte-Volatile)
         (void)val;
       }
 
@@ -400,9 +400,8 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   {
     LockHolder l(lock_);
     if (!advisedSlabs_.empty()) {
-      auto it = advisedSlabs_.begin();
-      slab = *it;
-      advisedSlabs_.erase(it);
+      slab = advisedSlabs_.back();
+      advisedSlabs_.pop_back();
     }
   }
 
@@ -418,7 +417,8 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   for (size_t pageOffset = 0; pageOffset < numPages; pageOffset++) {
     // Use volatile to fool the compiler to not optimize this away in opt
     // mode.
-    volatile const uint8_t val = *(mem + pageOffset * pageSize);
+    volatile const uint8_t val =
+        *(mem + pageOffset * pageSize); // NOLINT(facebook-hte-Volatile)
     (void)val;
   }
   memoryPoolSize_[id] += sizeof(Slab);

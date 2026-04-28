@@ -18,7 +18,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <cassert>
 #include <utility>
 
 #include "cachelib/navy/common/NavyThread.h"
@@ -48,18 +47,17 @@ Allocator::Allocator(RegionManager& regionManager,
   }
 }
 
-std::pair<RegionDescriptor, RelAddress> Allocator::allocate(uint32_t size,
-                                                            uint16_t priority,
-                                                            bool canWait,
-                                                            uint64_t keyHash) {
+std::tuple<RegionDescriptor, RelAddress, MutableBufferView> Allocator::allocate(
+    uint32_t size, uint16_t priority, bool canWait, uint64_t distKey) {
   XDCHECK_LT(priority, allocators_.size());
   if (size == 0 || size > regionManager_.regionSize()) {
-    return std::make_pair(RegionDescriptor{OpenStatus::Error}, RelAddress());
+    return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress(),
+                           MutableBufferView());
   }
   RegionAllocator* ra =
-      &allocators_[priority][keyHash % allocators_[priority].size()];
+      &allocators_[priority][distKey % allocators_[priority].size()];
   return allocateWith(*ra, size, canWait);
-} // namespace cachelib
+}
 
 // Allocates using region allocator @ra. If region is full, we take another
 // from the clean list (regions ready for allocation) If the clean list is
@@ -67,16 +65,17 @@ std::pair<RegionDescriptor, RelAddress> Allocator::allocate(uint32_t size,
 // have to wait. Every time we take a region from the clean list, we schedule
 // new reclaim job to refill it. Caller must close the region after data
 // written to the slot.
-std::pair<RegionDescriptor, RelAddress> Allocator::allocateWith(
-    RegionAllocator& ra, uint32_t size, bool canWait) {
+std::tuple<RegionDescriptor, RelAddress, MutableBufferView>
+Allocator::allocateWith(RegionAllocator& ra, uint32_t size, bool canWait) {
   std::unique_lock lock{ra.getLock()};
   RegionId rid = ra.getAllocationRegion();
   if (rid.valid()) {
     auto& region = regionManager_.getRegion(rid);
-    auto [desc, addr] = region.openAndAllocate(size);
+    auto allocData = region.openAndAllocate(size);
+    const auto& desc = std::get<0>(allocData);
     XDCHECK_NE(OpenStatus::Retry, desc.status());
     if (desc.isReady()) {
-      return std::make_pair(std::move(desc), addr);
+      return allocData;
     }
     XDCHECK_EQ(OpenStatus::Error, desc.status());
     // Buffer has been fully allocated. Release the region by scheduling an
@@ -102,7 +101,8 @@ std::pair<RegionDescriptor, RelAddress> Allocator::allocateWith(
       allocRetryWaits_.inc();
       waiter->baton_.wait();
     }
-    return std::make_pair(RegionDescriptor{status}, RelAddress{});
+    return std::make_tuple(RegionDescriptor{status}, RelAddress{},
+                           MutableBufferView{});
   }
   XDCHECK(status == OpenStatus::Ready);
   XDCHECK(!waiter);
@@ -113,9 +113,10 @@ std::pair<RegionDescriptor, RelAddress> Allocator::allocateWith(
 
   // Replace with a reclaimed region and allocate
   ra.setAllocationRegion(rid);
-  auto [desc, addr] = region.openAndAllocate(size);
+  auto allocData = region.openAndAllocate(size);
+  const auto& desc = std::get<0>(allocData);
   XDCHECK_EQ(OpenStatus::Ready, desc.status());
-  return std::make_pair(std::move(desc), addr);
+  return allocData;
 }
 
 void Allocator::close(RegionDescriptor&& desc) {

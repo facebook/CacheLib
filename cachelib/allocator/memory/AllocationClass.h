@@ -183,24 +183,21 @@ class AllocationClass {
 
     // Prefetch the first kForEachAllocPrefetchOffset items in the slab.
     // Note that the prefetch is for read with no temporal locality.
-    void* prefetchOffsetPtr = reinterpret_cast<void*>(slab);
+    auto* prefetchPtr = reinterpret_cast<uint8_t*>(slab);
     for (unsigned int i = 0; i < kForEachAllocPrefetchOffset; i++) {
-      prefetchOffsetPtr = reinterpret_cast<void*>(
-          reinterpret_cast<uintptr_t>(prefetchOffsetPtr) + allocationSize_);
-      __builtin_prefetch(prefetchOffsetPtr, 0, 0);
+      prefetchPtr += allocationSize_;
+      __builtin_prefetch(prefetchPtr, 0, 0);
     }
-    void* ptr = reinterpret_cast<void*>(slab);
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(slab);
     unsigned int allocsPerSlab = getAllocsPerSlab();
     for (unsigned int i = 0; i < allocsPerSlab; ++i) {
-      prefetchOffsetPtr = reinterpret_cast<void*>(
-          reinterpret_cast<uintptr_t>(prefetchOffsetPtr) + allocationSize_);
+      prefetchPtr += allocationSize_;
       // Prefetch ahead the kForEachAllocPrefetchOffset item.
-      __builtin_prefetch(prefetchOffsetPtr, 0, 0);
+      __builtin_prefetch(prefetchPtr, 0, 0);
       if (!callback(ptr, allocInfo.value())) {
         return SlabIterationStatus::kAbortIteration;
       }
-      ptr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) +
-                                    allocationSize_);
+      ptr += allocationSize_;
     }
     return SlabIterationStatus::kFinishedCurrentSlabAndContinue;
   }
@@ -387,8 +384,10 @@ class AllocationClass {
 
   // @param slab    the slab to create a new release alloc map
   //
+  // @return        iterator to the newly created release alloc map
   // throw std::runtime_error if fail to create a new release alloc map
-  void createSlabReleaseAllocMapLocked(const Slab* slab);
+  std::unordered_map<uintptr_t, std::vector<bool>>::iterator
+  createSlabReleaseAllocMapLocked(const Slab* slab);
 
   // @param slab    the slab associated with a release alloc map
   //
@@ -407,7 +406,7 @@ class AllocationClass {
   //          to this slab class to make further allocations out of it.
   void* allocateLocked();
 
-  // lock for serializing access to currSlab_, currOffset, allocatedSlabs_,
+  // lock for serializing access to currSlab_, currOffset_, allocatedSlabs_,
   // freeSlabs_, freedAllocations_.
   mutable folly::cacheline_aligned<folly::DistributedMutex> lock_;
 
@@ -469,7 +468,7 @@ class AllocationClass {
 
   // stores the list of outstanding allocations for a given slab. This is
   // created when we start a slab release process and if there are any active
-  // allocaitons need to be marked as free.
+  // allocations need to be marked as free.
   std::unordered_map<uintptr_t, std::vector<bool>> slabReleaseAllocMap_;
 
   // Starting releasing a slab is serialized across threads.

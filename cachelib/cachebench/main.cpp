@@ -23,7 +23,9 @@
 #include <thread>
 #include <vector>
 
+#include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Runner.h"
+#include "cachelib/cachebench/util/AggregateStats.h"
 #include "cachelib/cachebench/util/Sleep.h"
 #include "cachelib/common/Utils.h"
 
@@ -160,13 +162,16 @@ bool runAllRunners(std::chrono::seconds progress) {
   for (uint32_t i = 0; i < runnerInstances.size(); ++i) {
     threads.emplace_back([=, &results]() {
       std::string progressFile = getProgressStatsFileForInstance(i);
-      results[i] = runnerInstances[i].run(progress, progressFile);
+      results[i] = runnerInstances[i].run(
+          progress, progressFile, /* alsoPrintResultsToConsole */ false);
     });
   }
 
   for (auto& t : threads) {
     t.join();
   }
+
+  std::cout << facebook::cachelib::cachebench::AggregatedStats(runnerInstances);
 
   return std::ranges::all_of(results, [](bool result) { return result; });
 }

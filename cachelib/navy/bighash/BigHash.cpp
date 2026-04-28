@@ -292,7 +292,11 @@ bool BigHash::recover(RecordReader& rr) {
   return true;
 }
 
-Status BigHash::insert(HashedKey hk, BufferView value) {
+Status BigHash::insert(HashedKey hk,
+                       BufferView value,
+                       uint8_t /* poolId */,
+                       uint32_t /* expiryTime */,
+                       uint32_t /* lastAccessTimeSecs */) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 
@@ -390,7 +394,10 @@ uint64_t BigHash::estimateWriteSize(HashedKey, BufferView) const {
   return bucketSize_;
 }
 
-Status BigHash::lookup(HashedKey hk, Buffer& value) {
+Status BigHash::lookup(HashedKey hk,
+                       Buffer& value,
+                       uint32_t& lastAccessTimeSecs) {
+  lastAccessTimeSecs = 0;
   const auto bid = getBucketId(hk);
   lookupCount_.inc();
 

@@ -7,8 +7,7 @@
     "numPools" : 2,
     "poolSizes" : [0.5, 0.5],
     "allocFactor" : 2.0,
-    "nvmCacheSizeMB": 1024,
-    "navyNumInmemBuffers": 30
+    "nvmCacheSizeMB": 1024
   },
   "test_config" :
     {

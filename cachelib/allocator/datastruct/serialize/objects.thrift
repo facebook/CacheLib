@@ -27,7 +27,9 @@ namespace cpp2 facebook.cachelib.serialization
 
 // Saved state for an SList
 struct SListObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 size;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required i64 compressedHead; // Pointer to the head element
   // TODO(bwatling): remove the default value and clean up SList::SList() once
   // we can rely on 'compressedTail' always being valid.
@@ -35,11 +37,15 @@ struct SListObject {
 }
 
 struct DListObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required i64 compressedHead;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 compressedTail;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required i64 size;
 }
 
 struct MultiDListObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required list<DListObject> lists;
 }

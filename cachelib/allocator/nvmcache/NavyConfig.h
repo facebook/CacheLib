@@ -23,7 +23,6 @@
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/common/EventInterface.h"
-#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Hash.h"
 
 namespace facebook {
@@ -521,23 +520,14 @@ class BlockCacheConfig {
 
   BlockCacheConfig& setLegacyEventTracker(
       LegacyEventTracker& legacyEventTracker) {
-    legacyEventTracker_ = legacyEventTracker;
-    return *this;
-  }
-
-  BlockCacheConfig& setEventTracker(
-      std::shared_ptr<EventTracker> eventTracker) {
-    eventTracker_ = std::move(eventTracker);
+    legacyEventTracker_ =
+        std::reference_wrapper<LegacyEventTracker>(legacyEventTracker);
     return *this;
   }
 
   const std::optional<std::reference_wrapper<LegacyEventTracker>>&
   getLegacyEventTracker() const {
     return legacyEventTracker_;
-  }
-
-  const std::shared_ptr<EventTracker>& getEventTracker() const {
-    return eventTracker_;
   }
 
   BlockCacheConfig& setDataChecksum(bool dataChecksum) noexcept {
@@ -560,8 +550,23 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setCleanRegionFastPath(bool enable) noexcept {
+    cleanRegionFastPath_ = enable;
+    return *this;
+  }
+
+  BlockCacheConfig& setRecoverEvictionPolicy(bool enable) noexcept {
+    recoverEvictionPolicy_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
+    return *this;
+  }
+
+  BlockCacheConfig& useCombinedEntryBlock(bool enable) noexcept {
+    useCombinedEntryBlock_ = enable;
     return *this;
   }
 
@@ -615,6 +620,12 @@ class BlockCacheConfig {
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
 
+  bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
+
+  bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
+
+  bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
+
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
@@ -659,16 +670,31 @@ class BlockCacheConfig {
   // Whether the region manager workers flushes asynchronously.
   bool regionManagerFlushAsync_{false};
 
+  // Whether to enable the clean region fast path in getCleanRegion().
+  // When enabled, getCleanRegion() can skip acquiring the mutex and return
+  // Retry immediately if clean regions are empty and reclaims are in-flight.
+  bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts.
+  bool recoverEvictionPolicy_{false};
+
+  // Whether to use Combined entry block (For index entries and small sized
+  // items).
+  // Only FixedSizeIndex will support this and it doesn't work with
+  // SparseMapIndex
+  //
+  // TODO: For now, only index entries will be handled with Combined entry block
+  bool useCombinedEntryBlock_{false};
+
   // Number of allocators per priority.
   // Do not set this directly. This should be configured by setAllocatorCount
-  // for FIFO and LRU, and enableSegmentedFifio for segmented FIFO.
+  // for FIFO and LRU, and enableSegmentedFifo for segmented FIFO.
   std::vector<uint32_t> allocatorsPerPriority_{1};
 
   // Index related config. If not specified, SparseMapIndex will be used
   BlockCacheIndexConfig indexConfig_;
 
   std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
-  std::shared_ptr<EventTracker> eventTracker_;
 
   friend class NavyConfig;
 };
@@ -851,13 +877,13 @@ class NavyConfig {
 
   // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].bigHash();
   }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BlockCacheConfig& blockCache() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].blockCache();
   }
 
@@ -872,6 +898,9 @@ class NavyConfig {
   }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
+  int getReaderThreadsPriority() const { return readerThreadsPriority_; }
+  int getWriterThreadsPriority() const { return writerThreadsPriority_; }
+
   uint32_t getMaxNumReads() const { return maxNumReads_; }
   uint32_t getMaxNumWrites() const { return maxNumWrites_; }
   uint32_t getStackSize() const { return stackSize_; }
@@ -880,6 +909,8 @@ class NavyConfig {
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
   size_t getNumShards() const { return numShards_; }
+  bool getEnableAccessTimeMap() const { return enableAccessTimeMap_; }
+  size_t getAccessTimeMapMaxSize() const { return accessTimeMapMaxSize_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -998,6 +1029,20 @@ class NavyConfig {
   // @throw std::invalid_argument if the input value is 0.
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
 
+  // Set the nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setReaderThreadsPriority(int priority) noexcept {
+    readerThreadsPriority_ = priority;
+  }
+
+  // Set the nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setWriterThreadsPriority(int priority) noexcept {
+    writerThreadsPriority_ = priority;
+  }
+
   // ============ Other settings =============
   void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) noexcept {
     maxConcurrentInserts_ = maxConcurrentInserts;
@@ -1009,6 +1054,12 @@ class NavyConfig {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
   void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
+  void setEnableAccessTimeMap(bool enable) noexcept {
+    enableAccessTimeMap_ = enable;
+  }
+  void setAccessTimeMapMaxSize(size_t maxSize) noexcept {
+    accessTimeMapMaxSize_ = maxSize;
+  }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -1056,7 +1107,6 @@ class NavyConfig {
   uint32_t qDepth_{0};
 
   // ============ Engines settings =============
-  // Currently we support one pair of engines.
   std::vector<EnginesConfig> enginesConfigs_{1};
   // Function to map each item to a pair of engine.
   EnginesSelector selector_{};
@@ -1071,6 +1121,15 @@ class NavyConfig {
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
+  // Nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int readerThreadsPriority_{0};
+  // Nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int writerThreadsPriority_{0};
+
   // Max number of concurrent reads/writes in whole Navy.
   // This needs to be a multiple of the number of readers and writers.
   // Setting this to non-0 will enable async IO where fibers are used
@@ -1083,7 +1142,7 @@ class NavyConfig {
 
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
-  // 0 means unlimited.
+  // 0 rejects all inserts. Default of 1'000'000 is effectively no limit.
   uint32_t maxConcurrentInserts_{1'000'000};
   // Total memory limit for in-flight parcels.
   // Once this is reached, requests will be rejected until the parcel
@@ -1097,6 +1156,10 @@ class NavyConfig {
   bool enableFDP_{false};
   // Number of nvm lock shards
   size_t numShards_{8192};
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool enableAccessTimeMap_{false};
+  // Maximum number of entries in the AccessTimeMap. 0 means unbounded.
+  size_t accessTimeMapMaxSize_{0};
 };
 } // namespace navy
 } // namespace cachelib

@@ -27,36 +27,57 @@ package;
 // make sure to communicate that with our users.
 
 struct SlabAllocatorObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 memorySize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   4: required bool canAllocate;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   5: required map<byte, i64> memoryPoolSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   7: required i64 slabSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   8: required i64 minAllocSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   9: required i32 nextSlabIdx;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   10: required list<i32> freeSlabIdxs;
   11: list<i32> advisedSlabIdxs;
 }
 
 struct AllocationClassObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required byte classId;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 allocationSize; // to accommodate uint32_t allocationSize
+  @thrift.AllowUnsafeRequiredFieldQualifier
   4: required i64 currOffset;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   8: required bool canAllocate;
   9: SListObject freedAllocationsObject;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   10: required i32 currSlabIdx;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   11: required list<i32> allocatedSlabIdxs;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   12: required list<i32> freeSlabIdxs;
 }
 
 struct MemoryPoolObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required byte id;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 maxSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required i64 currSlabAllocSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   4: required i64 currAllocSize;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   6: required list<i64> acSizes;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   7: required list<AllocationClassObject> ac;
   8: i64 numSlabResize = 0;
   9: i64 numSlabRebalance = 0;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   10: required list<i32> freeSlabIdxs;
   11: i64 numSlabsAdvised = 0;
 }
@@ -69,10 +90,14 @@ struct MemoryPoolManagerObject {
 
 struct MemoryAllocatorObject {
   // fields in MemoryAllocator::Config
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required set<i64> allocSizes;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   4: required bool enableZeroedSlabAllocs;
   5: bool lockMemory = false;
 
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required SlabAllocatorObject slabAllocator;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required MemoryPoolManagerObject memoryPoolManager;
 }

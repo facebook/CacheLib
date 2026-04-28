@@ -36,6 +36,7 @@ inline NavyConfig getNvmTestConfig(const std::string& cacheDir) {
       .setSizePctAndMaxItemSize(50, 100)
       .setBucketSize(1024)
       .setBucketBfSize(8);
+  config.setEnableAccessTimeMap(true);
   return config;
 }
 

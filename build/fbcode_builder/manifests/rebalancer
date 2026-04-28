@@ -1,30 +1,48 @@
 [manifest]
 name = rebalancer
 fbsource_path = fbcode/algopt/rebalancer/
+shipit_project = facebookincubator/rebalancer
+shipit_fbcode_builder = true
+use_shipit = true
 
 [git]
 # To git clone on devserver, setup fwdproxy:
 # https://www.internalfb.com/wiki/Open_Source/Maintain_a_FB_OSS_Project/Devserver_GitHub_Access/
-repo_url = git@github.com:facebookincubator/rebalancer.git
-branch = richard
+repo_url = https://github.com/facebookincubator/rebalancer.git
+branch = main
 
 [build]
 builder = cmake
 
 [dependencies]
 boost
+fbthrift
+fmt
 folly
 gflags
 glog
-fbthrift
-fmt
-fizz
 googletest
+highs-optimizer
 xxhash
 
-[cmake.defines.os=darwin]
-REBALANCER_USE_SCIP=0
+[dependencies.os=linux]
+clang19
+
+[cmake.defines.os=linux]
+CMAKE_C_COMPILER=clang-19
+CMAKE_CXX_COMPILER=clang++-19
+
+[shipit.strip]
+^.*/fb/.*$
 
 [shipit.pathmap]
-fbcode/algopt/rebalancer/oss = .
-fbcode/algopt/rebalancer = rebalancer
+fbcode/algopt/rebalancer/oss_root = .
+fbcode/algopt/rebalancer = algopt/rebalancer
+fbcode/algopt/lp = algopt/lp
+
+[dependencies.all(distro=centos_stream,distro_vers=9)]
+clang19
+
+[cmake.defines.all(distro=centos_stream,distro_vers=9)]
+CMAKE_C_COMPILER=clang-19
+CMAKE_CXX_COMPILER=clang++-19

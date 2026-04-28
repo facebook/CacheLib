@@ -42,12 +42,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   // @return a valid Guard representing the tombstone
   Guard add(folly::StringPiece key) {
     std::lock_guard l(mutex_);
-    auto it = keys_.find(key);
-
-    if (it == keys_.end()) {
-      it = keys_.insert(std::make_pair(key.toString(), 0)).first;
-    }
-
+    auto [it, inserted] = keys_.try_emplace(key, 0);
     ++it->second;
     return Guard(it->first, *this);
   }

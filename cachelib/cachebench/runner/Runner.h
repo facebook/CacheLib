@@ -41,9 +41,14 @@ class Runner {
   //                            benchmark run is reported/tracked.
   // @param progressStatsFile   the file to log periodic stats and progress
   //                            to in addition to stdtout. Ignored if empty
+  // @param alsoPrintResultsToConsole if true, also print results to console in
+  //                                  addition to progressStatsFile (if
+  //                                  progressStatsFile is not empty). Does
+  //                                  nothing if progressStatsFile is empty.
   // @return true if the run was successful, false if there is a failure.
   bool run(std::chrono::seconds progressInterval,
-           const std::string& progressStatsFile);
+           const std::string& progressStatsFile,
+           bool alsoPrintResultsToConsole = true);
 
   // for testings using folly::Benchmark
   // in addition to running time, cachebench has several metrics
@@ -58,6 +63,11 @@ class Runner {
     }
   }
 
+  // Get run stats. Must only be called after run() has returned.
+  std::unique_ptr<StatsBase>& getCacheStats() { return cacheStats_; }
+  const ThroughputStats& getThroughputStats() const { return opsStats_; }
+  uint64_t getTestDurationNs() const { return durationNs_; }
+
  private:
   // id of the stressor instance
   size_t instanceId_;
@@ -66,10 +76,12 @@ class Runner {
 
   bool aborted_{false};
 
-  bool render(Stats& cacheStats,
-              ThroughputStats& opsStats,
-              uint64_t durationNs,
-              std::ostream& os) const;
+  // Stats captured after run() completes
+  std::unique_ptr<StatsBase> cacheStats_;
+  ThroughputStats opsStats_;
+  uint64_t durationNs_{0};
+
+  bool render(std::ostream& os);
 };
 } // namespace cachebench
 } // namespace cachelib

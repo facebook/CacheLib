@@ -249,7 +249,8 @@ class Device {
 std::unique_ptr<Device> createMemoryDevice(
     uint64_t size,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t ioAlignSize = 1);
+    uint32_t ioAlignSize = 1,
+    uint32_t numInitThreads = 8);
 
 // Creates a direct IO file device supporting RAID if multiple files are
 // provided. If qDepth = 0, sync IO will be used all the time

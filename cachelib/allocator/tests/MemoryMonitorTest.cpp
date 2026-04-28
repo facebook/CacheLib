@@ -15,6 +15,7 @@
  */
 
 #include "cachelib/allocator/MemoryMonitor.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -87,6 +88,24 @@ TEST(MemoryMonitorTest, decreasingRateLimiter) {
     rl.addValue(freeVal);
     EXPECT_EQ(reclaimPerIter, rl.throttle(reclaimPerIter));
   }
+}
+
+namespace {
+size_t mockCgroupMemProviderZero() { return 0; }
+} // namespace
+
+TEST(MemoryMonitorTest, CgroupMemoryConfig) {
+  auto memBefore = util::getMemAvailable();
+  EXPECT_GT(memBefore, 0);
+
+  util::setCgroupMemoryAdvising(mockCgroupMemProviderZero);
+
+  auto memAfter = util::getMemAvailable();
+  EXPECT_GT(memAfter, 0);
+  EXPECT_GT(memAfter, memBefore / 10);
+  EXPECT_LT(memAfter, memBefore * 10);
+
+  util::setCgroupMemoryAdvising(nullptr);
 }
 
 } // namespace tests

@@ -624,11 +624,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes / 2);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 23 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 1);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 3 * numBytes / 2);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 72 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 73 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
     }
   }
 
@@ -712,11 +712,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 8);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 12);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 16);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 12);
       // shutdown and make sure that the advised slabs in
       // each pool remain same after restore
       alloc.shutDown();
@@ -731,11 +731,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       AllocatorT alloc(AllocatorT::SharedMemAttach, config);
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 8);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 12);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 16);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 12);
     }
   }
 
@@ -828,31 +828,31 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(CCacheReturn::NOTFOUND, cc->set(Key(p), &p));
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 2 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 3 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 0);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 0 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 0);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 5 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 5);
+      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 6 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 4);
       alloc.shutDown();
     }
     {
       AllocatorT alloc(AllocatorT::SharedMemAttach, config);
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 2 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 3 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 0);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 0 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 0);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 5 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 5);
+      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 6 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 4);
     }
   }
 
@@ -943,17 +943,123 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       }
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 47 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 47 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), numBytes);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 44 * Slab::kSize);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 6);
     }
+  }
+
+  // Verify that per-pool advised slab counts always reflect reality.
+  // After advising slabs across pools of different sizes and waiting for
+  // a no-op iteration (numSlabsToAdvise == totalSlabsAdvised), each pool's
+  // getNumSlabsAdvised() must match the actual number of madvised slabs
+  // and must not exceed the pool's total slab count.
+  //
+  // Regression test for a bug where calcNumSlabsToAdviseReclaim would
+  // overwrite per-pool curSlabsAdvised_ counters with computed proportional
+  // targets when numSlabsToAdvise == totalSlabsAdvised, even though no
+  // actual advise or reclaim operations were performed. With asymmetric
+  // pool sizes and >50% of slabs advised, the computed target for a small
+  // pool can exceed its total slab count, causing getPoolUsableSize() to
+  // underflow and overLimit() to return a false positive.
+  void testMemMonitorAdvisedCountsMatchReality() {
+    typename AllocatorT::Config config;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
+    config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
+
+    // Disable slab rebalancing and pool resizing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
+    const unsigned int keyLen = 25;
+    const std::set<uint32_t> acSizes = {512 * 1024, 1024 * 1024};
+    const size_t pool1Slabs = 4;
+    const size_t pool2Slabs = 50;
+    config.setCacheSize((pool1Slabs + pool2Slabs + 1) * Slab::kSize);
+
+    AllocatorT alloc(config);
+    auto poolId1 = alloc.addPool("pool1", pool1Slabs * Slab::kSize, acSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId1);
+    auto poolId2 = alloc.addPool("pool2", pool2Slabs * Slab::kSize, acSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId2);
+    auto allocSizes = alloc.getPool(poolId1).getAllocSizes();
+
+    // Fill pool1 completely (4 slabs: 2 per alloc class)
+    for (size_t i = 0; i < pool1Slabs / 2; i++) {
+      this->fillUpOneSlab(alloc, poolId1, allocSizes[0], keyLen);
+      this->fillUpOneSlab(alloc, poolId1, allocSizes[1], keyLen);
+    }
+    ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(),
+              pool1Slabs * Slab::kSize);
+
+    // Fill pool2 completely (50 slabs: 25 per alloc class)
+    for (size_t i = 0; i < pool2Slabs / 2; i++) {
+      this->fillUpOneSlab(alloc, poolId2, allocSizes[0], keyLen);
+      this->fillUpOneSlab(alloc, poolId2, allocSizes[1], keyLen);
+    }
+    ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(),
+              pool2Slabs * Slab::kSize);
+
+    auto& memMonitor = *alloc.memMonitor_;
+
+    // Step 1: Advise 10 slabs. Proportional targets:
+    //   pool1: 4*10/54 = 0, +1 correction = 1
+    //   pool2: 50*10/54 = 9
+    // After: pool1(3 alloc, 1 advised), pool2(41 alloc, 9 advised)
+    memMonitor.updateNumSlabsToAdvise(10);
+    ASSERT_EVENTUALLY_TRUE([&] {
+      return alloc.getPool(poolId1).getNumSlabsAdvised() +
+                 alloc.getPool(poolId2).getNumSlabsAdvised() ==
+             10;
+    });
+
+    ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 1);
+    ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 9);
+    ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 3 * Slab::kSize);
+
+    // Step 2: Advise 44 total (+34 delta). Used: pool1=3, pool2=41, total=44.
+    //   Targets: pool1 = 3*44/44 = 3, pool2 = 41*44/44 = 41.
+    //   Advise 2 more from pool1 (1→3), 32 more from pool2 (9→41).
+    //   After: pool1(1 alloc, 3 advised), pool2(9 alloc, 41 advised)
+    memMonitor.updateNumSlabsToAdvise(34);
+    ASSERT_EVENTUALLY_TRUE([&] {
+      return alloc.getPool(poolId1).getNumSlabsAdvised() +
+                 alloc.getPool(poolId2).getNumSlabsAdvised() ==
+             44;
+    });
+
+    ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
+    ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 41);
+    ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 1 * Slab::kSize);
+
+    // Step 3: Let at least one more memory monitor iteration run.
+    // numSlabsToAdvise (44) == totalSlabsAdvised (44), so no advise or
+    // reclaim should occur. Advised counts must remain unchanged.
+    // With asymmetric pool sizes and >50% of slabs advised, proportional
+    // target computation can produce values exceeding a pool's slab count
+    // (e.g. pool1 target = 1*44/10 = 4, +1 correction = 5 > 4 slabs).
+    // The counters must never be overwritten with such computed targets.
+    auto runCountBefore = memMonitor.getRunCount();
+    ASSERT_EVENTUALLY_TRUE(
+        [&] { return memMonitor.getRunCount() >= runCountBefore + 2; });
+
+    // Advised counts must not exceed the pool's total slab count
+    ASSERT_LE(alloc.getPool(poolId1).getNumSlabsAdvised(), pool1Slabs);
+    ASSERT_LE(alloc.getPool(poolId2).getNumSlabsAdvised(), pool2Slabs);
+
+    // Advised counts must reflect reality (actual madvised slabs)
+    ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
+    ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 41);
+
+    // Pool1 must not be over limit
+    ASSERT_FALSE(alloc.getPool(poolId1).overLimit());
+    ASSERT_FALSE(alloc.getPool(poolId2).overLimit());
   }
 
   // testMemoryMonitorPerIterationAdviseReclaim

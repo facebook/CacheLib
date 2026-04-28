@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/common/Hash.h"
 
@@ -26,6 +27,13 @@ namespace navy {
 class Engine {
  public:
   virtual ~Engine() = default;
+
+  // Set the EventTracker for this engine (non-owning pointer).
+  // Must be called before concurrent access begins.
+  void setEventTracker(EventTracker* tracker) { eventTracker_ = tracker; }
+
+  // Get the EventTracker for this engine.
+  EventTracker* getEventTracker() const { return eventTracker_; }
 
   // return the size of usable space
   virtual uint64_t getSize() const = 0;
@@ -40,10 +48,19 @@ class Engine {
 
   // If insert is failed, previous item (if existed) is not affected and
   // remains available via lookup.
-  virtual Status insert(HashedKey hk, BufferView value) = 0;
+  // TODO: For now passing lastAccessTimeSecs as a param. This is
+  // temporary until ItemMetadata lands. After that, we will pass
+  // ItemMetadata as a param.
+  virtual Status insert(HashedKey hk,
+                        BufferView value,
+                        uint8_t poolId = 0,
+                        uint32_t expiryTime = 0,
+                        uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Looks up a key in the engine.
-  virtual Status lookup(HashedKey hk, Buffer& value) = 0;
+  virtual Status lookup(HashedKey hk,
+                        Buffer& value,
+                        uint32_t& lastAccessTimeSecs) = 0;
 
   // Remove must not return Status::Retry.
   virtual Status remove(HashedKey hk) = 0;
@@ -78,6 +95,10 @@ class Engine {
   // Update any stats needed to be updated when eviction is done
   // For now, only itme lifetime is updated
   virtual void updateEvictionStats(uint32_t lifetime) = 0;
+
+ protected:
+  // Non-owning pointer; lifetime managed by CacheBase.
+  EventTracker* eventTracker_{nullptr};
 };
 } // namespace navy
 } // namespace cachelib

@@ -43,6 +43,7 @@
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 DECLARE_bool(report_api_latency);
 DECLARE_string(report_ac_memory_usage_stats);
@@ -322,7 +323,7 @@ class Cache {
   }
 
   // Get overall stats on the whole cache allocator
-  Stats getStats() const;
+  std::unique_ptr<StatsBase> getStats() const;
 
   // Get number of bytes written to NVM.
   double getNvmBytesWritten() const;
@@ -668,7 +669,16 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       }
     }
 
-    if (config_.navyHitsReinsertionThreshold > 0) {
+    if (config_.navyEnableItemHistoryTracking) {
+      bcConfig.enableSparseMapIndex(
+          navy::SparseMapIndex::kDefaultNumBucketMaps,
+          navy::SparseMapIndex::kDefaultBucketMapsPerMutex,
+          /*trackItemHistory=*/true);
+    }
+
+    if (config_.customReinsertionPolicyFactory) {
+      bcConfig.enableCustomReinsertion(config_.customReinsertionPolicyFactory);
+    } else if (config_.navyHitsReinsertionThreshold > 0) {
       bcConfig.enableHitsBasedReinsertion(
           static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
     }
@@ -707,6 +717,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     }
     nvmConfig.navyConfig.setMaxConcurrentInserts(
         config_.navyMaxConcurrentInserts);
+    nvmConfig.navyConfig.setEnableAccessTimeMap(
+        config_.navyEnableAccessTimeMap);
+    nvmConfig.navyConfig.setAccessTimeMapMaxSize(
+        config_.navyAccessTimeMapMaxSize);
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;
@@ -1114,12 +1128,14 @@ double Cache<Allocator>::getNvmBytesWritten() const {
 }
 
 template <typename Allocator>
-Stats Cache<Allocator>::getStats() const {
+std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
+  auto retPtr = std::make_unique<Stats>();
+  auto& ret = *retPtr;
+
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
   auto usageFraction =
       1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
                 aggregate.poolUsableSize;
-  Stats ret;
   ret.poolUsageFraction.push_back(usageFraction);
   for (size_t pid = 1; pid < pools_.size(); pid++) {
     auto poolStats = cache_->getPoolStats(static_cast<PoolId>(pid));
@@ -1292,7 +1308,7 @@ Stats Cache<Allocator>::getStats() const {
     }
   }
 
-  return ret;
+  return retPtr;
 }
 
 template <typename Allocator>

@@ -20,7 +20,6 @@
 #include <folly/container/F14Map.h>
 #include <folly/fibers/TimedMutex.h>
 
-#include <cassert>
 #include <memory>
 #include <utility>
 
@@ -33,8 +32,6 @@
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/serialization/RecordIO.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
@@ -91,6 +88,11 @@ class RegionManager {
   //                                  TODO: This should be the default behavior
   //                                  and this flag should be removed once we're
   //                                  convinced there's no missing corner cases.
+  // @param cleanRegionFastPath       whether to enable the fast path in
+  //                                  getCleanRegion() that skips the mutex
+  //                                  when clean regions are empty
+  // @param recoverEvictionPolicy     whether to persist and recover eviction
+  //                                  policy ordering across restarts
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -105,7 +107,9 @@ class RegionManager {
                 uint16_t numPriorities,
                 uint16_t inMemBufFlushRetryLimit,
                 bool workerFlushAsync,
-                bool allowReadDuringReclaim = false);
+                bool allowReadDuringReclaim = false,
+                bool cleanRegionFastPath = false,
+                bool recoverEvictionPolicy = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -190,11 +194,6 @@ class RegionManager {
     }
     numInMemBufActive_.dec();
   }
-
-  // Writes buffer @buf at the @addr.
-  // @addr must be the address returned by Region::open(OpenMode::Write)
-  // @buf may be mutated and will be de-allocated at the end of this
-  void write(RelAddress addr, Buffer buf);
 
   bool deviceWrite(RelAddress addr, Buffer buf);
 
@@ -315,6 +314,18 @@ class RegionManager {
   // them and can be evicted right away.
   void resetEvictionPolicy();
 
+  // Recomputes external fragmentation from region state. Used by the eviction
+  // policy recovery path (resetEvictionPolicy() handles this internally).
+  void recomputeFragmentation();
+
+  // After policy_->recover(), reconstruct any region not in the recovered
+  // policy queue. Empty untracked regions go to cleanRegions_ (up to pool
+  // capacity); the rest are tracked into the policy. Defends against
+  // permanent leaks from in-memory state (e.g., cleanRegions_) that isn't
+  // covered by the persisted policy data. Also validates region IDs from
+  // the persisted policy data.
+  void restoreUntrackedRegions(const serialization::EvictionPolicyData& data);
+
   const uint16_t numPriorities_{};
   const uint16_t inMemBufFlushRetryLimit_{};
   const uint32_t numRegions_{};
@@ -339,6 +350,17 @@ class RegionManager {
 
   uint32_t reclaimsOutstanding_{0};
 
+  // Fast-path flag: when true, cleanRegions_ is empty and reclaims are
+  // in-flight. getCleanRegion() can skip acquiring cleanRegionsMutex_ and
+  // return Retry immediately, avoiding mutex contention that would starve
+  // reclaim workers trying to push clean regions back.
+  //
+  // Uses memory_order_relaxed: all stores are done under
+  // cleanRegionsMutex_ so writers are properly serialized, and the
+  // unsynchronized load on the fast-path may see a stale value but
+  // callers retry in a loop so correctness is not affected.
+  std::atomic<bool> cleanRegionsEmpty_{false};
+
   // The thread that runs the flush and reclaim. For Navy-async thread mode, the
   // async flushes will be run in-line on fiber by the async NavyThread itself
   std::vector<std::unique_ptr<NavyThread>> workers_;
@@ -351,6 +373,12 @@ class RegionManager {
 
   // Whether to allow read for the being reclaimed region
   const bool allowReadDuringReclaim_{false};
+
+  // Whether the clean region fast path is enabled
+  const bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts
+  const bool recoverEvictionPolicy_{false};
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

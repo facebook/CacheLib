@@ -55,6 +55,14 @@ TYPED_TEST(BaseAllocatorTest, ReadWriteHandle) { this->testReadWriteHandle(); }
 // fetch them.
 TYPED_TEST(BaseAllocatorTest, Find) { this->testFind(); }
 
+TYPED_TEST(BaseAllocatorTest, TryAcquireSuccess) {
+  this->testTryAcquireSuccess();
+}
+
+TYPED_TEST(BaseAllocatorTest, TryAcquireMoving) {
+  this->testTryAcquireMoving();
+}
+
 // make some allocations without evictions, remove them and ensure that they
 // cannot be accessed through find.
 TYPED_TEST(BaseAllocatorTest, Remove) { this->testRemove(); }
@@ -139,6 +147,10 @@ TYPED_TEST(BaseAllocatorTest, IterateAndRemoveWithKey) {
 
 TYPED_TEST(BaseAllocatorTest, IterateAndRemoveWithIter) {
   this->testIterateAndRemoveWithIter();
+}
+
+TYPED_TEST(BaseAllocatorTest, IterateLockGroup) {
+  this->testIterateLockGroup();
 }
 
 TYPED_TEST(BaseAllocatorTest, IterateWithEvictions) {

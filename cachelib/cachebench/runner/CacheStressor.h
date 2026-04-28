@@ -173,7 +173,9 @@ class CacheStressor : public CacheStressorBase {
   }
 
   // obtain stats from the cache instance.
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
  private:
   folly::SharedMutex& getLock(Key key) {
