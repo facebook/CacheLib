@@ -1,1 +1,0 @@
-"use strict";(globalThis.webpackChunkcachelib=globalThis.webpackChunkcachelib||[]).push([[6886],{73468(a){a.exports=JSON.parse('{"label":"announcement","permalink":"/blog/tags/announcement","allTagsPath":"/blog/tags","count":1}')}}]);

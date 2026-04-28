@@ -64,10 +64,10 @@ config.setItemDestructor([&](ObjectCacheDestructorData data) {
  });
 ```
 
-- (**Suggested**) `maxKeySizeBytes`: The maximum size of the key to be inserted. Default to `255`. Keys larger than 255 bytes are supported, but each item uses an additional 4 bytes. Since we also use this size to decide the allocation size of object-cache, we suggest you set a reasonable value to avoid wasting space.
+- (**Suggested**) `maxKeySizeBytes`: The maximum size of the key to be inserted. It cannot exceed 255 bytes. Default to `255`. Since we also use this size to decide the allocation size of object-cache, we suggest you set a reasonble value to avoid wasting space.
 
 <details>
-<summary> Max Key Size : Allocation Size Mapping Table </summary>
+<summary> Max Key Size : Allocation Size Mapping Table  </summary>
 
 | Max Key Size Bytes | Allocation Size Bytes |
 | ------------------ | --------------------- |
@@ -102,8 +102,6 @@ config.setItemDestructor([&](ObjectCacheDestructorData data) {
 | [233, 240]         | 288                   |
 | [241, 248]         | 296                   |
 | [249, 255]         | 304                   |
-
-For keys larger than 255 bytes, add 4 bytes to the allocation size.
 
 </details>
 
