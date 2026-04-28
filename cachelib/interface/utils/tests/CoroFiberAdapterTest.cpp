@@ -29,12 +29,16 @@ class CoroFiberAdapterTest : public testing::Test {
   template <typename T>
   using Result = folly::Expected<T, navy::Status>;
 
-  navy::NavyThread thread_{"test"};
+  CoroFiberAdapter executor_{CoroFiberAdapter::Config{
+      .threadName = "test_executor",
+      .numThreads = 1,
+      .fibersPerThread = 1,
+      .stackSize = 16 * 1024,
+  }};
 };
 
 CO_TEST_F(CoroFiberAdapterTest, success) {
-  auto result = co_await onWorkerThread(
-      thread_,
+  auto result = co_await executor_.onWorkerThread(
       []() -> Result<int> { return 42; },
       [](auto&&) { FAIL() << "should not have called cleanup function"; });
   CO_ASSERT_TRUE(result.hasValue());
@@ -42,7 +46,7 @@ CO_TEST_F(CoroFiberAdapterTest, success) {
 }
 
 CO_TEST_F(CoroFiberAdapterTest, defaultCleanup) {
-  auto result = co_await onWorkerThread(thread_, []() -> Result<int> {
+  auto result = co_await executor_.onWorkerThread([]() -> Result<int> {
     return folly::makeUnexpected(navy::Status::DeviceError);
   });
   CO_ASSERT_TRUE(result.hasError());
@@ -51,10 +55,9 @@ CO_TEST_F(CoroFiberAdapterTest, defaultCleanup) {
 
 CO_TEST_F(CoroFiberAdapterTest, retryThenSuccess) {
   size_t callCount = 0;
-  auto result = co_await onWorkerThread(
-      thread_,
+  auto result = co_await executor_.onWorkerThread(
       [&callCount]() -> Result<int> {
-        if (callCount++ < 3) {
+        if (callCount++ < 2) {
           return folly::makeUnexpected(navy::Status::Retry);
         }
         return 100;
@@ -62,12 +65,24 @@ CO_TEST_F(CoroFiberAdapterTest, retryThenSuccess) {
       [](auto&&) { FAIL() << "should not have called cleanup function"; });
   CO_ASSERT_TRUE(result.hasValue());
   EXPECT_EQ(result.value(), 100);
-  EXPECT_EQ(callCount, 4);
+  EXPECT_EQ(callCount, 3);
+}
+
+CO_TEST_F(CoroFiberAdapterTest, retriesExhausted) {
+  size_t callCount = 0;
+  auto result = co_await executor_.onWorkerThread(
+      [&callCount]() -> Result<int> {
+        ++callCount;
+        return folly::makeUnexpected(navy::Status::Retry);
+      },
+      [](auto&&) {});
+  CO_ASSERT_TRUE(result.hasError());
+  EXPECT_EQ(result.error(), navy::Status::Retry);
+  EXPECT_EQ(callCount, 3);
 }
 
 CO_TEST_F(CoroFiberAdapterTest, returnError) {
-  auto result = co_await onWorkerThread(
-      thread_,
+  auto result = co_await executor_.onWorkerThread(
       []() -> Result<int> {
         return folly::makeUnexpected(navy::Status::DeviceError);
       },
@@ -77,8 +92,7 @@ CO_TEST_F(CoroFiberAdapterTest, returnError) {
 }
 
 CO_TEST_F(CoroFiberAdapterTest, throws) {
-  auto result = co_await folly::coro::co_awaitTry(onWorkerThread(
-      thread_,
+  auto result = co_await folly::coro::co_awaitTry(executor_.onWorkerThread(
       []() -> Result<int> { throw std::runtime_error("error"); },
       [](auto&&) { FAIL() << "should not have called cleanup function"; }));
   CO_ASSERT_TRUE(result.hasException<std::runtime_error>());
@@ -116,20 +130,19 @@ CO_TEST_F(CoroFiberAdapterTest, cancellation) {
   };
 
   auto result = co_await folly::coro::collectAllTry(
-      folly::coro::co_withCancellation(cs.getToken(),
-                                       onWorkerThread(thread_,
-                                                      std::move(fiberFunc),
-                                                      std::move(cleanupFunc))),
+      folly::coro::co_withCancellation(
+          cs.getToken(),
+          executor_.onWorkerThread(std::move(fiberFunc),
+                                   std::move(cleanupFunc))),
       cancelTask());
   EXPECT_TRUE(std::get<0>(result).hasException<folly::OperationCancelled>());
-  thread_.drain(); // ensure fiberFunc() finishes running & sets the promise
+  executor_.drain(); // ensure fiberFunc() finishes running & sets the promise
   EXPECT_TRUE(ranCleanup);
 }
 
 CO_TEST_F(CoroFiberAdapterTest, concurrent) {
   auto task = [&](int value) -> folly::coro::Task<void> {
-    auto result = co_await onWorkerThread(
-        thread_,
+    auto result = co_await executor_.onWorkerThread(
         [value]() -> Result<int> { return value * 2; },
         [](auto&&) { FAIL() << "should not have called cleanup function"; });
     CO_ASSERT_TRUE(result.hasValue());

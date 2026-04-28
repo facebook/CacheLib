@@ -41,6 +41,7 @@
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/common/EventInterface.h"
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Throttler.h"
 
 namespace facebook {
@@ -343,6 +344,12 @@ class CacheAllocatorConfig {
   // starts
   CacheAllocatorConfig& setEventTracker(LegacyEventTrackerSharedPtr&&);
 
+  // Set a factory function to create EventTracker::Config on demand.
+  // Creates a fresh config each time, avoiding issues when
+  // CacheAllocatorConfig is reused (e.g., during warm roll recovery).
+  CacheAllocatorConfig& setEventTrackerConfigFactory(
+      std::function<EventTracker::Config()> factory);
+
   // Set the minimum TTL for an item to be admitted into NVM cache.
   // If nvmAdmissionMinTTL is set to be positive, any item with configured TTL
   // smaller than this will always be rejected by NvmAdmissionPolicy.
@@ -576,6 +583,11 @@ class CacheAllocatorConfig {
   // Callback for initializing the legacyEventTracker on CacheAllocator
   // construction.
   LegacyEventTrackerSharedPtr legacyEventTracker{nullptr};
+
+  // Factory function to create EventTracker::Config on demand.
+  // Creates a fresh config each time, avoiding issues when
+  // CacheAllocatorConfig is reused (e.g., during warm roll recovery).
+  std::function<EventTracker::Config()> eventTrackerConfigFactory{nullptr};
 
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
@@ -1165,6 +1177,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTrackerConfigFactory(
+    std::function<EventTracker::Config()> factory) {
+  eventTrackerConfigFactory = std::move(factory);
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
     uint64_t ttl) {
   if (!nvmConfig) {
@@ -1353,6 +1372,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
   configMap["eventTracker"] = legacyEventTracker ? "set" : "empty";
+  configMap["eventTrackerConfigFactory"] =
+      eventTrackerConfigFactory ? "set" : "empty";
   configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   configMap["delayCacheWorkersStart"] =
       delayCacheWorkersStart ? "true" : "false";

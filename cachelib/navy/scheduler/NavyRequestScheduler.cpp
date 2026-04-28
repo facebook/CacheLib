@@ -75,6 +75,7 @@ NavyRequestScheduler::NavyRequestScheduler(size_t numReaderThreads,
     size_t numDispatchers = numReaderThreads_ + numWriterThreads_;
     std::vector<NavyRequestDispatcher::Stats> lastStats(numDispatchers);
     std::vector<std::shared_ptr<NavyRequestDispatcher>> dispatchers;
+    dispatchers.reserve(readerDispatchers_.size());
     for (auto dispatcher : readerDispatchers_) {
       dispatchers.emplace_back(dispatcher);
     }

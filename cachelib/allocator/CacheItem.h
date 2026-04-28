@@ -253,6 +253,13 @@ class CACHELIB_PACKED_ATTR CacheItem {
   bool isNvmEvicted() const noexcept;
 
   /**
+   * Track whether the item was routed to BlockCache (large item) in NVM.
+   * Set during NVM promotion when the exact NVM buffer size is known.
+   */
+  void markNvmLargeItem() noexcept;
+  bool isNvmLargeItem() const noexcept;
+
+  /**
    * Function to set the timestamp for when to expire an item
    *
    * This API will only succeed when an item is a regular item, and user
@@ -735,13 +742,14 @@ std::string CacheItem<CacheTrait>::toString() const {
         "isInMMContainer={}:isAccessible={}:isMarkedForEviction={}:"
         "isMoving={}:references={}:ctime="
         "{}:"
-        "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:hasChainedItem="
+        "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:"
+        "isNvmLargeItem={}:hasChainedItem="
         "{}",
         this, getRefCountAndFlagsRaw(), getSize(),
         folly::humanify(getKey().str()), folly::hexlify(getKey()),
         isInMMContainer(), isAccessible(), isMarkedForEviction(), isMoving(),
         getRefCount(), getCreationTime(), getExpiryTime(), getLastAccessTime(),
-        isNvmClean(), isNvmEvicted(), hasChainedItem());
+        isNvmClean(), isNvmEvicted(), isNvmLargeItem(), hasChainedItem());
   }
 }
 
@@ -864,6 +872,16 @@ void CacheItem<CacheTrait>::unmarkNvmEvicted() noexcept {
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isNvmEvicted() const noexcept {
   return ref_.isNvmEvicted();
+}
+
+template <typename CacheTrait>
+void CacheItem<CacheTrait>::markNvmLargeItem() noexcept {
+  ref_.markNvmLargeItem();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isNvmLargeItem() const noexcept {
+  return ref_.isNvmLargeItem();
 }
 
 template <typename CacheTrait>

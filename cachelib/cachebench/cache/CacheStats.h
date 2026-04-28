@@ -22,6 +22,7 @@
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/cachebench/cache/StatsBase.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/interface/Stats.h"
 
 DECLARE_bool(report_api_latency);
 DECLARE_string(report_ac_memory_usage_stats);
@@ -730,6 +731,184 @@ class Stats : public StatsBase {
 
   static double invertPctFn(uint64_t ops, uint64_t total) {
     return 100 - pctFn(ops, total);
+  }
+};
+
+class ComponentStats : public StatsBase {
+ public:
+  interface::CacheComponentStats stats_;
+
+  explicit ComponentStats(interface::CacheComponentStats&& stats)
+      : stats_(std::move(stats)) {}
+
+  // Aggregate throughput stats from another instance. DOES NOT HANDLE
+  // LATENCY STATS!
+  ComponentStats& operator+=(const StatsBase& otherBase) override {
+    auto& other = otherBase.as<ComponentStats>();
+
+    auto addOpCounters = [](auto& dst, const auto& src) {
+      dst.throughput_.calls_ += src.throughput_.calls_;
+      dst.throughput_.successes_ += src.throughput_.successes_;
+      dst.throughput_.errors_ += src.throughput_.errors_;
+    };
+
+    auto addFindOpCounters = [&addOpCounters](auto& dst, const auto& src) {
+      addOpCounters(dst, src);
+      dst.throughput_.hits_ += src.throughput_.hits_;
+      dst.throughput_.misses_ += src.throughput_.misses_;
+    };
+
+    addOpCounters(stats_.allocate_, other.stats_.allocate_);
+    addOpCounters(stats_.insert_, other.stats_.insert_);
+    addOpCounters(stats_.insertOrReplace_, other.stats_.insertOrReplace_);
+    addFindOpCounters(stats_.find_, other.stats_.find_);
+    addFindOpCounters(stats_.findToWrite_, other.stats_.findToWrite_);
+    addFindOpCounters(stats_.removeByKey_, other.stats_.removeByKey_);
+    addOpCounters(stats_.removeByHandle_, other.stats_.removeByHandle_);
+    addOpCounters(stats_.writeBack_, other.stats_.writeBack_);
+    addOpCounters(stats_.release_, other.stats_.release_);
+
+    stats_.numItems += other.stats_.numItems;
+
+    return *this;
+  }
+
+  std::string progress(const StatsBase& prevStatsBase) const override {
+    auto& prevStats = prevStatsBase.as<ComponentStats>();
+    auto hitRates = getHitRatios(prevStats);
+    uint64_t totalOps = getTotalCalls();
+    return folly::sformat(
+        "{} items in cache. "
+        "{:>5} total cache operations (including support ops, e.g., "
+        "writeBack()). Hit Ratio {:6.2f}%.",
+        stats_.numItems,
+        prettyPrintOps(totalOps),
+        hitRates["overall"]);
+  }
+
+  void render(std::ostream& out) const override {
+    out << "== Cache Component Stats ==" << std::endl << stats_;
+  }
+
+  void render(const StatsBase& prevStatsBase,
+              std::ostream& out) const override {
+    auto& prevStats = prevStatsBase.as<ComponentStats>();
+
+    auto printOpDelta = [&out](const char* name, const auto& curr,
+                               const auto& prev) {
+      auto dCalls = curr.throughput_.calls_ - prev.throughput_.calls_;
+      if (dCalls == 0) {
+        return;
+      }
+      auto dSucc = curr.throughput_.successes_ - prev.throughput_.successes_;
+      auto dErr = curr.throughput_.errors_ - prev.throughput_.errors_;
+      out << folly::sformat("{:15}: calls={:<8} succ={:<8} err={}\n", name,
+                            dCalls, dSucc, dErr);
+    };
+
+    auto printFindOpDelta = [&out](const char* name, const auto& curr,
+                                   const auto& prev) {
+      auto dCalls = curr.throughput_.calls_ - prev.throughput_.calls_;
+      if (dCalls == 0) {
+        return;
+      }
+      auto dSucc = curr.throughput_.successes_ - prev.throughput_.successes_;
+      auto dErr = curr.throughput_.errors_ - prev.throughput_.errors_;
+      auto dHits = curr.throughput_.hits_ - prev.throughput_.hits_;
+      auto dMiss = curr.throughput_.misses_ - prev.throughput_.misses_;
+      out << folly::sformat(
+          "{:15}: calls={:<8} succ={:<8} err={:<6} hits={:<8} miss={}\n", name,
+          dCalls, dSucc, dErr, dHits, dMiss);
+    };
+
+    auto rates = getHitRatios(prevStatsBase);
+    out << folly::sformat("Hit Ratio: {:6.2f}%\n", rates["overall"]);
+    printOpDelta("allocate", stats_.allocate_, prevStats.stats_.allocate_);
+    printOpDelta("insert", stats_.insert_, prevStats.stats_.insert_);
+    printOpDelta("insertOrReplace", stats_.insertOrReplace_,
+                 prevStats.stats_.insertOrReplace_);
+    printFindOpDelta("find", stats_.find_, prevStats.stats_.find_);
+    printFindOpDelta("findToWrite", stats_.findToWrite_,
+                     prevStats.stats_.findToWrite_);
+    printFindOpDelta("removeByKey", stats_.removeByKey_,
+                     prevStats.stats_.removeByKey_);
+    printOpDelta("removeByHandle", stats_.removeByHandle_,
+                 prevStats.stats_.removeByHandle_);
+    printOpDelta("writeBack", stats_.writeBack_, prevStats.stats_.writeBack_);
+    printOpDelta("release", stats_.release_, prevStats.stats_.release_);
+  }
+
+  void render(folly::UserCounters& counters) const override {
+    counters["total_calls"] = static_cast<int64_t>(getTotalCalls());
+    counters["find_calls"] =
+        static_cast<int64_t>(stats_.find_.throughput_.calls_);
+
+    auto hits =
+        stats_.find_.throughput_.hits_ + stats_.findToWrite_.throughput_.hits_;
+    auto calls = stats_.find_.throughput_.calls_ +
+                 stats_.findToWrite_.throughput_.calls_;
+    counters["hit_rate"] =
+        calls > 0 ? static_cast<int64_t>(hits * 10000 / calls) : 0;
+    counters["num_items"] = static_cast<int64_t>(stats_.numItems);
+  }
+
+  std::map<std::string, double> getHitRatios(
+      const StatsBase& prevStatsBase) const override {
+    auto& prevStats = prevStatsBase.as<ComponentStats>();
+    std::map<std::string, double> rates;
+    rates["overall"] = 0.0;
+
+    uint64_t hits =
+        stats_.find_.throughput_.hits_ + stats_.findToWrite_.throughput_.hits_;
+    uint64_t calls = stats_.find_.throughput_.calls_ +
+                     stats_.findToWrite_.throughput_.calls_;
+
+    uint64_t prevHits = prevStats.stats_.find_.throughput_.hits_ +
+                        prevStats.stats_.findToWrite_.throughput_.hits_;
+    uint64_t prevCalls = prevStats.stats_.find_.throughput_.calls_ +
+                         prevStats.stats_.findToWrite_.throughput_.calls_;
+
+    uint64_t deltaHits = hits - prevHits;
+    uint64_t deltaTotal = calls - prevCalls;
+    if (deltaTotal > 0) {
+      rates["overall"] = 100.0 * static_cast<double>(deltaHits) /
+                         static_cast<double>(deltaTotal);
+    }
+
+    return rates;
+  }
+
+  bool renderIsTestPassed(std::ostream& /* out */) const override {
+    // ComponentStats doesn't track error conditions that would fail a test
+    return true;
+  }
+
+ private:
+  // Pretty-print a number with K/M/G/T suffix, keeping to ~3 characters
+  static std::string prettyPrintOps(uint64_t ops) {
+    if (ops < 1000) {
+      return std::to_string(ops);
+    } else if (ops < 1000000) {
+      return std::to_string(ops / 1000) + "K";
+    } else if (ops < 1000000000) {
+      return std::to_string(ops / 1000000) + "M";
+    } else if (ops < 1000000000000ULL) {
+      return std::to_string(ops / 1000000000) + "G";
+    } else {
+      return std::to_string(ops / 1000000000000ULL) + "T";
+    }
+  }
+
+  uint64_t getTotalCalls() const {
+    return stats_.allocate_.throughput_.calls_ +
+           stats_.insert_.throughput_.calls_ +
+           stats_.insertOrReplace_.throughput_.calls_ +
+           stats_.find_.throughput_.calls_ +
+           stats_.findToWrite_.throughput_.calls_ +
+           stats_.removeByKey_.throughput_.calls_ +
+           stats_.removeByHandle_.throughput_.calls_ +
+           stats_.writeBack_.throughput_.calls_ +
+           stats_.release_.throughput_.calls_;
   }
 };
 

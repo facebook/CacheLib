@@ -17,6 +17,8 @@
 #include "cachelib/allocator/CacheAllocatorConfig.h"
 #include "cachelib/allocator/MemoryTierCacheConfig.h"
 #include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/common/EventSink.h"
+#include "cachelib/common/EventTracker.h"
 
 namespace facebook {
 namespace cachelib {
@@ -89,6 +91,62 @@ TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyWTinyLFU) {
   WTinyLFUAllocator::Config config;
   auto serialized = config.serialize();
   EXPECT_EQ(serialized["evictionPolicy"], "MMWTinyLFU");
+}
+
+TEST_F(CacheAllocatorConfigTest, SetEventTrackerConfigFactory) {
+  AllocatorT::Config config;
+  int factoryCallCount = 0;
+  config.setEventTrackerConfigFactory([&factoryCallCount]() {
+    ++factoryCallCount;
+    EventTracker::Config trackerConfig;
+    trackerConfig.queueSize = 100;
+    trackerConfig.eventSink = std::make_unique<InMemoryEventSink>();
+    trackerConfig.sampler = std::make_unique<FurcHashSampler>(1);
+    return trackerConfig;
+  });
+  EXPECT_TRUE(config.eventTrackerConfigFactory != nullptr);
+  EXPECT_EQ(factoryCallCount, 0);
+
+  // Invoke the factory and verify it produces a valid config.
+  auto trackerConfig = config.eventTrackerConfigFactory();
+  EXPECT_EQ(factoryCallCount, 1);
+  EXPECT_EQ(trackerConfig.queueSize, 100);
+  EXPECT_NE(trackerConfig.eventSink, nullptr);
+  EXPECT_NE(trackerConfig.sampler, nullptr);
+}
+
+TEST_F(CacheAllocatorConfigTest, EventTrackerConfigFactoryProducesFreshConfig) {
+  AllocatorT::Config config;
+  config.setEventTrackerConfigFactory([]() {
+    EventTracker::Config trackerConfig;
+    trackerConfig.queueSize = 50;
+    trackerConfig.eventSink = std::make_unique<InMemoryEventSink>();
+    return trackerConfig;
+  });
+
+  // Call factory twice and verify each produces independent, valid configs.
+  auto config1 = config.eventTrackerConfigFactory();
+  auto config2 = config.eventTrackerConfigFactory();
+  EXPECT_NE(config1.eventSink, nullptr);
+  EXPECT_NE(config2.eventSink, nullptr);
+  // The two sinks must be distinct objects.
+  EXPECT_NE(config1.eventSink.get(), config2.eventSink.get());
+}
+
+TEST_F(CacheAllocatorConfigTest, SerializeEventTrackerConfigFactory) {
+  AllocatorT::Config config;
+  // Before setting, serialization should show "empty".
+  auto serialized = config.serialize();
+  EXPECT_EQ(serialized["eventTrackerConfigFactory"], "empty");
+
+  config.setEventTrackerConfigFactory([]() {
+    EventTracker::Config trackerConfig;
+    trackerConfig.queueSize = 10;
+    trackerConfig.eventSink = std::make_unique<InMemoryEventSink>();
+    return trackerConfig;
+  });
+  serialized = config.serialize();
+  EXPECT_EQ(serialized["eventTrackerConfigFactory"], "set");
 }
 
 } // namespace tests

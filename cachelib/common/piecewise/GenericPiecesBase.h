@@ -82,6 +82,7 @@ class GenericPiecesBase {
    */
   uint64_t getFullBodyLength() const { return fullBodyLen_; }
   uint64_t getNumPiecesTotal() const { return numPiecesTotal_; }
+  const std::string& getBaseKey() const { return baseKey_; }
 
   // ========================================================================
   // Common piece iteration methods.

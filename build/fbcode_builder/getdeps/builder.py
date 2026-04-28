@@ -263,6 +263,7 @@ class BuilderBase:
             # 1.5 GiB is a lot to assume, but it's typical of Facebook-style C++.
             # Some manifests are even heavier and should override.
             default_job_weight = 1536
+        # pyrefly: ignore [no-matching-overload]
         return int(
             self.manifest.get(
                 "build", "job_weight_mib", str(default_job_weight), ctx=self.ctx
@@ -481,7 +482,11 @@ class AutoconfBuilder(BuilderBase):
             inst_dir,
         )
         self.args: list[str] = args or []
-        if not build_opts.shared_libs and "--disable-shared" not in self.args:
+        if (
+            not build_opts.shared_libs
+            and "--disable-shared" not in self.args
+            and "--enable-shared" not in self.args
+        ):
             self.args.append("--disable-shared")
         self.conf_env_args: dict[str, list[str]] = conf_env_args or {}
 
@@ -864,10 +869,14 @@ if __name__ == "__main__":
             # We sometimes see intermittent ccache related breakages on some
             # of the FB internal CI hosts, so we prefer to disable ccache
             # when running in that environment.
-            # pyre-fixme[6]: For 1st argument expected `Mapping[str, str]` but got
-            #  `Env`.
+            # Prefer sccache over ccache when both are available; sccache
+            # supports cloud-backed caches (e.g. GitHub Actions cache) which
+            # accelerate CI builds across runs.
+            sccache = path_search(env, "sccache")
             ccache = path_search(env, "ccache")
-            if ccache:
+            if sccache:
+                defines["CMAKE_CXX_COMPILER_LAUNCHER"] = sccache
+            elif ccache:
                 defines["CMAKE_CXX_COMPILER_LAUNCHER"] = ccache
         else:
             # rocksdb does its own probing for ccache.
@@ -1145,6 +1154,7 @@ if __name__ == "__main__":
         # pyre-fixme[53]: Captured variable `cmake` is not annotated.
         # pyre-fixme[53]: Captured variable `env` is not annotated.
         def list_tests() -> list[dict[str, object]]:
+            # pyrefly: ignore [no-matching-overload]
             output = subprocess.check_output(
                 [require_command(ctest, "ctest"), "--show-only=json-v1"],
                 env=env,
@@ -1229,6 +1239,7 @@ if __name__ == "__main__":
             env.set("https_proxy", "")
             runs = []
 
+            # pyrefly: ignore [unbound-name]
             with start_run(env["FBSOURCE_HASH"]) as run_id:
                 testpilot_args = [
                     tpx,
@@ -1611,17 +1622,18 @@ class SetupPyBuilder(BuilderBase):
             # pyre-fixme[6]: For 2nd argument expected `str` but got `Optional[str]`.
             env[key] = value
 
-        setup_py_path = os.path.join(self.src_dir, "setup.py")
-
-        if not os.path.exists(setup_py_path):
-            raise RuntimeError(f"setup.py script not found at {setup_py_path}")
-
         self._check_cmd(
             # pyre-fixme[6]: For 1st argument expected `List[str]` but got
             #  `List[Union[str, None, str]]`.
             # pyre-fixme[6]: For 1st argument expected `Mapping[str, str]` but got
             #  `Env`.
-            [path_search(env, "python3"), setup_py_path, "install"],
+            [
+                path_search(env, "python3"),
+                "-m",
+                "pip",
+                "install",
+                ".",
+            ],
             cwd=self.src_dir,
             env=env,
         )

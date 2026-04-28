@@ -22,10 +22,10 @@ namespace cachelib {
 EventTracker::EventTracker(Config&& config)
     : eventInfoQueue_(config.queueSize),
       eventSink_(std::move(config.eventSink)),
-      preQueueCallback_(std::move(config.preQueueCallback)),
-      postQueueCallback_(std::move(config.postQueueCallback)),
       sampler_(config.sampler ? std::move(config.sampler)
-                              : std::make_unique<FurcHashSampler>(0)) {
+                              : std::make_unique<FurcHashSampler>(0)),
+      preQueueCallback_(std::move(config.preQueueCallback)),
+      postQueueCallback_(std::move(config.postQueueCallback)) {
   validateConfig();
   backgroundThread_ = std::thread([this]() { runBackgroundThread(); });
 }

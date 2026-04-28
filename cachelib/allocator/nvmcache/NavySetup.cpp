@@ -178,7 +178,12 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                                   blockCacheConfig.getCleanRegionThreads());
   blockCache->setRegionManagerFlushAsync(
       blockCacheConfig.isRegionManagerFlushAsync());
+
   blockCache->setCleanRegionFastPath(blockCacheConfig.isCleanRegionFastPath());
+  blockCache->setRecoverEvictionPolicy(
+      blockCacheConfig.isRecoverEvictionPolicy());
+  blockCache->setUseCombinedEntryBlock(
+      blockCacheConfig.isCombinedEntryBlockEnabled());
   blockCache->setNumAllocatorsPerPriority(
       blockCacheConfig.getNumAllocatorsPerPriority());
 

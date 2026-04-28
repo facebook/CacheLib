@@ -22,6 +22,7 @@ These dependencies further require multiple libraries:
 * [https://github.com/google/googletest.git](googletest) - Google Testing Framework
 * [https://github.com/fmtlib/fmt.git](fmt) - open-source formatting library
 * [https://github.com/Tessil/sparse-map.git](sparse-map) - memory efficient hash map and hash set
+* [https://github.com/Cyan4973/xxHash](xxHash) - extremely fast non-cryptographic hash algorithm
 * And many more libraries, commonly available as installable packages, e.g:
   `boost`, `libevent`, `lz4`, `snappy`, `zlib`, `ssl`, `libunwind`, `libsodium`
 
@@ -114,7 +115,7 @@ pull the latest changes (if any).
 
 Downloads the latest source code version of the following libraries,
 builds and installs them (using `sudo`):
-`googleflags`, `googlelog`, `sparsemap`, `fmt`, `folly`, `fizz`,
+`googleflags`, `googlelog`, `sparsemap`, `fmt`, `xxhash`, `folly`, `fizz`,
 `wangle`, `fbthrift`.
 
 In some cases the operating system has a pre-packaged version of some
@@ -146,6 +147,7 @@ options:
   -v    verbose build
 
 NAME: the dependency to build supported values are:
+  zstd, xxhash,
   googlelog, googleflags, googletest,
   fmt, sparsemap,
   folly, fizz, wangle, fbthrift,

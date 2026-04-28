@@ -44,6 +44,10 @@ struct Error {
     // Remove errors
     REMOVE_FAILED,
 
+    // Lifecycle errors
+    SHUTDOWN_FAILED,
+    RECOVER_FAILED,
+
     // Other
     UNIMPLEMENTED,
   };

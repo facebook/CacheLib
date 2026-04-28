@@ -106,6 +106,16 @@ inline std::ostream& operator<<(std::ostream& os, DestructorEvent e) {
 }
 
 inline int format_as(Status s) { return folly::to_underlying(s); }
+
+// Returns true if an item with the given key and value sizes would be
+// routed to BlockCache (large item engine) rather than BigHash.
+// When smallItemMaxSize == 0, BigHash is not configured and all items
+// are considered large.
+inline bool isItemLarge(size_t keySize,
+                        size_t valueSize,
+                        uint32_t smallItemMaxSize) {
+  return keySize + valueSize > smallItemMaxSize;
+}
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

@@ -163,9 +163,7 @@ class RebalanceStrategy {
 
   // Returns true if the state was already initialized and set up. False if we
   // state was not present.
-  bool poolStatePresent(PoolId pid) const {
-    return poolState_.find(pid) != poolState_.end();
-  }
+  bool poolStatePresent(PoolId pid) const { return poolState_.contains(pid); }
 
   PoolState& getPoolState(PoolId pid) { return poolState_.at(pid); }
   const PoolState& getPoolState(PoolId pid) const { return poolState_.at(pid); }

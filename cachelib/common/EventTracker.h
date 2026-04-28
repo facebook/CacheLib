@@ -90,6 +90,12 @@ class EventTracker {
     uint32_t queueSize = 0;
     std::unique_ptr<EventSink> eventSink = nullptr;
 
+    // Optional custom sampler.
+    // If provided, this sampler will be used to determine whether a key
+    // should be sampled. If not provided, a default FurcHashSampler is
+    // created with sampling rate 0 (disabled).
+    std::unique_ptr<SamplerInterface> sampler = nullptr;
+
     // Callback invoked before queuing the event (in the caller's thread).
     // Use this for processing non-owning data (e.g., payload StringPiece)
     // that may not be valid by the time the background thread processes it.
@@ -99,12 +105,6 @@ class EventTracker {
     // Use this for processing owned data (e.g., parsing the key string)
     // to avoid adding latency to the hot path.
     std::function<void(EventInfo&)> postQueueCallback = nullptr;
-
-    // Optional custom sampler.
-    // If provided, this sampler will be used to determine whether a key
-    // should be sampled. If not provided, a default FurcHashSampler is
-    // created with sampling rate 0 (disabled).
-    std::unique_ptr<SamplerInterface> sampler = nullptr;
   };
 
   explicit EventTracker(Config&& config);
@@ -135,9 +135,9 @@ class EventTracker {
   folly::MPMCQueue<EventInfo> eventInfoQueue_;
 
   std::unique_ptr<EventSink> eventSink_;
+  std::unique_ptr<SamplerInterface> sampler_;
   std::function<void(EventInfo&)> preQueueCallback_;
   std::function<void(EventInfo&)> postQueueCallback_;
-  std::unique_ptr<SamplerInterface> sampler_;
 
   AtomicCounter recordCount_{0};
   AtomicCounter sampleAttemptCount_{0};

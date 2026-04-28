@@ -717,6 +717,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     }
     nvmConfig.navyConfig.setMaxConcurrentInserts(
         config_.navyMaxConcurrentInserts);
+    nvmConfig.navyConfig.setEnableAccessTimeMap(
+        config_.navyEnableAccessTimeMap);
+    nvmConfig.navyConfig.setAccessTimeMapMaxSize(
+        config_.navyAccessTimeMapMaxSize);
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;

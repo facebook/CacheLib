@@ -91,6 +91,8 @@ class RegionManager {
   // @param cleanRegionFastPath       whether to enable the fast path in
   //                                  getCleanRegion() that skips the mutex
   //                                  when clean regions are empty
+  // @param recoverEvictionPolicy     whether to persist and recover eviction
+  //                                  policy ordering across restarts
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -106,7 +108,8 @@ class RegionManager {
                 uint16_t inMemBufFlushRetryLimit,
                 bool workerFlushAsync,
                 bool allowReadDuringReclaim = false,
-                bool cleanRegionFastPath = false);
+                bool cleanRegionFastPath = false,
+                bool recoverEvictionPolicy = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -191,11 +194,6 @@ class RegionManager {
     }
     numInMemBufActive_.dec();
   }
-
-  // Writes buffer @buf at the @addr.
-  // @addr must be the address returned by Region::open(OpenMode::Write)
-  // @buf may be mutated and will be de-allocated at the end of this
-  void write(RelAddress addr, Buffer buf);
 
   bool deviceWrite(RelAddress addr, Buffer buf);
 
@@ -316,6 +314,18 @@ class RegionManager {
   // them and can be evicted right away.
   void resetEvictionPolicy();
 
+  // Recomputes external fragmentation from region state. Used by the eviction
+  // policy recovery path (resetEvictionPolicy() handles this internally).
+  void recomputeFragmentation();
+
+  // After policy_->recover(), reconstruct any region not in the recovered
+  // policy queue. Empty untracked regions go to cleanRegions_ (up to pool
+  // capacity); the rest are tracked into the policy. Defends against
+  // permanent leaks from in-memory state (e.g., cleanRegions_) that isn't
+  // covered by the persisted policy data. Also validates region IDs from
+  // the persisted policy data.
+  void restoreUntrackedRegions(const serialization::EvictionPolicyData& data);
+
   const uint16_t numPriorities_{};
   const uint16_t inMemBufFlushRetryLimit_{};
   const uint32_t numRegions_{};
@@ -366,6 +376,9 @@ class RegionManager {
 
   // Whether the clean region fast path is enabled
   const bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts
+  const bool recoverEvictionPolicy_{false};
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

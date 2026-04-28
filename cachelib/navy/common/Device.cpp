@@ -30,6 +30,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <thread>
 
 #include "cachelib/common/Profiled.h"
 #include "cachelib/navy/common/FdpNvme.h"
@@ -370,10 +371,33 @@ class MemoryDevice final : public Device {
  public:
   explicit MemoryDevice(uint64_t size,
                         std::shared_ptr<DeviceEncryptor> encryptor,
-                        uint32_t ioAlignSize)
+                        uint32_t ioAlignSize,
+                        uint32_t numInitThreads = 8)
       : Device{size, std::move(encryptor), ioAlignSize, 0 /* max IO size */,
                0 /* max device write size */},
-        buffer_{std::make_unique<uint8_t[]>(size)} {}
+        buffer_{std::unique_ptr<uint8_t[]>(new uint8_t[size])} {
+    uint32_t numThreads = std::max(1u, numInitThreads);
+    if (size < numThreads) {
+      std::memset(buffer_.get(), 0, size);
+    } else {
+      std::vector<std::thread> threads;
+      threads.reserve(numThreads - 1);
+      uint64_t chunkSize = size / numThreads;
+      uint64_t offset = 0;
+      for (uint32_t i = 0; i < numThreads - 1; ++i) {
+        threads.emplace_back([ptr = buffer_.get() + offset, chunkSize]() {
+          std::memset(ptr, 0, chunkSize);
+        });
+        offset += chunkSize;
+      }
+      // Use the calling thread for the last chunk, absorbing any remainder
+      std::memset(buffer_.get() + offset, 0, size - offset);
+
+      for (auto& t : threads) {
+        t.join();
+      }
+    }
+  }
   MemoryDevice(const MemoryDevice&) = delete;
   MemoryDevice& operator=(const MemoryDevice&) = delete;
   MemoryDevice(MemoryDevice&&) = delete;
@@ -1211,9 +1235,10 @@ folly::File openCacheFile(const std::string& fileName,
 std::unique_ptr<Device> createMemoryDevice(
     uint64_t size,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t ioAlignSize) {
-  return std::make_unique<MemoryDevice>(size, std::move(encryptor),
-                                        ioAlignSize);
+    uint32_t ioAlignSize,
+    uint32_t numInitThreads) {
+  return std::make_unique<MemoryDevice>(size, std::move(encryptor), ioAlignSize,
+                                        numInitThreads);
 }
 
 std::unique_ptr<Device> createDirectIoFileDevice(

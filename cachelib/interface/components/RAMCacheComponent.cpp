@@ -91,11 +91,37 @@ class RAMCacheItem : public interface::CacheItem {
   LruCacheItem* item_;
 
   explicit RAMCacheItem(LruCacheItem* item) : item_(item) {}
+
+  void move(void* /* dest */) noexcept override {
+    // We don't use the inline Handle buffer, move() should never be called
+    XLOG(FATAL) << "Should not use RAMCacheItem::move()";
+  }
 };
 // RAMCacheItem should only contain vtable and LruCacheItem pointers
 static_assert(sizeof(RAMCacheItem) == (2 * sizeof(void*)));
 
 namespace {
+
+std::unique_ptr<LruAllocator> getCache(
+    LruAllocatorConfig&& config,
+    const RAMCacheComponent::PersistenceConfig& persistenceConfig) {
+  if (persistenceConfig.recover()) {
+    try {
+      return std::make_unique<LruAllocator>(LruAllocator::SharedMemAttach,
+                                            folly::copy(config));
+    } catch (const std::exception& e) {
+      XLOG(WARN) << "Failed to recover RAM cache from shared memory ("
+                 << e.what() << "), creating a new empty cache";
+      return std::make_unique<LruAllocator>(LruAllocator::SharedMemNew,
+                                            std::move(config));
+    }
+  } else if (persistenceConfig.persist()) {
+    return std::make_unique<LruAllocator>(LruAllocator::SharedMemNew,
+                                          std::move(config));
+  } else {
+    return std::make_unique<LruAllocator>(std::move(config));
+  }
+}
 
 template <typename HandleT>
 LruCacheItem* getImplItemFromHandle(HandleT& handle) {
@@ -112,9 +138,31 @@ HandleT toGenericHandle(RAMCacheComponent& cache,
 
 } // namespace
 
+/* static */ RAMCacheComponent::PersistenceConfig
+RAMCacheComponent::PersistenceConfig::noPersistenceOrRecovery() {
+  return PersistenceConfig(/* persist */ false, /* recover */ false,
+                           /* cacheDir */ std::string(),
+                           /* baseAddr */ nullptr);
+}
+
+/* static */ RAMCacheComponent::PersistenceConfig
+RAMCacheComponent::PersistenceConfig::persistenceAndRecovery(
+    std::string cacheDir, void* baseAddr) {
+  return PersistenceConfig(/* persist */ true, /* recover */ true,
+                           std::move(cacheDir), baseAddr);
+}
+
+/* static */ RAMCacheComponent::PersistenceConfig
+RAMCacheComponent::PersistenceConfig::persistenceButNoRecovery(
+    std::string cacheDir, void* baseAddr) {
+  return PersistenceConfig(/* persist */ true, /* recover */ false,
+                           std::move(cacheDir), baseAddr);
+}
+
 /* static */ Result<RAMCacheComponent> RAMCacheComponent::create(
     LruAllocatorConfig&& allocConfig,
     PoolConfig&& poolConfig,
+    PersistenceConfig persistenceConfig,
     const LatencySamplingConfig& latencySamplingConfig) noexcept {
   if (allocConfig.nvmConfig) {
     return makeError(Error::Code::INVALID_CONFIG,
@@ -122,18 +170,29 @@ HandleT toGenericHandle(RAMCacheComponent& cache,
   } else if (allocConfig.poolRebalancingEnabled()) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "RAMCacheComponent does not support pool rebalancing");
+  } else if (persistenceConfig.persist() || persistenceConfig.recover()) {
+    if (persistenceConfig.cacheDir().empty()) {
+      return makeError(Error::Code::INVALID_CONFIG,
+                       "cacheDir must be set for persistence/recovery");
+    }
+    allocConfig.enableCachePersistence(std::move(persistenceConfig.cacheDir()),
+                                       persistenceConfig.baseAddr());
   }
   try {
-    auto cache =
-        RAMCacheComponent(std::move(allocConfig), latencySamplingConfig);
-    // Add a default pool that will be used for all allocations
-    cache.defaultPool_ = cache.cache_->addPool(poolConfig.name_,
-                                               poolConfig.size_,
-                                               poolConfig.allocSizes_,
-                                               poolConfig.mmConfig_,
-                                               poolConfig.rebalanceStrategy_,
-                                               poolConfig.resizeStrategy_,
-                                               poolConfig.ensureProvisionable_);
+    auto cache = RAMCacheComponent(std::move(allocConfig), persistenceConfig,
+                                   latencySamplingConfig);
+    auto ids = cache.cache_->getPoolIds();
+    if (!ids.empty()) {
+      // Pool was restored from shared memory, just look up its ID
+      XCHECK_EQ(ids.size(), 1UL);
+      cache.defaultPool_ = *ids.begin();
+    } else {
+      // Add a default pool that will be used for all allocations
+      cache.defaultPool_ = cache.cache_->addPool(
+          poolConfig.name_, poolConfig.size_, poolConfig.allocSizes_,
+          poolConfig.mmConfig_, poolConfig.rebalanceStrategy_,
+          poolConfig.resizeStrategy_, poolConfig.ensureProvisionable_);
+    }
     return cache;
   } catch (const std::exception& e) {
     return makeError(Error::Code::INVALID_CONFIG, e.what());
@@ -322,9 +381,13 @@ folly::coro::Task<UnitResult> RAMCacheComponent::remove(ReadHandle&& handle) {
 
 RAMCacheComponent::RAMCacheComponent(
     LruAllocatorConfig&& config,
+    const PersistenceConfig& persistenceConfig,
     const LatencySamplingConfig& latencySamplingConfig)
     : CacheComponentWithStats(latencySamplingConfig),
-      cache_(std::make_unique<LruAllocator>(std::move(config))) {}
+      cache_(getCache(std::move(config), persistenceConfig)),
+      defaultPool_(Slab::kInvalidPoolId),
+      persist_(persistenceConfig.persist()),
+      lastStatsCollectionTime_(std::chrono::steady_clock::now()) {}
 
 UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
   stats_->writeBack_.throughput_.calls_.inc();
@@ -333,19 +396,43 @@ UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
   return folly::unit;
 }
 
-folly::coro::Task<void> RAMCacheComponent::release(interface::CacheItem& item,
-                                                   bool inserted) {
+void RAMCacheComponent::release(interface::CacheItem& item, bool inserted) {
   stats_->release_.throughput_.calls_.inc();
   auto latencyGuard = stats_->release_.latency_.start();
-  auto* implItem = reinterpret_cast<RAMCacheItem&>(item).item();
-  cache_->releaseBackToAllocator(
-      *implItem, RemoveContext::kNormal, /* nascent */ !inserted);
+  auto& genericItem = reinterpret_cast<RAMCacheItem&>(item);
+  auto* implItem = genericItem.item();
+  // call this destructor first since genericItem is embedded in implItem
+  genericItem.~RAMCacheItem();
+  cache_->releaseBackToAllocator(*implItem, RemoveContext::kNormal,
+                                 /* nascent */ !inserted);
   stats_->release_.throughput_.successes_.inc();
-  co_return;
+}
+
+UnitResult RAMCacheComponent::shutdown() {
+  if (persist_) {
+    switch (cache_->shutDown()) {
+    case LruAllocator::ShutDownStatus::kSuccess: // fall-through
+    case LruAllocator::ShutDownStatus::kSavedOnlyDRAM:
+      break;
+    case LruAllocator::ShutDownStatus::kSavedOnlyNvmCache: // fall-through
+    case LruAllocator::ShutDownStatus::kFailed:            // fall-through
+    default:
+      return makeError(Error::Code::SHUTDOWN_FAILED,
+                       "failed to persist RAM cache state");
+    }
+  } else {
+    // shutDown() internally calls stopWorkers() but doesn't check the return
+    // value so we won't either
+    cache_->stopWorkers();
+  }
+  return folly::unit;
 }
 
 CacheComponentStats RAMCacheComponent::getStats() const noexcept {
   CacheComponentStats stats(*stats_);
+
+  // Populate numItems from pool stats
+  stats.numItems = cache_->getPoolStats(defaultPool_).numItems();
 
   // Populate removeByKey throughput from CacheAllocator's counters
   auto& allocatorStats = cache_->stats();
@@ -358,6 +445,15 @@ CacheComponentStats RAMCacheComponent::getStats() const noexcept {
 
   // Populate allocate latency from CacheAllocator's counter
   stats.allocate_.latency_ = allocatorStats.allocateLatency_.estimate();
+
+  auto now = std::chrono::steady_clock::now();
+  auto prev = std::exchange(lastStatsCollectionTime_, now);
+  cache_->exportStats(
+      /* statPrefix */ "",
+      std::chrono::duration_cast<std::chrono::seconds>(now - prev),
+      [&stats](folly::StringPiece name, uint64_t value) {
+        stats.extraStats_.insertCount(name.toString(), value);
+      });
 
   return stats;
 }

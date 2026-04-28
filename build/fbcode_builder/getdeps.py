@@ -24,6 +24,7 @@ from getdeps.fetcher import (
     file_name_is_cmake_file,
     is_public_commit,
     list_files_under_dir_newer_than_timestamp,
+    safe_extractall,
     SystemPackageFetcher,
 )
 from getdeps.load import ManifestLoader
@@ -283,11 +284,12 @@ class CachedProject:
             try:
                 target_file_name = os.path.join(dl_dir, self.cache_file_name)
                 if self.cache.download_to_file(self.cache_file_name, target_file_name):
-                    tf = tarfile.open(target_file_name, "r")
-                    print(
-                        "Extracting %s -> %s..." % (self.cache_file_name, self.inst_dir)
-                    )
-                    tf.extractall(self.inst_dir)
+                    with tarfile.open(target_file_name, "r") as tf:
+                        print(
+                            "Extracting %s -> %s..."
+                            % (self.cache_file_name, self.inst_dir)
+                        )
+                        safe_extractall(tf, self.inst_dir)
 
                     cached_marker = os.path.join(self.inst_dir, ".getdeps-cached-build")
                     with open(cached_marker, "w") as f:
@@ -886,7 +888,7 @@ class BuildCmd(ProjectCmdBase):
         )
         parser.add_argument(
             "--free-up-disk",
-            help="Remove unused tools and clean up intermediate files if possible to maximise space for the build",
+            help="After installing each dependency, delete its build directory to free disk space during the build",
             action="store_true",
             default=False,
         )
@@ -1009,9 +1011,18 @@ class EnvCmd(ProjectCmdBase):
 class GenerateGitHubActionsCmd(ProjectCmdBase):
     RUN_ON_ALL = """ [push, pull_request]"""
 
+    WORKFLOW_DISPATCH_TMATE = """
+  workflow_dispatch:
+    inputs:
+      tmate_enabled:
+        description: 'Start a tmate SSH session on failure'
+        required: false
+        default: false
+        type: boolean"""
+
     def run_project_cmd(self, args, loader, manifest):
         platforms = [
-            HostType("linux", "ubuntu", "22"),
+            HostType("linux", "ubuntu", "24"),
             HostType("darwin", None, None),
             HostType("windows", None, None),
         ]
@@ -1023,24 +1034,35 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
 
     def get_run_on(self, args):
         if args.run_on_all_branches:
-            return self.RUN_ON_ALL
+            return (
+                """
+  push:
+  pull_request:"""
+                + self.WORKFLOW_DISPATCH_TMATE
+            )
         if args.cron:
             if args.cron == "never":
                 return " {}"
             elif args.cron == "workflow_dispatch":
-                return "\n  workflow_dispatch"
+                return self.WORKFLOW_DISPATCH_TMATE
             else:
-                return f"""
+                return (
+                    f"""
   schedule:
     - cron: '{args.cron}'"""
+                    + self.WORKFLOW_DISPATCH_TMATE
+                )
 
-        return f"""
+        return (
+            f"""
   push:
     branches:
     - {args.main_branch}
   pull_request:
     branches:
     - {args.main_branch}"""
+            + self.WORKFLOW_DISPATCH_TMATE
+        )
 
     # TODO: Break up complex function
     def write_job_for_platform(self, platform, args):  # noqa: C901
@@ -1061,9 +1083,16 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
         rust_version = (
             manifest.get("github.actions", "rust_version", ctx=manifest_ctx) or "stable"
         )
+        use_sccache = (
+            manifest.get("github.actions", "sccache", ctx=manifest_ctx) != "off"
+            and not build_opts.is_windows()
+        )
 
         override_build_type = args.build_type or manifest.get(
             "github.actions", "build_type", ctx=manifest_ctx
+        )
+        timeout_minutes = (
+            manifest.get("github.actions", "timeout_minutes", ctx=manifest_ctx) or "60"
         )
         if run_tests:
             manifest_ctx.set("test", "on")
@@ -1083,11 +1112,9 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
         if builder_name == "nop":
             return None
 
-        # We want to be sure that we're running things with python 3
-        # but python versioning is honestly a bit of a frustrating mess.
-        # `python` may be version 2 or version 3 depending on the system.
-        # python3 may not be a thing at all!
-        # Assume an optimistic default
+        # The interpreter name varies across runners, so resolve it per-OS
+        # below. Default to `python3`, which works on Linux and macOS GHA
+        # runners.
         py3 = "python3"
 
         if build_opts.is_linux():
@@ -1104,8 +1131,8 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
                 runs_on = args.runs_on
             else:
                 runs_on = "windows-2022"
-            # The windows runners are python 3 by default; python2.exe
-            # is available if needed.
+            # On Windows GHA runners the python 3 interpreter is exposed as
+            # `python`, not `python3`.
             py3 = "python"
         else:
             artifacts = "mac"
@@ -1141,6 +1168,7 @@ on:{run_on}
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
+  actions: read  #  to query GitHub Actions cache usage
 
 jobs:
 """
@@ -1150,7 +1178,45 @@ jobs:
 
             out.write("  build:\n")
             out.write("    runs-on: %s\n" % runs_on)
+            out.write(f"    timeout-minutes: {timeout_minutes}\n")
+            env_vars = []
+            if build_opts.is_darwin():
+                env_vars.append(
+                    "      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer\n"
+                )
+            if use_sccache:
+                env_vars.append('      SCCACHE_GHA_ENABLED: "on"\n')
+            if env_vars:
+                out.write("    env:\n")
+                for line in env_vars:
+                    out.write(line)
             out.write("    steps:\n")
+
+            if build_opts.is_linux():
+                out.write("    - name: Show runner info\n")
+                out.write("      run: |\n")
+                out.write('        echo "CPU cores: $(nproc)"\n')
+                out.write("        cat /proc/cpuinfo | grep 'model name' | head -1\n")
+                out.write("        free -h\n")
+            elif build_opts.is_darwin():
+                out.write("    - name: Show runner info\n")
+                out.write("      run: |\n")
+                out.write('        echo "CPU cores: $(sysctl -n hw.ncpu)"\n')
+                out.write("        sysctl -n machdep.cpu.brand_string\n")
+                out.write(
+                    "        sysctl -n hw.memsize | "
+                    'awk \'{print "Memory: " $1/1073741824 " GB"}\'\n'
+                )
+            elif build_opts.is_windows():
+                out.write("    - name: Show runner info\n")
+                out.write("      run: |\n")
+                out.write('        echo "CPU cores: $env:NUMBER_OF_PROCESSORS"\n')
+                out.write("        (Get-CimInstance Win32_Processor).Name\n")
+                out.write(
+                    "        [math]::Round((Get-CimInstance Win32_ComputerSystem)"
+                    '.TotalPhysicalMemory / 1GB, 1).ToString() + " GB RAM"\n'
+                )
+                out.write("      shell: pwsh\n")
 
             if build_opts.is_windows():
                 # cmake relies on BOOST_ROOT but GH deliberately don't set it in order
@@ -1177,6 +1243,21 @@ jobs:
                 out.write("      shell: cmd\n")
 
             out.write("    - uses: actions/checkout@v6\n")
+
+            extra_cmake_defines = {}
+            if use_sccache:
+                out.write("    - name: Set up sccache\n")
+                out.write("      uses: mozilla-actions/sccache-action@v0.0.9\n")
+                out.write("      with:\n")
+                out.write('        version: "v0.14.0"\n')
+                extra_cmake_defines["CMAKE_CXX_COMPILER_LAUNCHER"] = "sccache"
+
+            if extra_cmake_defines:
+                extra_cmake_arg = (
+                    " --extra-cmake-defines '" + json.dumps(extra_cmake_defines) + "'"
+                )
+            else:
+                extra_cmake_arg = ""
 
             build_type_arg = ""
             if override_build_type:
@@ -1315,7 +1396,7 @@ jobs:
                             f"      if: ${{{{ steps.paths.outputs.{m.name}_SOURCE }}}}\n"
                         )
                 out.write(
-                    f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{src_dir_arg}{free_up_disk}--no-tests {m.name}\n"
+                    f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{src_dir_arg}{free_up_disk}--no-tests {m.name}{extra_cmake_arg}\n"
                 )
 
                 if args.use_build_cache and not src_dir_arg:
@@ -1331,6 +1412,14 @@ jobs:
                     out.write(
                         f"       key: ${{{{ steps.paths.outputs.{m.name}_CACHE_KEY }}}}-install\n"
                     )
+
+            if args.free_up_disk_before_build and not build_opts.is_windows():
+                out.write("    - name: Free up disk space before build\n")
+                out.write("      run: |\n")
+                out.write(
+                    "        sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /opt/ghc /usr/local/.ghcup\n"
+                )
+                out.write("        df -h\n")
 
             out.write("    - name: Build %s\n" % manifest.name)
 
@@ -1348,8 +1437,13 @@ jobs:
                 no_deps_arg = "--no-deps "
 
             out.write(
-                f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{tests_arg}{no_deps_arg}--src-dir=. {manifest.name}{project_prefix}\n"
+                f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{tests_arg}{no_deps_arg}--src-dir=. {manifest.name}{project_prefix}{extra_cmake_arg}\n"
             )
+
+            if use_sccache:
+                out.write("    - name: Show sccache stats\n")
+                out.write("      if: always()\n")
+                out.write("      run: sccache --show-stats\n")
 
             out.write("    - name: Copy artifacts\n")
             if build_opts.is_linux():
@@ -1386,6 +1480,20 @@ jobs:
                 out.write("      if: always()\n")
                 out.write("      run: df -h\n")
 
+            out.write("    - name: Show GitHub Actions cache usage\n")
+            out.write("      if: always()\n")
+            out.write("      env:\n")
+            out.write("        GH_TOKEN: ${{ github.token }}\n")
+            out.write(
+                "      run: gh cache list --repo ${{ github.repository }} --sort size_in_bytes --order desc --limit 30\n"
+            )
+
+            out.write("    - name: Setup tmate session\n")
+            out.write(
+                "      if: failure() && github.event_name == 'workflow_dispatch' && inputs.tmate_enabled\n"
+            )
+            out.write("      uses: mxschmitt/action-tmate@v3\n")
+
     def setup_project_cmd_parser(self, parser):
         parser.add_argument(
             "--disallow-system-packages",
@@ -1402,7 +1510,7 @@ jobs:
             help="Allow CI to fire on all branches - Handy for testing",
         )
         parser.add_argument(
-            "--ubuntu-version", default="22.04", help="Version of Ubuntu to use"
+            "--ubuntu-version", default="24.04", help="Version of Ubuntu to use"
         )
         parser.add_argument(
             "--cpu-cores",
@@ -1443,7 +1551,13 @@ jobs:
         )
         parser.add_argument(
             "--free-up-disk",
-            help="Remove unused tools and clean up intermediate files if possible to maximise space for the build",
+            help="After installing each dependency, delete its build directory to free disk space during the build",
+            action="store_true",
+            default=False,
+        )
+        parser.add_argument(
+            "--free-up-disk-before-build",
+            help="Remove large system tools (dotnet, powershell, ghcup) immediately before the final project build to free disk space",
             action="store_true",
             default=False,
         )

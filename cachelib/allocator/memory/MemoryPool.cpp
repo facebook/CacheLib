@@ -17,7 +17,7 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 
 #include <algorithm>
-#include <string>
+#include <numeric>
 #include <utility>
 
 #include "cachelib/allocator/memory/AllocationClass.h"
@@ -549,6 +549,7 @@ void MemoryPool::completeSlabRelease(const SlabReleaseContext& context) {
 MPStats MemoryPool::getStats() const {
   LockHolder l(lock_);
   folly::F14FastMap<ClassId, ACStats> acStats;
+  acStats.reserve(ac_.size());
   std::set<ClassId> classIds;
   for (const auto& ac : ac_) {
     acStats.insert({ac->getId(), ac->getStats()});

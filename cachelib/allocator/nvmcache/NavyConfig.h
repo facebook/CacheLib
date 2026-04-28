@@ -555,8 +555,18 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setRecoverEvictionPolicy(bool enable) noexcept {
+    recoverEvictionPolicy_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
+    return *this;
+  }
+
+  BlockCacheConfig& useCombinedEntryBlock(bool enable) noexcept {
+    useCombinedEntryBlock_ = enable;
     return *this;
   }
 
@@ -612,6 +622,10 @@ class BlockCacheConfig {
 
   bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
 
+  bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
+
+  bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
+
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
@@ -660,6 +674,17 @@ class BlockCacheConfig {
   // When enabled, getCleanRegion() can skip acquiring the mutex and return
   // Retry immediately if clean regions are empty and reclaims are in-flight.
   bool cleanRegionFastPath_{false};
+
+  // Whether to persist and recover eviction policy ordering across restarts.
+  bool recoverEvictionPolicy_{false};
+
+  // Whether to use Combined entry block (For index entries and small sized
+  // items).
+  // Only FixedSizeIndex will support this and it doesn't work with
+  // SparseMapIndex
+  //
+  // TODO: For now, only index entries will be handled with Combined entry block
+  bool useCombinedEntryBlock_{false};
 
   // Number of allocators per priority.
   // Do not set this directly. This should be configured by setAllocatorCount
@@ -852,13 +877,13 @@ class NavyConfig {
 
   // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].bigHash();
   }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BlockCacheConfig& blockCache() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].blockCache();
   }
 
@@ -884,6 +909,8 @@ class NavyConfig {
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
   size_t getNumShards() const { return numShards_; }
+  bool getEnableAccessTimeMap() const { return enableAccessTimeMap_; }
+  size_t getAccessTimeMapMaxSize() const { return accessTimeMapMaxSize_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -1027,6 +1054,12 @@ class NavyConfig {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
   void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
+  void setEnableAccessTimeMap(bool enable) noexcept {
+    enableAccessTimeMap_ = enable;
+  }
+  void setAccessTimeMapMaxSize(size_t maxSize) noexcept {
+    accessTimeMapMaxSize_ = maxSize;
+  }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -1074,7 +1107,6 @@ class NavyConfig {
   uint32_t qDepth_{0};
 
   // ============ Engines settings =============
-  // Currently we support one pair of engines.
   std::vector<EnginesConfig> enginesConfigs_{1};
   // Function to map each item to a pair of engine.
   EnginesSelector selector_{};
@@ -1124,6 +1156,10 @@ class NavyConfig {
   bool enableFDP_{false};
   // Number of nvm lock shards
   size_t numShards_{8192};
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool enableAccessTimeMap_{false};
+  // Maximum number of entries in the AccessTimeMap. 0 means unbounded.
+  size_t accessTimeMapMaxSize_{0};
 };
 } // namespace navy
 } // namespace cachelib

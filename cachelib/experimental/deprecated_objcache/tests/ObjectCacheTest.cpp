@@ -25,7 +25,6 @@
 
 #include "cachelib/experimental/deprecated_objcache/ObjectCache.h"
 #include "cachelib/navy/serialization/RecordIO.h"
-#include "thrift/lib/cpp2/protocol/Cpp2Ops.h"
 
 namespace facebook {
 namespace cachelib {

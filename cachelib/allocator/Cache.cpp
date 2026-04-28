@@ -481,6 +481,8 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                    statPrefix + "nvm.make_obj_cb.latency_us");
     visitEstimates(uploadStats, stats.nvmPutSize,
                    statPrefix + "nvm.incoming_item_size_bytes");
+    visitEstimates(uploadStats, stats.nvmHitTTASecs,
+                   statPrefix + "nvm.hit_tta_secs");
 
     if (stats.numNvmDestructorRefcountOverflow > 0) {
       counters_.updateCount(statPrefix + "nvm.destructors.refcount_overflow",
@@ -628,10 +630,6 @@ void CacheBase::updateAggregatedPoolStats(const std::string& statPrefix) const {
 }
 
 void CacheBase::setEventTracker(EventTracker::Config&& config) {
-  eventTracker_.store(std::make_shared<EventTracker>(std::move(config)));
-}
-
-std::shared_ptr<EventTracker> CacheBase::getEventTracker() const {
-  return eventTracker_.load();
+  eventTracker_ = std::make_unique<EventTracker>(std::move(config));
 }
 } // namespace facebook::cachelib

@@ -46,7 +46,7 @@ struct MockInsertCB {
 };
 
 struct MockLookupCB {
-  MOCK_METHOD3(call, void(Status, HashedKey, BufferView));
+  MOCK_METHOD4(call, void(Status, HashedKey, BufferView, uint32_t));
 };
 
 struct MockRemoveCB {

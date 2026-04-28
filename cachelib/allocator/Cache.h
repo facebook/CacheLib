@@ -16,9 +16,10 @@
 
 #pragma once
 
-#include <folly/concurrency/AtomicSharedPtr.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest_prod.h>
 
+#include <memory>
 #include <mutex>
 #include <unordered_map>
 
@@ -230,7 +231,9 @@ class CacheBase {
   // Whether to aggregate pool stats to reduce ODS counter inflation
   bool aggregatePoolStats_{false};
 
-  std::shared_ptr<EventTracker> getEventTracker() const;
+  FOLLY_ALWAYS_INLINE EventTracker* getEventTracker() const {
+    return eventTracker_.get();
+  }
   virtual void setEventTracker(EventTracker::Config&& config);
 
  protected:
@@ -375,7 +378,7 @@ class CacheBase {
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
 
-  folly::atomic_shared_ptr<EventTracker> eventTracker_;
+  std::unique_ptr<EventTracker> eventTracker_;
 
   // Enable aggregating pool stats
   void enableAggregatePoolStats() { aggregatePoolStats_ = true; }

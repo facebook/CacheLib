@@ -751,6 +751,59 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testTryAcquireSuccess() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+
+    auto res = alloc.tryAcquire(itemHandle.get());
+    ASSERT_EQ(TryAcquireResult::kSuccess, res.second);
+    ASSERT_NE(nullptr, res.first);
+    ASSERT_EQ(itemHandle.get(), res.first.get());
+  }
+
+  void testTryAcquireMoving() {
+    using TryAcquireResult = typename AllocatorT::TryAcquireResult;
+
+    typename AllocatorT::Config config;
+    config.setCacheSize(3 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+
+    auto itemHandle = alloc.findInternal("key");
+    ASSERT_NE(nullptr, itemHandle);
+    auto* item = itemHandle.get();
+    itemHandle.reset();
+
+    ASSERT_TRUE(item->markMoving());
+
+    auto res = alloc.tryAcquire(item);
+    ASSERT_EQ(TryAcquireResult::kMoving, res.second);
+    ASSERT_EQ(nullptr, res.first);
+    item->unmarkMoving();
+    ASSERT_FALSE(item->isMoving());
+  }
+
   // make some allocations without evictions and ensure that we are able to
   // fetch them.
   void testFind() {
@@ -2026,6 +2079,35 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       (void)item;
       visited++;
     }
+  }
+
+  // Verify that LockGroupAccessIterator visits every accessible item exactly
+  // once. Exercises CacheAllocator::beginLockGroup() / endLockGroup() and the
+  // tryHandleMaker / findByKey wiring inside CacheAllocator.
+  void testIterateLockGroup() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    std::set<uint32_t> allocSizes{1024};
+    auto poolId = alloc.addPool("foobar", numBytes, allocSizes);
+
+    const unsigned int numItems = 100;
+    const uint32_t itemSize = 100;
+    std::set<std::string> expectedKeys;
+    for (unsigned int i = 0; i < numItems; ++i) {
+      const std::string key = "key_" + folly::to<std::string>(i);
+      auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
+      ASSERT_NE(nullptr, handle);
+      expectedKeys.insert(key);
+    }
+
+    std::set<std::string> visitedKeys;
+    for (auto it = alloc.beginLockGroup(); it != alloc.endLockGroup(); ++it) {
+      const bool inserted = visitedKeys.insert(it->getKey().str()).second;
+      ASSERT_TRUE(inserted);
+    }
+    ASSERT_EQ(expectedKeys, visitedKeys);
   }
 
   void testIterateWithEvictions() {

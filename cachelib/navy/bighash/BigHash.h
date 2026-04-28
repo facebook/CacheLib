@@ -112,11 +112,19 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
   // Buffer as "value" as any existing storage will be freed. If not found,
   // it will return Status::NotFound. And of course, on error, it returns
   // DeviceError.
-  Status lookup(HashedKey hk, Buffer& value) override;
+  // BigHash does not track per-item access time; lastAccessTimeSecs is
+  // always set to 0.
+  Status lookup(HashedKey hk,
+                Buffer& value,
+                uint32_t& lastAccessTimeSecs) override;
 
   // Inserts key and value into BigHash. This will replace an existing
   // key if found. If it failed to write, it will return DeviceError.
-  Status insert(HashedKey hk, BufferView value) override;
+  Status insert(HashedKey hk,
+                BufferView value,
+                uint8_t poolId = 0,
+                uint32_t expiryTime = 0,
+                uint32_t lastAccessTimeSecs = 0) override;
 
   // Removes an entry from BigHash if found. Ok on success, NotFound on miss,
   // and DeviceError on error.

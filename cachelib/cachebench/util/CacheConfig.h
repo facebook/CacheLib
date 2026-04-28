@@ -246,6 +246,11 @@ struct CacheConfig : public JSONConfig {
   // Enable the FDP Data placement mode in the device, if it is capable.
   bool deviceEnableFDP{false};
 
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool navyEnableAccessTimeMap{false};
+  // Maximum entries in the AccessTimeMap. 0 means unbounded.
+  size_t navyAccessTimeMapMaxSize{0};
+
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};
@@ -286,6 +291,15 @@ struct CacheConfig : public JSONConfig {
   // If specified, we will not admit any item into NvmCache if their
   // eviction-age is more than this threshold. 0 means no threshold
   uint32_t nvmAdmissionRetentionTimeThreshold{0};
+
+  // CoroFiberAdapter config for FlashCacheComponent run via
+  // CacheComponentStressor.
+  // Number of worker threads for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterNumThreads{32};
+  // Number of fibers per thread for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterFibersPerThread{4};
+  // Stack size in KB for CoroFiberAdapter fibers
+  uint32_t fccCoroFiberAdapterStackSizeKB{32};
 
   //
   // Options below are not to be populated with JSON
