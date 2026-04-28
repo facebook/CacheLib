@@ -399,7 +399,10 @@ UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
 void RAMCacheComponent::release(interface::CacheItem& item, bool inserted) {
   stats_->release_.throughput_.calls_.inc();
   auto latencyGuard = stats_->release_.latency_.start();
-  auto* implItem = reinterpret_cast<RAMCacheItem&>(item).item();
+  auto& genericItem = reinterpret_cast<RAMCacheItem&>(item);
+  auto* implItem = genericItem.item();
+  // call this destructor first since genericItem is embedded in implItem
+  genericItem.~RAMCacheItem();
   cache_->releaseBackToAllocator(*implItem, RemoveContext::kNormal,
                                  /* nascent */ !inserted);
   stats_->release_.throughput_.successes_.inc();

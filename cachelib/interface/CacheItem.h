@@ -106,6 +106,14 @@ class CacheItem {
   virtual uint32_t getTotalSize() const noexcept = 0;
 
  private:
+  /**
+   * Move the cache item to a new location in memory. Only used when the item is
+   * embedded in a Handle that a user is moving.
+   *
+   * NOTE: move is responsible for destroying *this!
+   *
+   * @param dest new location of the cache item
+   */
   virtual void move(void* dest) noexcept = 0;
 
   friend class Handle;

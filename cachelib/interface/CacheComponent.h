@@ -25,6 +25,17 @@
 
 namespace facebook::cachelib::interface {
 
+/**
+ * A cache that manages a section of storage.
+ *
+ * The interface is as generic as possible to give components maximum
+ * implementation flexibility.  APIs are coro-compatible so components can run
+ * work asynchronously (some components may run synchronously under the hood).
+ *
+ * NOTE: most APIs take the key argument as a Key (essentially a string view).
+ * This allows maximum performance, but users *must* ensure the string view is
+ * constant across coroutine suspension points.
+ */
 class CacheComponent {
  public:
   virtual ~CacheComponent() = default;
@@ -176,6 +187,8 @@ class CacheComponent {
    * Release the item from the cache. Frees the associated allocation and
    * executes any necessary callbacks. Only meant to be called by the component
    * or cache item handles.
+   *
+   * NOTE: the component is responsible for destroying the item!
    *
    * @param item the item to release
    * @param inserted whether the item was previously inserted into the cache

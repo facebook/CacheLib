@@ -37,7 +37,6 @@ Handle::Handle(Handle&& other) noexcept
   XDCHECK_NE(cache_, nullptr) << "Invalid handle";
   if (other.item_ == reinterpret_cast<CacheItem*>(other.buf_)) {
     other.item_->move(buf_);
-    other.item_->~CacheItem();
     item_ = reinterpret_cast<CacheItem*>(buf_);
   } else {
     item_ = other.item_;
@@ -50,7 +49,6 @@ Handle::~Handle() noexcept {
     if (item_->decrementRefCount()) {
       cache_->release(*item_, inserted_);
     }
-    item_ = nullptr;
   }
 }
 

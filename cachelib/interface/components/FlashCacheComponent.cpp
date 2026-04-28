@@ -150,6 +150,7 @@ class FlashCacheItem : public CacheItem {
 
   void move(void* dest) noexcept override {
     new (dest) FlashCacheItem(std::move(*this));
+    this->~FlashCacheItem();
   }
 };
 
@@ -663,6 +664,7 @@ class ConsistentFlashCacheItem : public FlashCacheItem {
 
   void move(void* dest) noexcept override {
     new (dest) ConsistentFlashCacheItem(std::move(*this));
+    this->~ConsistentFlashCacheItem();
   }
 };
 
