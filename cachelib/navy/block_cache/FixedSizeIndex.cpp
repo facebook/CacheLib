@@ -24,29 +24,54 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
+// static helpers
+uint64_t FixedSizeIndex::getTotalBucketCount(uint32_t numChunks,
+                                             uint8_t numBucketsPerChunkPower) {
+  // TODO: All these XDCHECK should throw exception instead.
+  // For now, it's internally passed down so should be fine.
+  XDCHECK(numChunks != 0 && numBucketsPerChunkPower != 0 &&
+          numBucketsPerChunkPower <= 63);
+  return (uint64_t)numChunks * (1ull << numBucketsPerChunkPower);
+}
+
+uint64_t FixedSizeIndex::getTotalShardCount(uint64_t totalBuckets,
+                                            uint64_t numBucketsPerShard) {
+  XDCHECK(totalBuckets != 0 && numBucketsPerShard != 0);
+  XDCHECK(numBucketsPerShard <= totalBuckets);
+  return (totalBuckets - 1) / numBucketsPerShard + 1;
+}
+
 void FixedSizeIndex::initialize() {
-  XDCHECK(numChunks_ != 0 && numBucketsPerChunkPower_ != 0 &&
-          numBucketsPerMutex_ != 0);
+  if (handleOverflow_ && retrieveKeyCb_ == nullptr) {
+    throw std::invalid_argument(
+        "retrieveKey callback must be set with handleOverflow enabled");
+  }
 
-  XDCHECK(numBucketsPerChunkPower_ <= 63);
   bucketsPerChunk_ = (1ull << numBucketsPerChunkPower_);
-  totalBuckets_ = numChunks_ * bucketsPerChunk_;
+  totalBuckets_ = getTotalBucketCount(numChunks_, numBucketsPerChunkPower_);
+  totalShards_ = getTotalShardCount(totalBuckets_, numBucketsPerShard_);
 
-  XDCHECK(numBucketsPerMutex_ <= totalBuckets_);
-  totalMutexes_ = (totalBuckets_ - 1) / numBucketsPerMutex_ + 1;
+  mutex_ = std::make_unique<SharedMutexType[]>(totalShards_);
+  if (handleOverflow_) {
+    XDCHECK(retrieveKeyCb_ != nullptr);
+    // This in-memory combined entries is a temporary implementation until we
+    // keep it on flash
+    combinedEntries_ = std::make_unique<
+        folly::F14FastMap<uint64_t, std::unique_ptr<CombinedEntryBlock>>[]>(
+        totalShards_);
+  }
 
-  mutex_ = std::make_unique<SharedMutexType[]>(totalMutexes_);
   bucketDistInfo_.initialize(totalBuckets_);
 }
 
 size_t FixedSizeIndex::getRequiredPreallocSize() const {
   // Need to preallocate buffer for those info which needs to be persistent
   // 1. Main hash table with PackedItemRecord entries
-  // 2. Table entry count information per each mutex boundary
-  // (validBucketsPerMutex_)
+  // 2. Table entry count information per each shard boundary
+  // (validBucketsPerShard_)
   // 3. BucketDistInfo
   return sizeof(PackedItemRecord) * totalBuckets_ + // for ht_
-         sizeof(size_t) * totalMutexes_ +           // for validBucketsPerMutex_
+         sizeof(size_t) * totalShards_ +            // for validBucketsPerShard_
          bucketDistInfo_.getBucketDistInfoBufSize(); // for bucketDistInfo_
 }
 
@@ -63,10 +88,10 @@ Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
 
   if (elb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(elb.recordPtr()->address,
-                                   elb.recordPtr()->getSizeHint(),
+                        ItemRecord(elb.recordRef().address,
+                                   elb.recordRef().getSizeHint(),
                                    0, /* totalHits */
-                                   elb.recordPtr()->bumpCurHits()));
+                                   elb.bumpCurRecordHits()));
   }
 
   return {};
@@ -77,10 +102,10 @@ Index::LookupResult FixedSizeIndex::peek(uint64_t key) const {
 
   if (slb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(slb.recordPtr()->address,
-                                   slb.recordPtr()->getSizeHint(),
+                        ItemRecord(slb.recordRef().address,
+                                   slb.recordRef().getSizeHint(),
                                    0, /* totalHits */
-                                   slb.recordPtr()->info.curHits));
+                                   slb.recordRef().info.curHits));
   }
 
   return {};
@@ -95,16 +120,17 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
   XDCHECK(elb.bucketExist());
   if (elb.isValidRecord()) {
     lr = LookupResult(true,
-                      ItemRecord(elb.recordPtr()->address,
-                                 elb.recordPtr()->getSizeHint(),
+                      ItemRecord(elb.recordRef().address,
+                                 elb.recordRef().getSizeHint(),
                                  0, /* totalHits */
-                                 elb.recordPtr()->info.curHits));
+                                 elb.recordRef().info.curHits));
   } else {
     ++elb.validBucketCntRef();
   }
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
-  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateRecord(PackedItemRecord{address, sizeHint, /* currentHits */ 0},
+                   *this);
   elb.updateDistInfo(key, *this);
 
   return lr;
@@ -119,17 +145,18 @@ Index::LookupResult FixedSizeIndex::insertIfNotExists(uint64_t key,
   XDCHECK(elb.bucketExist());
   if (elb.isValidRecord()) {
     lr = LookupResult(true,
-                      ItemRecord(elb.recordPtr()->address,
-                                 elb.recordPtr()->getSizeHint(),
+                      ItemRecord(elb.recordRef().address,
+                                 elb.recordRef().getSizeHint(),
                                  0, /* totalHits */
-                                 elb.recordPtr()->info.curHits));
+                                 elb.recordRef().info.curHits));
     return lr;
   }
 
   ++elb.validBucketCntRef();
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
-  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateRecord(PackedItemRecord{address, sizeHint, /* currentHits */ 0},
+                   *this);
   elb.updateDistInfo(key, *this);
 
   return lr;
@@ -138,12 +165,12 @@ Index::LookupResult FixedSizeIndex::insertIfNotExists(uint64_t key,
 bool FixedSizeIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {
+  // This will be mainly used when the entry was moved to different location
+  // and only the address needs to be updated (ex. with reclaim-reinsert)
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.isValidRecord() && elb.recordPtr()->address == oldAddress) {
-    elb.recordPtr()->address = newAddress;
-    elb.recordPtr()->info.curHits = 0;
-    return true;
+  if (elb.isValidRecord() && elb.recordRef().address == oldAddress) {
+    return elb.updateNewAddress(newAddress, *this);
   }
   return false;
 }
@@ -152,19 +179,19 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
   ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.isValidRecord()) {
-    LookupResult lr{true, ItemRecord(elb.recordPtr()->address,
-                                     elb.recordPtr()->getSizeHint(),
+    LookupResult lr{true, ItemRecord(elb.recordRef().address,
+                                     elb.recordRef().getSizeHint(),
                                      0, /* totalHits */
-                                     elb.recordPtr()->info.curHits)};
+                                     elb.recordRef().info.curHits)};
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
-    *elb.recordPtr() = PackedItemRecord{};
+    elb.removeRecord(*this);
     return lr;
   }
 
   if (elb.bucketExist()) {
-    *elb.recordPtr() = PackedItemRecord{};
+    elb.removeRecord(*this);
   }
   return {};
 }
@@ -172,8 +199,8 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
 bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.isValidRecord() && elb.recordPtr()->address == address) {
-    *elb.recordPtr() = PackedItemRecord{};
+  if (elb.isValidRecord() && elb.recordRef().address == address) {
+    elb.removeRecord(*this);
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
@@ -198,12 +225,16 @@ void FixedSizeIndex::reset() {
   initWithBaseAddr(reinterpret_cast<uint8_t*>(baseAddr));
 
   uint64_t bucketId = 0;
-  for (uint32_t i = 0; i < totalMutexes_; i++) {
+  for (uint32_t i = 0; i < totalShards_; i++) {
     auto lock = std::lock_guard{mutex_[i]};
-    for (uint64_t j = 0; j < numBucketsPerMutex_; ++j) {
+    for (uint64_t j = 0; j < numBucketsPerShard_; ++j) {
       ht_[bucketId++] = PackedItemRecord{};
     }
-    validBucketsPerMutex_[i] = 0;
+    validBucketsPerShard_[i] = 0;
+    if (handleOverflow_) {
+      // Clear all the combined entries if any
+      combinedEntries_[i].clear();
+    }
   }
 
   if (shmManager_) {
@@ -212,7 +243,7 @@ void FixedSizeIndex::reset() {
     *cfg.version() = kFixedSizeIndexVersion;
     *cfg.numChunks() = static_cast<int32_t>(numChunks_);
     *cfg.numBucketsPerChunkPower() = numBucketsPerChunkPower_;
-    *cfg.numBucketsPerMutex() = static_cast<int64_t>(numBucketsPerMutex_);
+    *cfg.numBucketsPerShard() = static_cast<int64_t>(numBucketsPerShard_);
 
     auto ioBuf = Serializer::serializeToIOBuf(cfg);
 
@@ -237,9 +268,9 @@ void FixedSizeIndex::reset() {
 
 size_t FixedSizeIndex::computeSize() const {
   size_t size = 0;
-  for (uint32_t i = 0; i < totalMutexes_; i++) {
+  for (uint32_t i = 0; i < totalShards_; i++) {
     auto lock = std::shared_lock{mutex_[i]};
-    size += validBucketsPerMutex_[i];
+    size += validBucketsPerShard_[i];
   }
 
   return size;
@@ -250,8 +281,8 @@ Index::MemFootprintRange FixedSizeIndex::computeMemFootprintRange() const {
 
   size_t memUsage = 0;
   memUsage += totalBuckets_ * sizeof(PackedItemRecord);
-  memUsage += totalMutexes_ * sizeof(SharedMutex);
-  memUsage += totalMutexes_ * sizeof(size_t);
+  memUsage += totalShards_ * sizeof(SharedMutex);
+  memUsage += totalShards_ * sizeof(size_t);
 
   // for BucketDistInfo
   memUsage += bucketDistInfo_.getBucketDistInfoBufSize();
@@ -318,8 +349,7 @@ void FixedSizeIndex::setHitsTestOnly(uint64_t key,
   ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.isValidRecord()) {
-    elb.recordPtr()->info.curHits =
-        PackedItemRecord::truncateCurHits(currentHits);
+    elb.setCurRecordHits(PackedItemRecord::truncateCurHits(currentHits));
     XLOGF(INFO,
           "setHitsTestOnly() for {}. totalHits {} was discarded in "
           "FixedSizeIndex",
@@ -334,21 +364,23 @@ bool FixedSizeIndex::checkStoredConfig(
           static_cast<uint32_t>(*stored.numChunks()) == numChunks_ &&
           static_cast<uint8_t>(*stored.numBucketsPerChunkPower()) ==
               numBucketsPerChunkPower_ &&
-          static_cast<uint64_t>(*stored.numBucketsPerMutex()) ==
-              numBucketsPerMutex_);
+          static_cast<uint64_t>(*stored.numBucketsPerShard()) ==
+              numBucketsPerShard_);
 }
 
 void FixedSizeIndex::initWithBaseAddr(uint8_t* addr) {
   // In Shm, it's stored in this order:
-  // ht_, validBucketsPerMutex_, bucketDistInfo (fillMap_, partialBits_)
+  // ht_, validBucketsPerShard_, bucketDistInfo (fillMap_, partialBits_)
   ht_ = reinterpret_cast<PackedItemRecord*>(addr);
   addr += sizeof(PackedItemRecord) * totalBuckets_;
 
-  validBucketsPerMutex_ = reinterpret_cast<size_t*>(addr);
-  addr += sizeof(size_t) * totalMutexes_;
+  validBucketsPerShard_ = reinterpret_cast<size_t*>(addr);
+  addr += sizeof(size_t) * totalShards_;
 
   bucketDistInfo_.initWithBaseAddr(addr);
 }
+
+Index::Iterator FixedSizeIndex::begin() const { return {}; }
 
 } // namespace navy
 } // namespace cachelib

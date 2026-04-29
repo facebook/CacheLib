@@ -4,6 +4,8 @@
   <img width="500" height="140" alt="CacheLib" src="website/static/img/CacheLib-Logo-Large-transp.png">
 </p>
 
+[![linux](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml/badge.svg)](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml)
+
 CacheLib is a C++ library that provides a powerful, flexible, and high-performance in-process caching engine. It is designed to build and scale services that require efficient memory management, low-latency access to cached data, and the ability to leverage both DRAM and SSD storage transparently.
 
 See [www.cachelib.org](https://cachelib.org) for comprehensive documentation and more information.
@@ -101,7 +103,13 @@ python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
 python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
 ```
 
-### Performance Benchmarking
+### Locating build output
+
+`getdeps.py` installs build artifacts to a scratch directory. To find where CacheLib was installed:
+
+    python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib
+
+The install directory contains `bin/` (executables like `cachebench`), `lib/` (libraries), `include/` (headers), and `test_configs/` (sample configurations).
 
 CacheLib includes `CacheBench`, a powerful tool for evaluating cache performance against production workloads. See the [CacheBench documentation](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) for more details.
 

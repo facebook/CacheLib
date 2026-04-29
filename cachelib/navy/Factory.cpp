@@ -131,6 +131,18 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.regionManagerFlushAsync = asyn;
   }
 
+  void setCleanRegionFastPath(bool enable) override {
+    config_.cleanRegionFastPath = enable;
+  }
+
+  void setRecoverEvictionPolicy(bool enable) override {
+    config_.recoverEvictionPolicy = enable;
+  }
+
+  void setUseCombinedEntryBlock(bool useCombinedEntryBlock) override {
+    config_.useCombinedEntryBlock = useCombinedEntryBlock;
+  }
+
   void setIndexConfig(const BlockCacheIndexConfig& indexConfig) override {
     config_.indexConfig = indexConfig;
   }

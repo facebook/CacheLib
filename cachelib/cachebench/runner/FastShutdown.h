@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 
 namespace facebook {
@@ -34,7 +35,9 @@ class FastShutdownStressor : public Stressor {
   FastShutdownStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
   // report the cache statistics
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   ThroughputStats aggregateThroughputStats() const override {
     ThroughputStats stats;

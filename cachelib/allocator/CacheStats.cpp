@@ -54,10 +54,10 @@ struct SizeVerify {};
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
 #ifdef __GLIBCXX__
-#define EXPECTED_SIZE 16736
+#define EXPECTED_SIZE 16912
 #endif
 #ifdef _LIBCPP_VERSION
-#define EXPECTED_SIZE 16736
+#define EXPECTED_SIZE 16912
 #endif
   SizeVerify<sizeof(Stats)> a = SizeVerify<EXPECTED_SIZE>{};
   std::ignore = a;
@@ -125,6 +125,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
       this->nvmEvictionSecondsPastExpiry_.estimate();
   ret.nvmEvictionSecondsToExpiry = this->nvmEvictionSecondsToExpiry_.estimate();
   ret.nvmPutSize = this->nvmPutSize_.estimate();
+  ret.nvmHitTTASecs = this->nvmHitTTASecs_.estimate();
 
   auto accum = [](const PerPoolClassAtomicCounters& c) {
     uint64_t sum = 0;
@@ -455,8 +456,9 @@ std::vector<uint32_t> PoolStats::slabsDistribution() const {
   std::vector<uint32_t> ret;
   auto& acStats = mpStats.acStats;
   XDCHECK_LE(acStats.size(), MemoryAllocator::kMaxClasses);
+  ret.reserve(acStats.size());
   for (size_t i = 0; i < acStats.size(); i++) {
-    ret.push_back(acStats.at(static_cast<ClassId>(i)).totalSlabs());
+    ret.emplace_back(acStats.at(static_cast<ClassId>(i)).totalSlabs());
   }
   return ret;
 }

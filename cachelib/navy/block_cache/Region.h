@@ -91,7 +91,11 @@ class Region {
 
   // Opens this region for write and allocate a slot of @size.
   // Fail if there's insufficient space.
-  std::tuple<RegionDescriptor, RelAddress> openAndAllocate(uint32_t size);
+  // Returns a MutableBufferView into the attached buffer covering the
+  // allocated range.  The view is empty when allocation fails.
+  // A buffer must be attached before calling this method.
+  std::tuple<RegionDescriptor, RelAddress, MutableBufferView> openAndAllocate(
+      uint32_t size);
 
   // Opens this region for reading. Fail if region is blocked.
   RegionDescriptor openForRead();

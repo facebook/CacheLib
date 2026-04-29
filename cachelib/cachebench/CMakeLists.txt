@@ -13,10 +13,10 @@
 # limitations under the License.
 
 add_library (cachelib_cachebench
-  ../interface/CacheItem.cpp
-  ../interface/Handle.cpp
-  ../interface/components/RAMCacheComponent.cpp
   ./cache/Cache.cpp
+  ./cache/components/Components.cpp
+  ./cache/components/FlashComponent.cpp
+  ./cache/components/RAMComponent.cpp
   ./cache/TimeStampTicker.cpp
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
@@ -29,6 +29,7 @@ add_library (cachelib_cachebench
   ./runner/ProgressTracker.cpp
   ./runner/Runner.cpp
   ./runner/Stressor.cpp
+  ./util/AggregateStats.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
@@ -41,8 +42,10 @@ add_library (cachelib_cachebench
   ./workload/PieceWiseReplayGenerator.cpp
   ./workload/SimpleFlashBenchmarkGenerator.cpp
   )
+
 add_dependencies(cachelib_cachebench thrift_generated_files)
 target_link_libraries(cachelib_cachebench PUBLIC
+  cachelib_interface
   cachelib_datatype
   cachelib_allocator
   gflags

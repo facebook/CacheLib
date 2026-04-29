@@ -300,15 +300,6 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
   }
   auto poolAdviseTargets = getTargetSlabsToAdvise(
       numSlabsToAdvise, poolIds, totalSlabsInUse, numSlabsInUse);
-  if (numSlabsToAdvise == totalSlabsAdvised) {
-    // No need to advise-away or reclaim any new slabs.
-    // Just rebalance the advised away slabs in each pool
-    for (auto& target : poolAdviseTargets) {
-      pools_[target.first]->setNumSlabsAdvised(target.second);
-    }
-    return results;
-  }
-
   if (numSlabsToAdvise > totalSlabsAdvised) {
     results.advise = true;
     uint64_t diff = numSlabsToAdvise - totalSlabsAdvised;

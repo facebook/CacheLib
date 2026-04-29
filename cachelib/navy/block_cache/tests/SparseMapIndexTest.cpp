@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
 #include <thread>
 
 #define SparseMapIndex_TEST_FRIENDS_FORWARD_DECLARATION \
@@ -409,6 +410,66 @@ TEST(SparseMapIndex, InsertIfNotExistsMultipleKeys) {
     EXPECT_EQ(i + 1000, index.lookup(i).address());
     EXPECT_EQ(i + 500, index.lookup(i).sizeHint());
   }
+}
+
+TEST(SparseMapIndex, EntriesBasic) {
+  SparseMapIndex index;
+  // Insert entries across multiple shards (same pattern as Recovery test)
+  std::map<uint64_t, std::pair<uint32_t, uint16_t>> expected;
+  for (uint64_t i = 0; i < 16; i++) {
+    for (uint64_t j = 0; j < 10; j++) {
+      uint64_t key = i << 32 | j;
+      uint32_t addr = static_cast<uint32_t>(j + i);
+      uint16_t sizeHint = static_cast<uint16_t>(j + 1);
+      index.insert(key, addr, sizeHint);
+      expected[key] = {addr, sizeHint};
+    }
+  }
+
+  std::map<uint64_t, std::pair<uint32_t, uint16_t>> visited;
+  for (const auto& entry : index) {
+    visited[entry.token] = {entry.record.address, entry.record.sizeHint};
+  }
+
+  EXPECT_EQ(expected, visited);
+}
+
+TEST(SparseMapIndex, EntriesEmpty) {
+  SparseMapIndex index;
+  size_t count = 0;
+  for (const auto& entry : index) {
+    static_cast<void>(entry);
+    count++;
+  }
+  EXPECT_EQ(0, count);
+}
+
+TEST(SparseMapIndex, EntriesEarlyTermination) {
+  SparseMapIndex index;
+  std::map<uint64_t, std::pair<uint32_t, uint16_t>> expected;
+  for (uint64_t i = 0; i < 100; i++) {
+    const uint64_t key = i << 32;
+    const auto address = static_cast<uint32_t>(i);
+    index.insert(key, address, 1);
+    expected[key] = {address, 1};
+  }
+
+  constexpr size_t kStopAfter = 5;
+  size_t count = 0;
+  for (const auto& entry : index) {
+    static_cast<void>(entry);
+    count++;
+    if (count == kStopAfter) {
+      break;
+    }
+  }
+  EXPECT_EQ(kStopAfter, count);
+
+  std::map<uint64_t, std::pair<uint32_t, uint16_t>> visited;
+  for (const auto& entry : index) {
+    visited[entry.token] = {entry.record.address, entry.record.sizeHint};
+  }
+  EXPECT_EQ(expected, visited);
 }
 
 } // namespace facebook::cachelib::navy::tests

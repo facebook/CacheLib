@@ -253,7 +253,7 @@ SlabReleaseContext AllocationClass::startSlabRelease(
     // The slab is actively used, so we create a new release alloc map
     // and mark the slab for release
     header->setMarkedForRelease(true);
-    createSlabReleaseAllocMapLocked(slab);
+    auto slabReleaseIt = createSlabReleaseAllocMapLocked(slab);
 
     // remove this slab from the allocatedSlab_ if it exists.
     auto allocIt =
@@ -264,8 +264,7 @@ SlabReleaseContext AllocationClass::startSlabRelease(
       // error.
       throw std::runtime_error(
           folly::sformat("Slab {} belongs to class {}. But its not present in "
-                         "the free list or "
-                         "allocated list.",
+                         "the free list or allocated list.",
                          slab, getId()));
     }
     *allocIt = allocatedSlabs_.back();
@@ -274,8 +273,7 @@ SlabReleaseContext AllocationClass::startSlabRelease(
     // if slab is being carved currently, then update slabReleaseAllocMap
     // allocState with free Allocs info, and then reset it
     if (currSlab_ == slab) {
-      const auto it = slabReleaseAllocMap_.find(getSlabPtrValue(slab));
-      auto& allocState = it->second;
+      auto& allocState = slabReleaseIt->second;
       XDCHECK_EQ(allocState.size(), getAllocsPerSlab());
       for (size_t i = currOffset_ / allocationSize_; i < allocState.size();
            i++) {
@@ -704,7 +702,8 @@ ACStats AllocationClass::getStats() const {
   });
 }
 
-void AllocationClass::createSlabReleaseAllocMapLocked(const Slab* slab) {
+decltype(AllocationClass::slabReleaseAllocMap_)::iterator
+AllocationClass::createSlabReleaseAllocMapLocked(const Slab* slab) {
   // Initialize slab free state
   // Each bit represents whether or not an alloc has already been freed
   const auto slabPtrVal = getSlabPtrValue(slab);
@@ -716,6 +715,7 @@ void AllocationClass::createSlabReleaseAllocMapLocked(const Slab* slab) {
     throw std::runtime_error(
         folly::sformat("failed to insert allocState map for slab {}", slab));
   }
+  return res.first;
 }
 
 std::vector<bool>& AllocationClass::getSlabReleaseAllocMapLocked(

@@ -209,6 +209,7 @@ struct Stats {
   mutable util::PercentileStats nvmLargeLifetimeSecs_;
   mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
   mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
+  mutable util::PercentileStats nvmHitTTASecs_;
 
   // per-pool percentile stats for eviction age
   std::array<util::PercentileStats, MemoryPoolManager::kMaxPools>

@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/common/Buffer.h"
@@ -30,11 +31,16 @@ enum class CombinedEntryStatus : uint8_t {
   kUpdated,
   kFull,
   kNotFound,
+  kError,
 };
 
 using EntryPos = uint16_t;
 using EntryIdx = uint16_t;
 using EntryRecord = Index::PackedItemRecord;
+// Map for all the stored keys to their EntryPosInfo location
+using StoredKeysMap = folly::F14FastMap<uint64_t, EntryIdx>;
+// Maintain info on all the bids and # of keys stored for each bid
+using StoredBidsMap = folly::F14FastMap<uint64_t, uint16_t>;
 
 // Combined entry block is a special block which contains multiple entries'
 // info. It will be used to maintain overflowed index entries and also to have
@@ -52,9 +58,42 @@ using EntryRecord = Index::PackedItemRecord;
 class CombinedEntryBlock {
  public:
   // Size for the combined entry block
-  static constexpr uint32_t kCombinedEntryBlockSize = 4096;
+  static constexpr uint16_t kDefaultSize = 4096;
 
-  CombinedEntryBlock() : buffer_(kCombinedEntryBlockSize) {}
+  // For the purpose of CombinedEntryBlock, it doesn't need to be large size
+  // hence blockSize is limited to 16bits
+  CombinedEntryBlock(uint16_t blockSize = kDefaultSize)
+      : ownedBuf_{blockSize},
+        bufView_{ownedBuf_.mutableView()},
+        headerPtr_((Header*)bufView_.data()),
+        // The first portion is for the header
+        entryPosInfoBase_(bufView_.data() + sizeof(Header)),
+        curPos_{blockSize} {
+    initHeader();
+  }
+
+  CombinedEntryBlock(uint8_t* buf, uint16_t blockSize)
+      : bufView_(blockSize, buf),
+        headerPtr_((Header*)bufView_.data()),
+        // The first portion is for the header
+        entryPosInfoBase_(bufView_.data() + sizeof(Header)),
+        curPos_{blockSize} {
+    initHeader();
+  }
+
+  // Constructor for read mode
+  // It's only for read mode, don't use it when it's for writing a combined
+  // entry block
+  explicit CombinedEntryBlock(Buffer&& readBuf)
+      : ownedBuf_{std::move(readBuf)},
+        bufView_{ownedBuf_.mutableView()},
+        headerPtr_((Header*)bufView_.data()),
+        // The first portion is for the header
+        entryPosInfoBase_(bufView_.data() + sizeof(Header)),
+        // Don't try to write here so set the curPos_ as 0
+        curPos_{0},
+        readMode_{true},
+        parsed_{false} {}
 
   // Adding a index entry as the content of Combined entry block
   CombinedEntryStatus addIndexEntry(uint64_t bid,
@@ -70,10 +109,22 @@ class CombinedEntryBlock {
   // Peek if we have a valid index entry for the given key
   bool peekIndexEntry(uint64_t key);
 
+  // Clear all the contents of the combined entry block
+  void clear();
+
   // Get the number of stored entries
-  uint16_t getNumStoredEntries() const { return numStoredEntries_; }
+  uint32_t numStoredEntries() const { return headerPtr_->numStoredEntries; }
   // Get the number of valid entries
-  uint16_t getNumValidEntries() const { return numValidEntries_; }
+  uint16_t numValidEntries() const { return numValidEntries_; }
+
+  uint16_t getSize() const { return static_cast<uint16_t>(bufView_.size()); }
+  uint16_t getUsableSize() const {
+    return (uint16_t)(bufView_.size() - sizeof(Header));
+  }
+
+  BufferView getBufferView() const { return toView(bufView_); }
+
+  const StoredBidsMap& getStoredBids() const { return keysForBids_; }
 
   struct EntryPosInfo {
     // TODO: There will be padding here, but we'll probably need additional
@@ -89,32 +140,82 @@ class CombinedEntryBlock {
 
  private:
   EntryPos getEntryPos(uint16_t keyIdx) const {
-    XDCHECK((keyIdx + 1) * sizeof(EntryPosInfo) <= curPos_);
-    return (reinterpret_cast<const EntryPosInfo*>(buffer_.data())[keyIdx]).pos;
+    XDCHECK(sizeof(Header) + (keyIdx + 1) * sizeof(EntryPosInfo) <= curPos_);
+    return (reinterpret_cast<const EntryPosInfo*>(entryPosInfoBase_)[keyIdx])
+        .pos;
   }
 
   EntryPos getEmptySpacePos(uint16_t numEntry) const {
-    return sizeof(EntryPosInfo) * numEntry;
+    return sizeof(Header) + sizeof(EntryPosInfo) * numEntry;
   }
 
   EntryPosInfo& entryPosInfoRef(uint16_t keyIdx) {
-    return reinterpret_cast<EntryPosInfo*>(buffer_.data())[keyIdx];
+    return reinterpret_cast<EntryPosInfo*>(entryPosInfoBase_)[keyIdx];
   }
 
+  // EntryRecord pos is the offset within the entire buffer including Header
   EntryRecord& entryRecordRef(uint16_t pos) {
-    return *reinterpret_cast<EntryRecord*>(buffer_.data() + pos);
+    return *reinterpret_cast<EntryRecord*>(bufView_.data() + pos);
   }
 
-  Buffer buffer_;
-  // numStoredEntries can be different from storedKeys_.size()
-  // (When the same entry has to be re-written to the different position)
-  uint16_t numStoredEntries_{0};
+  void increaseKeysForBid(uint64_t bid) { keysForBids_[bid]++; }
+
+  void decreaseKeysForBid(uint64_t bid) {
+    XDCHECK_GT(keysForBids_[bid], 0);
+    keysForBids_[bid]--;
+    if (keysForBids_[bid] == 0) {
+      keysForBids_.erase(bid);
+    }
+  }
+
+  void initHeader() {
+    ::memcpy(headerPtr_->sig, kCombinedEntryHeaderSig, kCebHeaderSigLen);
+    headerPtr_->numStoredEntries = 0;
+  }
+
+  static constexpr const char* kCombinedEntryHeaderSig = "CEBENTRY";
+  static constexpr const uint8_t kCebHeaderSigLen = 8;
+
+  struct Header {
+    char sig[kCebHeaderSigLen];
+    // numStoredEntries will be stored in the buffer as the part of the
+    // header. numStoredEntries can be different from storedKeys_.size()
+    // (When the same entry has to be re-written to the different position)
+    uint32_t numStoredEntries;
+  };
+
+  // Buffer will be allocated only when this CombinedEntryBlock doesn't
+  // represent the data in other given buffer.
+  // If this CombinedEntryBlock uses the buffer given via the constructor,
+  // ownedBuf_ will be empty and not used.
+  Buffer ownedBuf_{};
+
+  // bufView will always represent the buffer in use for thie
+  // CombinedEntryBlock no matter where the buffer is and how it's
+  // allocated.
+  MutableBufferView bufView_{};
+
+  Header* headerPtr_{nullptr};
   uint16_t numValidEntries_{0};
+  // The base addr from the buffer where the list of entryPosInfo is being
+  // stored
+  uint8_t* entryPosInfoBase_{nullptr};
   // current position grows in reverse direction (from the end to the 0)
-  EntryPos curPos_{kCombinedEntryBlockSize};
+  EntryPos curPos_{kDefaultSize};
+
+  // For read mode. Read mode is when we read the combined entry block from
+  // the Region (mostly from flash)
+  bool readMode_{false};
+  // For read mode only. If parsed == true, all the content and info from the
+  // combined entry block is already parsed and stored to each members
+  // accordingly (e.g. storedKeys_, keysForBids_, ...)
+  bool parsed_{false};
 
   // For quick check if it's already stored and where its info is.
-  folly::F14FastMap<uint64_t, EntryIdx> storedKeys_;
+  StoredKeysMap storedKeys_{};
+  // To maintain all the bids and # of keys stored with this
+  // CombinedEntryBlock
+  StoredBidsMap keysForBids_{};
 };
 
 } // namespace navy

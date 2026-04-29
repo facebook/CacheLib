@@ -20,12 +20,18 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
 #include "cachelib/common/Ticker.h"
 #include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {
+
+namespace navy {
+class Index;
+} // namespace navy
+
 namespace cachebench {
 // Monitor that is set up after CacheAllocator is created and
 // destroyed before CacheAllocator is shut down.
@@ -180,6 +186,17 @@ struct CacheConfig : public JSONConfig {
   // use a probability based reinsertion policy with navy
   uint64_t navyProbabilityReinsertionThreshold{0};
 
+  // Optional custom reinsertion policy factory for Navy's BlockCache.
+  // When set, this takes precedence over the standard hits-based
+  // reinsertion policy.
+  std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(
+      const navy::Index&)>
+      customReinsertionPolicyFactory;
+
+  // Enable item history tracking in Navy's BlockCache index.
+  // Required by reinsertion policies that use item access history.
+  bool navyEnableItemHistoryTracking{false};
+
   // number of asynchronous worker thread for navy read operation.
   uint32_t navyReaderThreads{32};
 
@@ -191,7 +208,7 @@ struct CacheConfig : public JSONConfig {
   uint32_t navyMaxNumWrites{0};
 
   // Default stack size of Navy fibers when async IO is enabled
-  uint32_t navyStackSizeKB{16};
+  uint32_t navyStackSizeKB{32};
 
   // qdepth to be used; override if already set automatically
   // by navyMaxNumReads and navyMaxNumWrites
@@ -222,15 +239,17 @@ struct CacheConfig : public JSONConfig {
   // by default, we do not encrypt content in Navy
   bool navyEncryption = false;
 
-  // number of navy in-memory buffers
-  uint32_t navyNumInmemBuffers{30};
-
   // By default Navy will only flush to device at most 1MB, if larger than 1MB,
   // Navy will split it into multiple IOs.
   uint32_t deviceMaxWriteSize{1024 * 1024};
 
   // Enable the FDP Data placement mode in the device, if it is capable.
   bool deviceEnableFDP{false};
+
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool navyEnableAccessTimeMap{false};
+  // Maximum entries in the AccessTimeMap. 0 means unbounded.
+  size_t navyAccessTimeMapMaxSize{0};
 
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
@@ -272,6 +291,15 @@ struct CacheConfig : public JSONConfig {
   // If specified, we will not admit any item into NvmCache if their
   // eviction-age is more than this threshold. 0 means no threshold
   uint32_t nvmAdmissionRetentionTimeThreshold{0};
+
+  // CoroFiberAdapter config for FlashCacheComponent run via
+  // CacheComponentStressor.
+  // Number of worker threads for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterNumThreads{32};
+  // Number of fibers per thread for the CoroFiberAdapter executor
+  size_t fccCoroFiberAdapterFibersPerThread{4};
+  // Stack size in KB for CoroFiberAdapter fibers
+  uint32_t fccCoroFiberAdapterStackSizeKB{32};
 
   //
   // Options below are not to be populated with JSON

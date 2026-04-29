@@ -26,10 +26,14 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "cachelib/allocator/BackgroundMoverStrategy.h"
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/MM2Q.h"
+#include "cachelib/allocator/MMLru.h"
+#include "cachelib/allocator/MMTinyLFU.h"
+#include "cachelib/allocator/MMWTinyLFU.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/MemoryTierCacheConfig.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
@@ -37,6 +41,7 @@
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/common/EventInterface.h"
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Throttler.h"
 
 namespace facebook {
@@ -339,6 +344,12 @@ class CacheAllocatorConfig {
   // starts
   CacheAllocatorConfig& setEventTracker(LegacyEventTrackerSharedPtr&&);
 
+  // Set a factory function to create EventTracker::Config on demand.
+  // Creates a fresh config each time, avoiding issues when
+  // CacheAllocatorConfig is reused (e.g., during warm roll recovery).
+  CacheAllocatorConfig& setEventTrackerConfigFactory(
+      std::function<EventTracker::Config()> factory);
+
   // Set the minimum TTL for an item to be admitted into NVM cache.
   // If nvmAdmissionMinTTL is set to be positive, any item with configured TTL
   // smaller than this will always be rejected by NvmAdmissionPolicy.
@@ -573,6 +584,11 @@ class CacheAllocatorConfig {
   // construction.
   LegacyEventTrackerSharedPtr legacyEventTracker{nullptr};
 
+  // Factory function to create EventTracker::Config on demand.
+  // Creates a fresh config each time, avoiding issues when
+  // CacheAllocatorConfig is reused (e.g., during warm roll recovery).
+  std::function<EventTracker::Config()> eventTrackerConfigFactory{nullptr};
+
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
 
@@ -712,6 +728,7 @@ class CacheAllocatorConfig {
   std::string stringifyAddr(const void* addr) const;
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
+  std::string_view getEvictionPolicyName() const;
 
   // Configuration for memory tiers.
   MemoryTierConfigs memoryTierConfigs{
@@ -1160,6 +1177,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTrackerConfigFactory(
+    std::function<EventTracker::Config()> factory) {
+  eventTrackerConfigFactory = std::move(factory);
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
     uint64_t ttl) {
   if (!nvmConfig) {
@@ -1269,6 +1293,7 @@ template <typename T>
 std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   std::map<std::string, std::string> configMap;
 
+  configMap["evictionPolicy"] = std::string(getEvictionPolicyName());
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
   configMap["posixShm"] = isUsingPosixShm() ? "set" : "empty";
@@ -1303,6 +1328,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
     break;
   case MemoryMonitor::Disabled:
     configMap["memMonitorMode"] = "Disabled";
+    break;
+  case MemoryMonitor::TestMode:
+    configMap["memMonitorMode"] = "Test";
     break;
   default:
     configMap["memMonitorMode"] = "Unknown";
@@ -1344,6 +1372,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
   configMap["eventTracker"] = legacyEventTracker ? "set" : "empty";
+  configMap["eventTrackerConfigFactory"] =
+      eventTrackerConfigFactory ? "set" : "empty";
   configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   configMap["delayCacheWorkersStart"] =
       delayCacheWorkersStart ? "true" : "false";
@@ -1394,6 +1424,22 @@ std::string CacheAllocatorConfig<T>::stringifyRebalanceStrategy(
     return "empty";
   }
   return folly::json::serialize(folly::toDynamic(strategy->exportConfig()), {});
+}
+
+template <typename T>
+std::string_view CacheAllocatorConfig<T>::getEvictionPolicyName() const {
+  const int id = T::MMType::kId;
+  if (id == MMLru::kId) {
+    return "MMLru";
+  } else if (id == MM2Q::kId) {
+    return "MM2Q";
+  } else if (id == MMTinyLFU::kId) {
+    return "MMTinyLFU";
+  } else if (id == MMWTinyLFU::kId) {
+    return "MMWTinyLFU";
+  } else {
+    return "Unknown";
+  }
 }
 } // namespace cachelib
 } // namespace facebook

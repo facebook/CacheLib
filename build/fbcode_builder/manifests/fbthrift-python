@@ -28,9 +28,9 @@ enable_tests=OFF
 
 [cmake.defines.os=linux]
 thrift_python=ON
-enable_tests=ON
 
 [dependencies]
+benchmark
 fizz-python
 fmt-python
 folly-python
@@ -45,9 +45,8 @@ xxhash
 # dependency to avoid duplication.
 
 [dependencies.os=linux]
-libaio
+libaio-python
 libevent-python
-proxygen-python
 
 [shipit.pathmap]
 xplat/thrift/public_tld = .

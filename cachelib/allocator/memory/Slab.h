@@ -193,10 +193,10 @@ enum class SlabReleaseMode {
   kAdvise     // Advise away slab to increase free memory
 };
 
-// Used to denote store the context for releasing a slab.  This is created
-// using a startSlabRelease call and needs to be passed on to the
-// completeSlabRelease call to finalize the slab release process if the
-// context is in a state where the slab is not released(isReleased())
+// Used to store the context for releasing a slab.  This is created using a
+// startSlabRelease call and needs to be passed on to the completeSlabRelease
+// call to finalize the slab release process if the context is in a state where
+// the slab is not released(check isReleased())
 class SlabReleaseContext {
  public:
   // non copyable

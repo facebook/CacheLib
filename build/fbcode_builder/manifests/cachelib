@@ -25,9 +25,18 @@ zstd
 mvfst
 numa
 libaio
+magic_enum
+xxhash
 # cachelib also depends on openssl but since the latter requires a platform-
 # specific configuration we rely on the folly manifest to provide this
 # dependency to avoid duplication.
+
+[rpms.all(distro=centos_stream,distro_vers=9)]
+gcc-toolset-14
+
+[cmake.defines.all(distro=centos_stream,distro_vers=9)]
+CMAKE_C_COMPILER=/opt/rh/gcc-toolset-14/root/usr/bin/gcc
+CMAKE_CXX_COMPILER=/opt/rh/gcc-toolset-14/root/usr/bin/g++
 
 [shipit.pathmap]
 fbcode/cachelib = cachelib
@@ -37,3 +46,5 @@ fbcode/cachelib/public_tld = .
 ^fbcode/cachelib/examples(/|$)
 ^fbcode/cachelib/facebook(/|$)
 ^fbcode/cachelib/public_tld/website/docs/facebook(/|$)
+^fbcode/cachelib/public_tld/website/node_modules(/|$)
+^fbcode/cachelib/public_tld/website/build(/|$)

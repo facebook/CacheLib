@@ -40,14 +40,6 @@ module.exports = {
 
 
   themeConfig: {
-    announcementBar: {
-      id: 'support_ukraine',
-      content:
-        'Support Ukraine 🇺🇦 <a target="_blank" rel="noopener noreferrer" href="https://opensource.fb.com/support-ukraine"> Help Provide Humanitarian Aid to Ukraine</a>.',
-      backgroundColor: '#20232a',
-      textColor: '#fff',
-      isCloseable: false,
-    },
     algolia:  fbContent({
       internal: undefined,
       external:{
@@ -116,6 +108,11 @@ module.exports = {
           label: 'Learn More',
           position: 'right',
         },
+        {
+          to: 'blog',
+          label: 'Blog',
+          position: 'right',
+        },
         // Please keep GitHub link to the right for consistency.
         {
           href: 'https://github.com/facebook/CacheLib',
@@ -149,7 +146,6 @@ module.exports = {
             },
           ],
         },
-	  /*
         {
           title: 'More',
           items: [
@@ -159,11 +155,10 @@ module.exports = {
             },
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/facebook/CacheLib',
             },
           ],
         },
-*/
         {
           title: 'Legal',
           // Please do not remove the privacy and terms, it's a legal requirement.

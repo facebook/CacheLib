@@ -21,9 +21,21 @@
 #include "cachelib/interface/CacheItem.h"
 #include "cachelib/interface/Handle.h"
 #include "cachelib/interface/Result.h"
+#include "cachelib/interface/Stats.h"
 
 namespace facebook::cachelib::interface {
 
+/**
+ * A cache that manages a section of storage.
+ *
+ * The interface is as generic as possible to give components maximum
+ * implementation flexibility.  APIs are coro-compatible so components can run
+ * work asynchronously (some components may run synchronously under the hood).
+ *
+ * NOTE: most APIs take the key argument as a Key (essentially a string view).
+ * This allows maximum performance, but users *must* ensure the string view is
+ * constant across coroutine suspension points.
+ */
 class CacheComponent {
  public:
   virtual ~CacheComponent() = default;
@@ -118,6 +130,21 @@ class CacheComponent {
    */
   virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
 
+  /**
+   * Shut down the cache component. Persists state if the component was
+   * configured for persistence and stops all background workers. The component
+   * is no longer usable after calling shutdown().
+   *
+   * @return folly::unit on success or an error result otherwise
+   */
+  virtual UnitResult shutdown() = 0;
+
+  /**
+   * Get stats for the cache component.
+   * @return stats for the cache component
+   */
+  virtual CacheComponentStats getStats() const noexcept = 0;
+
  protected:
   /**
    * Mark an item as inserted into cache.
@@ -135,6 +162,12 @@ class CacheComponent {
    * @param handle handle to release
    */
   FOLLY_ALWAYS_INLINE void releaseHandle(Handle&& handle) { handle.release(); }
+
+  /**
+   * Get a pointer to the inline buffer in the handle, suitable for placement
+   * new of a CacheItem subclass.
+   */
+  static void* getInlineBuf(Handle& handle) noexcept { return handle.buf_; }
 
  private:
   // ------------------------------ Interface ------------------------------ //
@@ -155,14 +188,34 @@ class CacheComponent {
    * executes any necessary callbacks. Only meant to be called by the component
    * or cache item handles.
    *
+   * NOTE: the component is responsible for destroying the item!
+   *
    * @param item the item to release
    * @param inserted whether the item was previously inserted into the cache
    * (callbacks are typically only called when it was inserted)
    */
-  virtual folly::coro::Task<void> release(CacheItem& item, bool inserted) = 0;
+  virtual void release(CacheItem& item, bool inserted) = 0;
 
   friend class Handle;
   friend class WriteHandle;
+};
+
+/**
+ * A cache component that provides stats. Your implementation still needs to
+ * bump them!
+ */
+class CacheComponentWithStats : public CacheComponent {
+ public:
+  CacheComponentWithStats(
+      const CacheComponentStatsCollector::LatencySamplingConfig& config = {})
+      : stats_(std::make_unique<CacheComponentStatsCollector>(config)) {}
+
+  CacheComponentStats getStats() const noexcept override {
+    return CacheComponentStats(*stats_);
+  }
+
+ protected:
+  std::unique_ptr<CacheComponentStatsCollector> stats_;
 };
 
 } // namespace facebook::cachelib::interface

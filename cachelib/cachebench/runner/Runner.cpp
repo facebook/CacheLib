@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/runner/Runner.h"
 
+#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/ProgressTracker.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 
@@ -45,7 +46,7 @@ bool Runner::run(std::chrono::seconds progressInterval,
   opsStats_ = stressor_->aggregateThroughputStats();
   tracker.stop();
 
-  bool passed = true;
+  bool passed;
   if (progressStatsFile.empty()) {
     passed = render(std::cout);
   } else {
@@ -75,15 +76,17 @@ bool Runner::run(folly::UserCounters& counters) {
     auto opsStats = stressor_->aggregateThroughputStats();
 
     // Allocator Stats
-    cacheStats.render(counters);
+    cacheStats->render(counters);
 
     // Throughput
     opsStats.render(durationNs, counters);
 
     stressor_->renderWorkloadGeneratorStats(durationNs, counters);
 
-    counters["nvm_disable"] = cacheStats.isNvmCacheDisabled ? 100 : 0;
-    counters["inconsistency_count"] = cacheStats.inconsistencyCount * 100;
+    if (auto* statsPtr = cacheStats->asPtr<const Stats>()) {
+      counters["nvm_disable"] = statsPtr->isNvmCacheDisabled ? 100 : 0;
+      counters["inconsistency_count"] = statsPtr->inconsistencyCount * 100;
+    }
 
     stressor_.reset();
   }
@@ -97,7 +100,7 @@ bool Runner::run(folly::UserCounters& counters) {
 
 bool Runner::render(std::ostream& os) {
   os << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats_.render(os);
+  cacheStats_->render(os);
 
   os << "\n== Throughput Stats ==\n";
   opsStats_.render(durationNs_, os);
@@ -105,7 +108,7 @@ bool Runner::render(std::ostream& os) {
   stressor_->renderWorkloadGeneratorStats(durationNs_, os);
   os << std::endl;
 
-  return cacheStats_.renderIsTestPassed(os);
+  return cacheStats_->renderIsTestPassed(os);
 }
 
 } // namespace cachebench

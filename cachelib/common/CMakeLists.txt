@@ -40,12 +40,14 @@ target_link_libraries(cachelib_common PUBLIC
   Threads::Threads
   FBThrift::thriftcpp2
   FBThrift::thriftprotocol
+  FBThrift::thrift_dynamic_value
   Folly::folly
   Folly::follybenchmark
-  Folly::folly_exception_tracer
-  Folly::folly_exception_tracer_base
-  Folly::folly_exception_counter
+  Folly::folly_debugging_exception_tracer_exception_tracer
+  Folly::folly_debugging_exception_tracer_exception_tracer_base
+  Folly::folly_debugging_exception_tracer_exception_counter
   GTest::gtest
+  magic_enum::magic_enum
   ${XXHASH_LIBRARY}
 )
 

@@ -11,7 +11,7 @@
   },
   "test_config" :
     {
-      "numOps" : 4000000,
+      "numOps" : 2000000,
       "numThreads" : 32,
       "numKeys" : 100000,
 

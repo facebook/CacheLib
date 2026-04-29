@@ -527,6 +527,7 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmEvictionSecondsPastExpiry{};
   util::PercentileStats::Estimates nvmEvictionSecondsToExpiry{};
   util::PercentileStats::Estimates nvmPutSize{};
+  util::PercentileStats::Estimates nvmHitTTASecs{};
 
   // time when CacheAllocator structure is created. Whenever a process restarts
   // and even if cache content is persisted, this will be reset. It's similar

@@ -23,6 +23,7 @@
 #include <thread>
 #include <vector>
 
+#include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Runner.h"
 #include "cachelib/cachebench/util/AggregateStats.h"
 #include "cachelib/cachebench/util/Sleep.h"

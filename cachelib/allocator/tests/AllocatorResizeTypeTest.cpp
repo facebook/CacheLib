@@ -56,6 +56,10 @@ TYPED_TEST(AllocatorResizeTest, MemMonitorEmptySlabs) {
   this->testMemMonitorEmptySlabs();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisedCountsMatchReality) {
+  this->testMemMonitorAdvisedCountsMatchReality();
+}
+
 TYPED_TEST(AllocatorResizeTest, MemoryAdviseWithSaveRestore) {
   this->testMemoryAdviseWithSaveRestore();
 }
