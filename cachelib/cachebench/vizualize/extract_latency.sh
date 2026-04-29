@@ -12,6 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# Note:
+# For an even number of samples, this function returns the lower-middle
+# value instead of averaging the two middle values. This is intentional
+# for operational latency analysis.
 
 
 input_logfile=$1
@@ -54,7 +58,7 @@ extract_latency() {
 
     # check if the file actually produced valid content
     [[ "$(wc -l < "$out")" -eq "1" ]] &&                        \
-        echo "Incorrect log file. No latecny records found" ||  \
+        echo "Incorrect log file. No latency records found" ||  \
         echo "$search latency written to $out"
 }
 
@@ -74,7 +78,8 @@ extract_bandwidth() {
         # get the bandwidth
         grep -e "$search" "$in"             | \
             tail -1                         | \
-            awk '{print $10 " " $13}'
+            awk -F '[ ,]+' '{for(i=1;i<=NF;i++) if($i=="egressBytesPerSec") print $(i+2), $(i+5)}'
+
     }  | column -t > "$out"
 
     # check if the file actually produced valid content
