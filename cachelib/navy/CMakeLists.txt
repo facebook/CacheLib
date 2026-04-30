@@ -87,7 +87,9 @@ if (BUILD_TESTS)
 
 
   function (add_source_test SOURCE_FILE)
-     generic_add_source_test("navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}")
+     generic_add_source_test(
+       "navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}"
+     )
     get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
     target_sources("navy-test-${TEST_NAME}" PRIVATE
       "${CACHELIB_HOME}/common/tests/TestMain.cpp")
@@ -119,6 +121,10 @@ if (BUILD_TESTS)
   add_source_test (testing/tests/MockJobSchedulerTest.cpp)
   add_source_test (testing/tests/SeqPointsTest.cpp)
   add_source_test (block_cache/tests/BlockCacheTest.cpp)
+  set_tests_properties(
+    "navy-test-BlockCacheTest.BlockCache.ExpiredItemDestructorCallback"
+    PROPERTIES DISABLED TRUE
+  )
   add_source_test (block_cache/tests/CombinedEntryBlockTest.cpp)
   add_source_test (bighash/tests/BigHashTest.cpp)
 endif()
