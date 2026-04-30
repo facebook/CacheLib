@@ -13,7 +13,7 @@ jobs:
           - 'cachelib'
           - 'examples'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run clang-format
         uses: jidicula/clang-format-action@v4.13.0
         with:
