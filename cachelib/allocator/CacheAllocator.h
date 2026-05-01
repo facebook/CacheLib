@@ -5600,7 +5600,7 @@ CCacheT* CacheAllocator<CacheTrait>::attachCompactCache(folly::StringPiece name,
   // if a compact cache with this name already exists, return without creating
   // new instance
   std::unique_lock lock(compactCachePoolsLock_);
-  if (compactCaches_.find(poolId) != compactCaches_.end()) {
+  if (compactCaches_.contains(poolId)) {
     return static_cast<CCacheT*>(compactCaches_[poolId].get());
   }
 
