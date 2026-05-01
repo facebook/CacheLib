@@ -916,12 +916,7 @@ void MMS3FIFO::Container<T, HookPtr>::maybeUpdateFeatures() noexcept {
   if (!config_.enableFeatureCollection) {
     return;
   }
-  // Tiny-cache guard: trackers can't produce a reliable signal at this
-  // scale, so skip both logging and prediction.
-  if (lru_.size() < config_.featureMinCacheSize) {
-    config_.enableFeatureCollection = false;
-    return;
-  }
+
   // Single shot; once we've applied (or aborted on drift) we never run
   // the prediction path again.
   if (hasUpdatedOnce_.load(std::memory_order_acquire)) {
@@ -1071,6 +1066,16 @@ void MMS3FIFO::Container<T, HookPtr>::maybeUpdateFeatures() noexcept {
           collectorId_, predicted.smallSizePercent,
           predicted.ghostSizePercent, predicted.smallToMainPromoThreshold,
           predicted.smallSkipRatio);
+    // If # of objects too few, skip
+    if (lru_.size() < config_.featureMinCacheSize) {
+      XLOGF(INFO,
+            "[S4FIFO id={}] Cache size {} is below the featureMinCacheSize "
+            "{} — skipping prediction, stopping collection",
+            collectorId_, lru_.size(), config_.featureMinCacheSize);
+      hasUpdatedOnce_.store(true, std::memory_order_release);
+      config_.enableFeatureCollection = false;
+      return;
+    }
 
     if (
         predicted.ghostSizePercent >=
