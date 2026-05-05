@@ -472,6 +472,12 @@ std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
   XDCHECK_GE(reinterpret_cast<uintptr_t>(memory),
              reinterpret_cast<uintptr_t>(slab));
 
+  // getRandomAlloc() is best-effort sampling. Slab headers can concurrently
+  // transition between allocation classes while slab release/rebalance is in
+  // progress; callers validate the sampled item before using it. A racing
+  // allocSize read may at worst produce an invalid sample, which is reported as
+  // nullptr below or rejected by the caller's lookup validation.
+  folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
   const auto allocSize = header->allocSize;
   if (allocSize == 0) {
     return std::make_tuple(0, nullptr);
