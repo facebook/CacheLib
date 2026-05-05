@@ -41,7 +41,7 @@ class PutCtx {
          folly::IOBuf buf,
          util::LatencyTracker tracker)
       : buf_(std::move(buf)),
-        key_(_key.toString()),
+        key_(_key.data(), _key.size()),
         tracker_{std::move(tracker)} {}
 
   // @return   key as StringPiece
