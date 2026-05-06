@@ -86,7 +86,7 @@ inline void prepareS3ModelInput(const S3FIFOFeatureVector& fv, double* input) {
     tail_heaviness += fv.histMain[i];
   }
 
-  const double cache_size = std::exp(log_C);
+  const double cache_size = std::pow(10.0, log_C);
   const double working_set_size =
       static_cast<double>(fv.totalRequests) * fv.uniqueRatio;
   double ratio_estimate = cache_size / (working_set_size + 1e-6);
@@ -129,8 +129,6 @@ inline void prepareS3ModelInput(const S3FIFOFeatureVector& fv, double* input) {
   input[74] = static_cast<double>(fv.totalRequests);
 }
 
-// Gating thresholds: skip prediction until the snapshot has enough
-// signal. Matches the S4 predictor's thresholds.
 inline S3FIFOPredictedParams s3fifoLightGBMPredict(
     const S3FIFOFeatureVector& features) {
   S3FIFOPredictedParams params;

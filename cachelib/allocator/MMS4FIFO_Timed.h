@@ -126,17 +126,12 @@ struct S3FIFOHitPosTracker {
     return newBucket;
   }
 
-  // Record that a ghost entry inserted at `removedInsertTime` was hit
-  // (and thus removed from the middle of the queue). The deletion is
-  // attributed to the removed item's own bin so that later hits can
-  // correct their position by the right amount.
-  void recordRemoval(int64_t removedInsertTime) {
+  // Record that a ghost entry was hit and removed from the middle of the queue.
+  void recordRemoval() {
     if (!haveWarmedUp || !trackMiddleRemoval || bucketSize == 0) {
       return;
     }
-    int64_t removedBucket =
-        (removedInsertTime / bucketSize) % numBuckets;
-    removalCounters[removedBucket]++;
+    removalCounters[currentBucket]++;
     totalRemovals++;
   }
 
@@ -354,19 +349,12 @@ struct S3FIFOFeatureCollector {
   }
 };
 
-// Predicted parameters returned by the prediction callback. Sentinel
-// values mean "do not change this parameter":
-//   SIZE_MAX for size_t, -1 for int, -1.0 for double.
+// Predicted parameters returned by the prediction callback.
 struct S3FIFOPredictedParams {
-  size_t smallSizePercent{SIZE_MAX};
-  size_t ghostSizePercent{SIZE_MAX};
-  int smallToMainPromoThreshold{-1};
-  double smallSkipRatio{-1.0};
-
-  bool hasAnyChange() const {
-    return smallSizePercent != SIZE_MAX || ghostSizePercent != SIZE_MAX ||
-           smallToMainPromoThreshold != -1 || smallSkipRatio >= 0.0;
-  }
+  size_t smallSizePercent{10};
+  size_t ghostSizePercent{100};
+  int smallToMainPromoThreshold{2};
+  double smallSkipRatio{0.0};
 };
 
 using S3FIFOPredictionCallback =
@@ -482,10 +470,10 @@ class MMS3FIFO {
     Config& operator=(Config&& rhs) = default;
 
     void checkConfig() {
-      if (smallSizePercent < 1 || smallSizePercent > 50) {
+      if (smallSizePercent < 1 || smallSizePercent > 100) {
         throw std::invalid_argument(
             folly::sformat("Invalid small queue size {}. Small queue size "
-                           "must be between 1% and 50% of total cache size.",
+                           "must be between 1% and 100% of total cache size.",
                            smallSizePercent));
       }
       if (smallToMainPromoThreshold < 1 || smallToMainPromoThreshold > 2) {
@@ -561,8 +549,8 @@ class MMS3FIFO {
     // Length of the feature-collection window once warmup completes.
     // After this elapses, exactly one prediction is emitted (subject to
     // the drift gate) and collection stops permanently.
-    // Default 2 hours feature collection
-    uint64_t featureCollectionSecs{7200};
+    // Default 3 hours feature collection
+    uint64_t featureCollectionSecs{10800};
 
     // Resolution of hit-position histograms.
     int32_t featureNumBuckets{kS3FIFODefaultBuckets};
@@ -572,7 +560,7 @@ class MMS3FIFO {
     // queue's size has drifted by more than this fraction, skip the
     // prediction entirely — the histogram bucketing is no longer
     // representative of the cache state. Collection still stops.
-    double featureSizeDriftThreshold{0.25};
+    double featureSizeDriftThreshold{0.30};
 
     // Below this cache size the trackers cannot produce a reliable signal,
     // so we stop collecting features and applying predictions.
@@ -582,12 +570,6 @@ class MMS3FIFO {
     // prediction. The runtime skip-queue path is still controlled by
     // config_.smallSkipRatio, but the model cannot move it.
     bool applyPredictedSmallSkipRatio{false};
-
-    // Per-field nullification thresholds applied to the predictor output
-    // before applyPredictedParams. A nullified field is not applied.
-    // 
-    size_t predictedGhostSizePercentMaxSentinel{600};
-    size_t largeSmallSizePercentThreshold{25};
 
     std::chrono::seconds mmReconfigureIntervalSecs{};
 
@@ -836,22 +818,22 @@ class MMS3FIFO {
     // Called at top of recordAccess. Wall-clock gated; noop until warmup.
     void maybeUpdateFeatures() noexcept;
 
-    // Apply only non-sentinel fields to config_. Caller holds featureMutex_.
-    void applyPredictedParams(const S3FIFOPredictedParams& params) {
-      if (params.smallSizePercent != SIZE_MAX) {
-        config_.smallSizePercent = params.smallSizePercent;
-      }
-      if (params.ghostSizePercent != SIZE_MAX) {
-        config_.ghostSizePercent = params.ghostSizePercent;
-      }
-      if (params.smallToMainPromoThreshold != -1) {
-        config_.smallToMainPromoThreshold =
-            static_cast<uint8_t>(params.smallToMainPromoThreshold);
-      }
-      if (params.smallSkipRatio >= 0.0 &&
-          config_.applyPredictedSmallSkipRatio) {
+    // Caller must hold lruMutex_.
+    void applyPredictedParamsLocked(const S3FIFOPredictedParams& params) {
+      config_.smallSizePercent = params.smallSizePercent;
+      config_.ghostSizePercent = params.ghostSizePercent;
+      config_.smallToMainPromoThreshold =
+          static_cast<uint8_t>(params.smallToMainPromoThreshold);
+      if (config_.applyPredictedSmallSkipRatio) {
         config_.smallSkipRatio = params.smallSkipRatio;
       }
+    }
+
+    // Caller holds featureMutex_. Prediction updates must also be serialized
+    // with eviction, which reads the tunables under lruMutex_.
+    void applyPredictedParams(const S3FIFOPredictedParams& params) {
+      lruMutex_->lock_combine(
+          [this, &params]() { applyPredictedParamsLocked(params); });
     }
 
     // keyHash → gCounter-at-insert. O(1) lookup for ghost hits; the TS
@@ -1077,35 +1059,42 @@ void MMS3FIFO::Container<T, HookPtr>::maybeUpdateFeatures() noexcept {
       return;
     }
 
-    if (
-        predicted.ghostSizePercent >=
-            config_.predictedGhostSizePercentMaxSentinel || predicted.smallSizePercent >
-            config_.largeSmallSizePercentThreshold) {
-      XLOGF(INFO,
-            "[S4FIFO id={}] Nullifying predicted ghostSizePercent={} smallSizePercent={}, will discard the prediction because the values are outside reasonable bounds",
-            collectorId_, predicted.ghostSizePercent, predicted.smallSizePercent);
-      hasUpdatedOnce_.store(true, std::memory_order_release);
-      config_.enableFeatureCollection = false;
-      return;
-    }
+    // Snapshot config before and after under lruMutex_, the same lock used
+    // by eviction when reading these tunables.
+    size_t beforeSmallPct = 0;
+    size_t beforeGhostPct = 0;
+    uint8_t beforePromo = 0;
+    double beforeSkip = 0.0;
+    size_t afterSmallPct = 0;
+    size_t afterGhostPct = 0;
+    uint8_t afterPromo = 0;
+    double afterSkip = 0.0;
 
-    // Snapshot config before apply so we can log the actual diff.
-    const size_t beforeSmallPct = config_.smallSizePercent;
-    const size_t beforeGhostPct = config_.ghostSizePercent;
-    const uint8_t beforePromo = config_.smallToMainPromoThreshold;
-    const double beforeSkip = config_.smallSkipRatio;
+    lruMutex_->lock_combine([this, &predicted, &beforeSmallPct,
+                             &beforeGhostPct, &beforePromo, &beforeSkip,
+                             &afterSmallPct, &afterGhostPct, &afterPromo,
+                             &afterSkip]() {
+      beforeSmallPct = config_.smallSizePercent;
+      beforeGhostPct = config_.ghostSizePercent;
+      beforePromo = config_.smallToMainPromoThreshold;
+      beforeSkip = config_.smallSkipRatio;
 
-    applyPredictedParams(predicted);
+      applyPredictedParamsLocked(predicted);
+
+      afterSmallPct = config_.smallSizePercent;
+      afterGhostPct = config_.ghostSizePercent;
+      afterPromo = config_.smallToMainPromoThreshold;
+      afterSkip = config_.smallSkipRatio;
+    });
 
     XLOGF(INFO,
           "[S4FIFO id={}] Applied params: smallSizePercent {}->{}, "
           "ghostSizePercent {}->{}, smallToMainPromoThreshold {}->{}, "
           "smallSkipRatio {:.4f}->{:.4f}",
-          collectorId_, beforeSmallPct, config_.smallSizePercent,
-          beforeGhostPct, config_.ghostSizePercent,
+          collectorId_, beforeSmallPct, afterSmallPct,
+          beforeGhostPct, afterGhostPct,
           static_cast<int>(beforePromo),
-          static_cast<int>(config_.smallToMainPromoThreshold), beforeSkip,
-          config_.smallSkipRatio);
+          static_cast<int>(afterPromo), beforeSkip, afterSkip);
 
     hasUpdatedOnce_.store(true, std::memory_order_release);
     config_.enableFeatureCollection = false;
@@ -1259,8 +1248,7 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
       featureCollector_.ghostTracker.recordHit(
           static_cast<int64_t>(ghostTS),
           static_cast<int64_t>(gCounter_.load(std::memory_order_relaxed)));
-      featureCollector_.ghostTracker.recordRemoval(
-          static_cast<int64_t>(ghostTS));
+      featureCollector_.ghostTracker.recordRemoval();
     } else {
       featureCollector_.totalUnique++;
     }
