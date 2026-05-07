@@ -11,11 +11,10 @@ thread-safe API that enables developers to build and customize scalable, concurr
 
 CacheLib is targeted at services that use gigabytes of memory to cache information. It provides an API similar to `malloc` and a concurrent unordered hash table for caching. Consider using cache and cachelib for your service if any of the following applies to the service:
 
-- Caching variable sized objects.
 - Concurrent access with zero copy semantics.
-- Hard RSS memory constraints for cache to avoid OOMs.
-- Variety of caching algorithms like LRU, Segmented LRU, FIFO, 2Q, and TTL.
-- Intelligent and automatic tuning of cache for dynamic changes to workload.
+- Strict memory bounds — the cache lives within a configured size, never overruns it.
+- Variety of caching algorithms like LRU, TinyLFU, LRU2Q with TTL support.
+- Intelligent and automatic tuning of cache (pool rebalance, class rebalance) for dynamic changes to workload.
 - Shared-memory based persistence of cache across process restarts.
 - Transparent usage of DRAM and SSD for caching.
 
