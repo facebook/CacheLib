@@ -426,6 +426,27 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
                : sizeController_->getCurrentEntriesLimit();
   }
 
+  // Get the current total object size limit used by the size controller.
+  size_t getTotalObjectSizeLimit() const {
+    return sizeController_ == nullptr
+               ? config_.totalObjectSizeLimit
+               : sizeController_->getTotalObjectSizeLimit();
+  }
+
+  // Update the total object size limit used by the size controller. The limit
+  // must be positive and takes effect when the size controller next runs.
+  //
+  // Returns false if no size controller is active for this cache (i.e.,
+  // objectSizeTrackingEnabled is false or sizeControllerIntervalMs == 0),
+  // or if totalObjectSizeLimit is zero.
+  bool setTotalObjectSizeLimit(size_t totalObjectSizeLimit) {
+    if (totalObjectSizeLimit == 0 || sizeController_ == nullptr) {
+      return false;
+    }
+    sizeController_->setTotalObjectSizeLimit(totalObjectSizeLimit);
+    return true;
+  }
+
   // Get the expiry timestamp of the object
   // @param  object   object shared pointer returned from ObjectCache APIs
   //
@@ -1156,8 +1177,7 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
   config["aggregatePoolStats"] = config_.aggregatePoolStats ? "true" : "false";
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {
-    config["totalObjectSizeLimit"] =
-        std::to_string(config_.totalObjectSizeLimit);
+    config["totalObjectSizeLimit"] = std::to_string(getTotalObjectSizeLimit());
     config["sizeControllerIntervalMs"] =
         std::to_string(config_.sizeControllerIntervalMs);
   }

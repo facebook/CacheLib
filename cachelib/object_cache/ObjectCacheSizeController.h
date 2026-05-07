@@ -47,6 +47,11 @@ class ObjectCacheSizeController : public PeriodicWorker {
   size_t getCurrentEntriesLimit() const {
     return currentEntriesLimit_.load(std::memory_order_relaxed);
   }
+  size_t getTotalObjectSizeLimit() const {
+    return totalObjectSizeLimit_.load(std::memory_order_relaxed);
+  }
+
+  void setTotalObjectSizeLimit(size_t totalObjectSizeLimit);
 
   void getCounters(const util::CounterVisitor& visitor) const;
   size_t getTotalObjSizeBytes() const;
@@ -85,6 +90,7 @@ class ObjectCacheSizeController : public PeriodicWorker {
 
   // will be adjusted to control the cache size limit
   std::atomic<size_t> currentEntriesLimit_;
+  std::atomic<size_t> totalObjectSizeLimit_;
 
   // callback to get free memory in bytes
   GetFreeMemCb getFreeMem_;
@@ -141,9 +147,9 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   }
   auto minEntriesWarmCacheThreshold =
       kSizeControllerThresholdPct * objCache_.config_.l1EntriesLimit / 100;
+  auto totalObjectSizeLimit = getTotalObjectSizeLimit();
   auto totalObjectSizeWarmCacheThreshold =
-      kSizeControllerThresholdPct * objCache_.config_.totalObjectSizeLimit /
-      100;
+      kSizeControllerThresholdPct * totalObjectSizeLimit / 100;
 
   // Check if the cache is warming up.
   // A cache is considered to be warming up if:
@@ -173,8 +179,7 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   if (averageObjSize == 0) {
     return;
   }
-  auto newEntriesLimit =
-      objCache_.config_.totalObjectSizeLimit / averageObjSize;
+  auto newEntriesLimit = totalObjectSizeLimit / averageObjSize;
 
   if (newEntriesLimit > objCache_.config_.l1EntriesLimit) {
     XLOGF_EVERY_MS(INFO, 60'000,
@@ -184,11 +189,12 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   }
 
   XLOGF_EVERY_MS(INFO, 60'000,
-                 "CacheLib size-controller: total object size = {}, current "
-                 "entries = {}, average object size = "
-                 "{}, new entries limit = {}, current entries limit = {}",
-                 totalObjSize, currentNumEntries, averageObjSize,
-                 newEntriesLimit, currentEntriesLimit_);
+                 "CacheLib size-controller: total object size = {}, total "
+                 "object size limit = {}, current entries = {}, average "
+                 "object size = {}, new entries limit = {}, current entries "
+                 "limit = {}",
+                 totalObjSize, totalObjectSizeLimit, currentNumEntries,
+                 averageObjSize, newEntriesLimit, currentEntriesLimit_);
 
   // We have computed the newEntriesLimit to satisfy the numEntries and
   // totalObjSize limits. If user has specified additional control
@@ -254,6 +260,12 @@ void ObjectCacheSizeController<AllocatorT>::work() {
     expandCacheByEntriesNum(newEntriesLimit - currentEntriesLimit,
                             currentEntriesLimit);
   }
+}
+
+template <typename AllocatorT>
+void ObjectCacheSizeController<AllocatorT>::setTotalObjectSizeLimit(
+    size_t totalObjectSizeLimit) {
+  totalObjectSizeLimit_.store(totalObjectSizeLimit, std::memory_order_relaxed);
 }
 
 template <typename AllocatorT>
@@ -332,6 +344,8 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
   visitor("objcache.rss_mem_bytes", objCache_.config_.getRSSMemBytes());
   visitor("objcache.current_entries_limit",
           currentEntriesLimit_.load(std::memory_order_relaxed));
+  visitor("objcache.total_object_size_limit",
+          totalObjectSizeLimit_.load(std::memory_order_relaxed));
   visitor("objcache.size_controller.shrink_cache_calls",
           shrinkCacheCalls_.get(), util::CounterVisitor::CounterType::RATE);
   visitor("objcache.size_controller.expand_cache_calls",
@@ -362,5 +376,6 @@ ObjectCacheSizeController<AllocatorT>::ObjectCacheSizeController(
     : throttlerConfig_(throttlerConfig),
       objCache_(objCache),
       mode_(objCache_.config_.memoryMode),
-      currentEntriesLimit_(objCache_.config_.l1EntriesLimit) {}
+      currentEntriesLimit_(objCache_.config_.l1EntriesLimit),
+      totalObjectSizeLimit_(objCache_.config_.totalObjectSizeLimit) {}
 } // namespace facebook::cachelib::objcache2

@@ -855,6 +855,26 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_GT(stats.getCounts().at("objcache.key_padding_bytes"), 0);
   }
 
+  void testRuntimeTotalObjectSizeLimitVisibility() {
+    ObjectCacheConfig config;
+    config.setCacheName("runtime_resize_visibility_test");
+    config.setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    config.setCacheCapacity(10 /* l1EntriesLimit */,
+                            200 /* totalObjectSizeLimit */,
+                            60'000 /* sizeControllerIntervalMs */);
+
+    auto objcache = ObjectCache::create(config);
+    ASSERT_TRUE(objcache->setTotalObjectSizeLimit(100));
+
+    EXPECT_EQ(objcache->serializeConfigParams().at("totalObjectSizeLimit"),
+              "100");
+
+    util::StatsMap stats;
+    objcache->getObjectCacheCounters(stats.createCountVisitor());
+    EXPECT_EQ(stats.getCounts().at("objcache.total_object_size_limit"), 100);
+  }
+
   void testMultithreadObjectSizeTrackingWithMutation() {
     if (!folly::usingJEMalloc()) {
       return;
@@ -2008,6 +2028,9 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithMutation) {
 TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithSizeUpdate) {
   this->testObjectSizeTrackingWithSizeUpdate();
 }
+TYPED_TEST(ObjectCacheTest, RuntimeTotalObjectSizeLimitVisibility) {
+  this->testRuntimeTotalObjectSizeLimitVisibility();
+}
 TYPED_TEST(ObjectCacheTest, MultithreadObjectSizeTrackingWithMutation) {
   this->testMultithreadObjectSizeTrackingWithMutation();
 }
@@ -2174,6 +2197,88 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
     EXPECT_NE(nullptr, objcache->find<Foo>("key_8"));
     EXPECT_NE(nullptr, objcache->find<Foo>("key_9"));
   }
+}
+
+TEST(ObjectCacheTest, RuntimeTotalObjectSizeLimitResize) {
+  constexpr size_t kEntriesLimit = 20;
+  constexpr int kSizeControllerIntervalMs = 10;
+
+  ObjectCache::Config config;
+  config.setCacheName("runtime_resize_test");
+  config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+  config.setCacheCapacity(kEntriesLimit, 200 /* totalObjectSizeLimit */,
+                          kSizeControllerIntervalMs);
+
+  auto objcache = ObjectCache::create(config);
+  for (size_t i = 0; i < 8; i++) {
+    objcache->insertOrReplace(folly::sformat("key_{}", i),
+                              std::make_unique<Foo>(), 25);
+  }
+
+  ASSERT_EQ(objcache->getTotalObjectSizeLimit(), 200);
+  ASSERT_EQ(objcache->getTotalObjectSize(), 200);
+
+  ASSERT_TRUE(objcache->setTotalObjectSizeLimit(100));
+  EXPECT_EQ(objcache->getTotalObjectSizeLimit(), 100);
+  ASSERT_TRUE(test_util::eventuallyTrue(
+      [&]() {
+        return objcache->getTotalObjectSize() <= 100 &&
+               objcache->getCurrentEntriesLimit() == 4;
+      },
+      3 /* timeoutSecs */));
+  EXPECT_LE(objcache->getTotalObjectSize(), 100);
+  EXPECT_EQ(objcache->getCurrentEntriesLimit(), 4);
+
+  ASSERT_TRUE(objcache->setTotalObjectSizeLimit(200));
+  EXPECT_EQ(objcache->getTotalObjectSizeLimit(), 200);
+  ASSERT_TRUE(test_util::eventuallyTrue(
+      [&]() { return objcache->getCurrentEntriesLimit() > 4; },
+      3 /* timeoutSecs */));
+  EXPECT_GT(objcache->getCurrentEntriesLimit(), 4);
+  EXPECT_LE(objcache->getCurrentEntriesLimit(), kEntriesLimit);
+
+  for (size_t i = 8; i < 12; i++) {
+    objcache->insertOrReplace(folly::sformat("key_{}", i),
+                              std::make_unique<Foo>(), 25);
+  }
+  EXPECT_LE(objcache->getTotalObjectSize(), 200);
+}
+
+TEST(ObjectCacheTest, RuntimeTotalObjectSizeLimitRejectsZero) {
+  ObjectCache::Config config;
+  config.setCacheName("runtime_resize_zero_test");
+  config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+  config.setCacheCapacity(10 /* l1EntriesLimit */,
+                          100 /* totalObjectSizeLimit */,
+                          60'000 /* sizeControllerIntervalMs */);
+
+  auto objcache = ObjectCache::create(config);
+  for (size_t i = 0; i < 4; i++) {
+    objcache->insertOrReplace(folly::sformat("key_{}", i),
+                              std::make_unique<Foo>(), 25);
+  }
+
+  ASSERT_EQ(objcache->getTotalObjectSize(), 100);
+  EXPECT_FALSE(objcache->setTotalObjectSizeLimit(0));
+  EXPECT_EQ(objcache->getTotalObjectSizeLimit(), 100);
+  EXPECT_EQ(objcache->getTotalObjectSize(), 100);
+  EXPECT_EQ(objcache->getNumEntries(), 4);
+}
+
+TEST(ObjectCacheTest, RuntimeTotalObjectSizeLimitUnsupported) {
+  ObjectCache::Config config;
+  config.setCacheName("runtime_resize_unsupported_test");
+  config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+  config.setCacheCapacity(10);
+
+  auto objcache = ObjectCache::create(config);
+  // Entry-count-only ObjectCache instances do not have a size controller, so
+  // runtime object-size-limit updates are unsupported and must fail cleanly.
+  EXPECT_EQ(objcache->getTotalObjectSizeLimit(), 0);
+  EXPECT_FALSE(objcache->setTotalObjectSizeLimit(100));
 }
 
 TEST(ObjectCacheTest, ExportStats) {
