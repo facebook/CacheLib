@@ -1837,6 +1837,118 @@ class ObjectCacheTest : public ::testing::Test {
       ts[i].join();
     }
   }
+
+  std::unique_ptr<ObjectCache> makeFooCache() {
+    ObjectCacheConfig config;
+    config.setCacheName("test").setCacheCapacity(10'000);
+    config.setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    return ObjectCache::create(config);
+  }
+
+  std::map<std::string, Foo> populateFooCache(ObjectCache& objcache, int n) {
+    std::map<std::string, Foo> expected;
+    for (int i = 0; i < n; i++) {
+      auto key = folly::sformat("Foo_{}", i);
+      auto foo = std::make_unique<Foo>();
+      foo->a = i;
+      foo->b = i * 2;
+      foo->c = i * 3;
+      expected[key] = *foo;
+      auto [allocRes, _, __] = objcache.insertOrReplace(key, std::move(foo));
+      EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, allocRes);
+    }
+    return expected;
+  }
+
+  template <typename Iter>
+  void verifyVisitsAllFoos(Iter begin,
+                           const Iter& end,
+                           const std::map<std::string, Foo>& expected) {
+    std::map<std::string, Foo> visited;
+    for (auto it = std::move(begin); it != end; ++it) {
+      ASSERT_TRUE(static_cast<bool>(it));
+      visited[it.getKey().str()] = *it.template getObjectPtrAs<Foo>();
+    }
+    EXPECT_EQ(expected.size(), visited.size());
+    for (const auto& [k, v] : expected) {
+      auto vIt = visited.find(k);
+      ASSERT_NE(visited.end(), vIt);
+      EXPECT_EQ(v.a, vIt->second.a);
+      EXPECT_EQ(v.b, vIt->second.b);
+      EXPECT_EQ(v.c, vIt->second.c);
+    }
+  }
+
+  void testAccessIteratorVisitsAll() {
+    auto objcache = makeFooCache();
+    auto expected = populateFooCache(*objcache, 50);
+    verifyVisitsAllFoos(objcache->begin(), objcache->end(), expected);
+  }
+
+  void testAccessIteratorEmpty() {
+    auto objcache = makeFooCache();
+    EXPECT_EQ(objcache->begin(), objcache->end());
+  }
+
+  void testLockGroupAccessIteratorVisitsAll() {
+    auto objcache = makeFooCache();
+    auto expected = populateFooCache(*objcache, 50);
+    verifyVisitsAllFoos(objcache->beginLockGroup(), objcache->endLockGroup(),
+                        expected);
+  }
+
+  void testLockGroupAccessIteratorEmpty() {
+    auto objcache = makeFooCache();
+    EXPECT_EQ(objcache->beginLockGroup(), objcache->endLockGroup());
+  }
+
+  void testLockGroupAccessIteratorFilter() {
+    auto objcache = makeFooCache();
+    populateFooCache(*objcache, 50);
+
+    auto filter = [](folly::StringPiece key) {
+      return key == "Foo_0" || key == "Foo_1" || key == "Foo_2";
+    };
+    std::set<std::string> filteredVisited;
+    for (auto it = objcache->beginLockGroup(filter);
+         it != objcache->endLockGroup();
+         ++it) {
+      filteredVisited.insert(it.getKey().str());
+    }
+    const std::set<std::string> filteredExpected{"Foo_0", "Foo_1", "Foo_2"};
+    EXPECT_EQ(filteredExpected, filteredVisited);
+  }
+
+  void testLockGroupAccessIteratorPrefixScan() {
+    auto objcache = makeFooCache();
+    std::set<std::string> expectedAlpha;
+    std::set<std::string> expectedBeta;
+    for (int i = 0; i < 500; i++) {
+      auto alpha = folly::sformat("alpha_{}", i);
+      auto beta = folly::sformat("beta_{}", i);
+      expectedAlpha.insert(alpha);
+      expectedBeta.insert(beta);
+      auto [r1, _1, __1] =
+          objcache->insertOrReplace(alpha, std::make_unique<Foo>());
+      auto [r2, _2, __2] =
+          objcache->insertOrReplace(beta, std::make_unique<Foo>());
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, r1);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, r2);
+    }
+
+    auto prefixFilter =
+        [prefix = folly::StringPiece{"alpha_"}](folly::StringPiece key) {
+          return key.startsWith(prefix);
+        };
+    std::set<std::string> visited;
+    for (auto it = objcache->beginLockGroup(prefixFilter);
+         it != objcache->endLockGroup();
+         ++it) {
+      visited.insert(it.getKey().str());
+    }
+    EXPECT_EQ(expectedAlpha, visited);
+  }
 };
 
 using AllocatorTypes = ::testing::Types<LruAllocator,
@@ -1853,6 +1965,24 @@ TYPED_TEST(ObjectCacheTest, SetEvictionPolicyConfig) {
   }
 }
 TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
+TYPED_TEST(ObjectCacheTest, AccessIteratorVisitsAll) {
+  this->testAccessIteratorVisitsAll();
+}
+TYPED_TEST(ObjectCacheTest, AccessIteratorEmpty) {
+  this->testAccessIteratorEmpty();
+}
+TYPED_TEST(ObjectCacheTest, LockGroupAccessIteratorVisitsAll) {
+  this->testLockGroupAccessIteratorVisitsAll();
+}
+TYPED_TEST(ObjectCacheTest, LockGroupAccessIteratorEmpty) {
+  this->testLockGroupAccessIteratorEmpty();
+}
+TYPED_TEST(ObjectCacheTest, LockGroupAccessIteratorFilter) {
+  this->testLockGroupAccessIteratorFilter();
+}
+TYPED_TEST(ObjectCacheTest, LockGroupAccessIteratorPrefixScan) {
+  this->testLockGroupAccessIteratorPrefixScan();
+}
 TYPED_TEST(ObjectCacheTest, MultiType) { this->testMultiType(); }
 TYPED_TEST(ObjectCacheTest, testMultiTypePolymorphism) {
   this->testMultiTypePolymorphism();

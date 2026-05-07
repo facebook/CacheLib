@@ -151,6 +151,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using Restorer = Restorer<ObjectCache<AllocatorT>>;
   using EvictionIterator = typename AllocatorT::EvictionIterator;
   using RawAccessIterator = typename AllocatorT::AccessIterator;
+  using RawLockGroupAccessIterator =
+      typename AllocatorT::LockGroupAccessIterator;
+  using LockGroupFilterFn = typename AllocatorT::LockGroupFilterFn;
   using NvmCache = typename AllocatorT::NvmCacheT;
   using NvmCacheConfig = typename AllocatorT::NvmCacheT::Config;
   using WriteHandle = typename AllocatorT::WriteHandle;
@@ -176,31 +179,31 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
         __builtin_align_up(memory, kValueAlignment));
   }
 
-  // Wrapper iterator that provides aligned access to ObjectCacheItem.  Does not
+  // Wrapper iterator that provides aligned access to ObjectCacheItem. Does not
   // expose the underlying CacheItem to avoid using an unaligned pointer.
-  class AccessIterator {
+  // Templated on the underlying allocator iterator type (per-bucket
+  // AccessIterator or LockGroupIterator).
+  template <typename InnerItr>
+  class IterWrapper {
    public:
-    explicit AccessIterator(RawAccessIterator&& itr) : inner_(std::move(itr)) {}
-    AccessIterator(AccessIterator&&) = default;
-    AccessIterator& operator=(AccessIterator&&) = default;
-    AccessIterator(const AccessIterator&) = delete;
-    AccessIterator& operator=(const AccessIterator&) = delete;
+    explicit IterWrapper(InnerItr&& itr) : inner_(std::move(itr)) {}
+    IterWrapper(IterWrapper&&) = default;
+    IterWrapper& operator=(IterWrapper&&) = default;
+    IterWrapper(const IterWrapper&) = delete;
+    IterWrapper& operator=(const IterWrapper&) = delete;
+    ~IterWrapper() = default;
 
-    AccessIterator& operator++() {
+    IterWrapper& operator++() {
       ++inner_;
       return *this;
     }
-    // AccessIterator exposes the cache item getters so "dereference" returns
-    // this iterator. Note: this is required for range-based for loops.
-    AccessIterator& operator*() { return *this; }
-    const AccessIterator& operator*() const { return *this; }
+    // Dereference returns this wrapper so range-based for loops see the
+    // ObjectCache item accessors rather than the unaligned CacheItem.
+    IterWrapper& operator*() { return *this; }
+    const IterWrapper& operator*() const { return *this; }
 
-    bool operator==(const AccessIterator& o) const {
-      return inner_ == o.inner_;
-    }
-    bool operator!=(const AccessIterator& o) const {
-      return inner_ != o.inner_;
-    }
+    bool operator==(const IterWrapper& o) const { return inner_ == o.inner_; }
+    bool operator!=(const IterWrapper& o) const { return inner_ != o.inner_; }
     FOLLY_ALWAYS_INLINE explicit operator bool() {
       return inner_.asHandle().get() != nullptr;
     }
@@ -238,8 +241,19 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
       return getAlignedItemPtr(inner_->getMemory())->objectSize;
     }
 
-   private:
-    RawAccessIterator inner_;
+   protected:
+    InnerItr inner_;
+  };
+
+  using AccessIterator = IterWrapper<RawAccessIterator>;
+
+  // Adds the lock-group iterator's scan statistics on top of the shared
+  // wrapper.
+  class LockGroupAccessIterator
+      : public IterWrapper<RawLockGroupAccessIterator> {
+   public:
+    using IterWrapper<RawLockGroupAccessIterator>::IterWrapper;
+    const auto& getStats() const { return this->inner_.getStats(); }
   };
 
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
@@ -378,6 +392,25 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   AccessIterator end() { return AccessIterator{this->l1Cache_->end()}; }
 
+  // Lock-group iteration variant. See CacheAllocator::beginLockGroup for the
+  // trade-offs vs. the per-bucket AccessIterator. The optional filter is
+  // applied to each key under the hash table lock; only matching items have
+  // handles created.
+  LockGroupAccessIterator beginLockGroup(LockGroupFilterFn filter = {}) {
+    return LockGroupAccessIterator{
+        this->l1Cache_->beginLockGroup(std::move(filter))};
+  }
+
+  LockGroupAccessIterator beginLockGroup(util::Throttler::Config config,
+                                         LockGroupFilterFn filter = {}) {
+    return LockGroupAccessIterator{
+        this->l1Cache_->beginLockGroup(config, std::move(filter))};
+  }
+
+  LockGroupAccessIterator endLockGroup() {
+    return LockGroupAccessIterator{this->l1Cache_->endLockGroup()};
+  }
+
   // Get the default l1 allocation size in bytes.
   static uint32_t getL1AllocSize(uint32_t maxKeySizeBytes);
 
@@ -503,6 +536,13 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   }
 
   size_t getObjectSize(AccessIterator& itr) const {
+    if (!itr) {
+      return 0;
+    }
+    return itr.getObjectSize();
+  }
+
+  size_t getObjectSize(LockGroupAccessIterator& itr) const {
     if (!itr) {
       return 0;
     }
