@@ -31,6 +31,7 @@
 #include <folly/container/Array.h>
 #include <folly/lang/Align.h>
 #include <folly/logging/xlog.h>
+#include <folly/container/EvictingCacheMap.h>
 #include <folly/synchronization/DistributedMutex.h>
 
 #include "cachelib/allocator/Cache.h"
@@ -720,32 +721,35 @@ class MMS3FIFO {
 
     // Insert a key hash into ghost. The stamped Time is the gCounter value
     // at insert, used by the ghost hit-position tracker to compute age.
-    // The map gives O(1) TS lookup; the deque gives FIFO eviction order.
-    // On ghost hit we erase from the map but leave the deque entry as a
-    // tombstone — when the deque drains past cap, erase-on-missing is a
-    // no-op. This matches the previous semantics (approximate cap).
-    void ghostInsert(uint32_t keyHash, Time stampedTS) const noexcept {
-      ghostMap_[keyHash] = stampedTS;
-      ghostFifo_.push_back(keyHash);
+    //
+    // EvictingCacheMap gives FIFO eviction order through its internal list since we never promote
+    //
+    // For duplicate ghost insertion, erase the old entry first and then insert the
+    // new timestamp as a fresh ghost entry. This avoids keeping an old FIFO
+    // position with a newer timestamp.
+    void ghostInsert(uint32_t keyHash, Time stampedTS) {
       const size_t ghostMax =
           std::max<size_t>(1, lru_.size() * config_.ghostSizePercent / 100);
-      while (ghostFifo_.size() > ghostMax) {
-        ghostMap_.erase(ghostFifo_.front());
-        ghostFifo_.pop_front();
-      }
+
+      ghostMap_.setMaxSize(ghostMax);
+
+      // Insert if new, replace the value and bump the LRU up otherwise.
+      ghostMap_.set(keyHash, stampedTS, true);
     }
 
-    // O(1). Returns (true, insertTS) on hit, (false, 0) on miss. Erases the
-    // entry from the map; the deque entry is left as a tombstone and
-    // drained lazily by ghostInsert's cap loop.
-    std::pair<bool, Time> ghostContainsAndErase(
-        uint32_t keyHash) const noexcept {
-      auto it = ghostMap_.find(keyHash);
+    // We do not use lookup promotion for ghost hits. On ghost hit, the entry is
+    // erased completely from both the index and the internal list.
+    std::pair<bool, Time> ghostContainsAndErase(uint32_t keyHash) {
+      auto it = ghostMap_.findWithoutPromotion(keyHash);
+
       if (it == ghostMap_.end()) {
         return {false, Time{0}};
       }
+
       const Time ts = it->second;
-      ghostMap_.erase(it);
+
+      ghostMap_.erase(keyHash);
+
       return {true, ts};
     }
 
@@ -838,11 +842,8 @@ class MMS3FIFO {
 
     // keyHash → gCounter-at-insert. O(1) lookup for ghost hits; the TS
     // lets us compute ghost hit position.
-    mutable folly::F14FastMap<uint32_t, Time> ghostMap_;
-    // FIFO of inserted keys for eviction order. May contain tombstone
-    // entries (keys already erased from ghostMap_ on hit); the cap drain
-    // in ghostInsert handles them transparently.
-    mutable std::deque<uint32_t> ghostFifo_;
+    mutable folly::EvictingCacheMap<uint32_t, Time> ghostMap_{1};
+
 
     mutable folly::cacheline_aligned<Mutex> lruMutex_;
 
