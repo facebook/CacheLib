@@ -2730,7 +2730,11 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
   initStats();
   initNvmCache(dramCacheAttached);
   if (config_.eventTrackerConfigFactory) {
-    setEventTracker(config_.eventTrackerConfigFactory());
+    try {
+      setEventTracker(config_.eventTrackerConfigFactory());
+    } catch (const std::exception& ex) {
+      XLOG(ERR, "Failed to initialize EventTracker, disabling: {}", ex.what());
+    }
   }
 
   if (!config_.delayCacheWorkersStart) {
