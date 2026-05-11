@@ -132,8 +132,7 @@ template <typename HandleT, typename ImplHandleT>
 HandleT toGenericHandle(RAMCacheComponent& cache,
                         const ImplHandleT& implHandle) {
   auto* implItem = const_cast<LruCacheItem*>(implHandle.get());
-  auto* embeddedItem = RAMCacheItem::init(implItem);
-  return HandleT(cache, *embeddedItem);
+  return HandleT(cache, *implItem->getMemoryAs<RAMCacheItem>());
 }
 
 } // namespace
@@ -221,7 +220,7 @@ folly::coro::Task<Result<AllocatedHandle>> RAMCacheComponent::allocate(
           fmt::format("could not find room in cache for {}", key));
     }
     stats_->allocate_.throughput_.successes_.inc();
-    co_return toGenericHandle<AllocatedHandle>(*this, implHandle);
+    co_return AllocatedHandle(*this, *RAMCacheItem::init(implHandle.get()));
   } catch (const std::exception& e) {
     stats_->allocate_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS, e.what());
