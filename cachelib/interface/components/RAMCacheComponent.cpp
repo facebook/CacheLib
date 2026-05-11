@@ -35,13 +35,11 @@ using LruCacheItem = cachelib::CacheItem<LruCacheTrait>;
  *   -------------------------------------------------
  *           ( double bars represent LruCacheItem's value memory)
  *
- * RAMCacheItem maintains two pointers - an implicit vtable ref and a pointer to
- * the containing LruCacheItem for access to standard APIs.  RAMCacheItem
+ * RAMCacheItem stores its offset from the containing LruCacheItem (offset is
+ * variable because of the key). This makes it safe across slab moves (where
+ * data is copied to a new allocation with the same layout) and warm rolls
+ * (where shared memory may be mapped at a different address).  RAMCacheItem
  * accounts for itself in everything exposed to the user.
- *
- * Note: RAMCacheItem needs to keep the pointer to the containing LruCacheItem
- * because we can't automatically calculate the address of the containing item
- * due to the variable-sized key.
  *
  * TODO(rlyerly) remove this shim and have LruCacheItem directly implement
  * interface::CacheItem
@@ -63,42 +61,50 @@ class RAMCacheItem : public interface::CacheItem {
    * Get the containing LruCacheItem.
    * @return the containing cache item
    */
-  LruCacheItem* item() const noexcept { return item_; }
+  LruCacheItem* item() const noexcept {
+    auto* base = reinterpret_cast<std::byte*>(const_cast<RAMCacheItem*>(this));
+    return reinterpret_cast<LruCacheItem*>(base - offset_);
+  }
 
   // ------------------------------ Interface ------------------------------ //
 
   uint32_t getCreationTime() const noexcept override {
-    return item_->getCreationTime();
+    return item()->getCreationTime();
   }
   uint32_t getExpiryTime() const noexcept override {
-    return item_->getExpiryTime();
+    return item()->getExpiryTime();
   }
   // TODO return error result if this fails
-  void incrementRefCount() noexcept override { item_->incRef(); }
-  bool decrementRefCount() noexcept override { return item_->decRef() == 0; }
-  Key getKey() const noexcept override { return item_->getKey(); }
+  void incrementRefCount() noexcept override { item()->incRef(); }
+  bool decrementRefCount() noexcept override { return item()->decRef() == 0; }
+  Key getKey() const noexcept override { return item()->getKey(); }
   void* getMemory() const noexcept override {
-    return static_cast<char*>(item_->getMemory()) + sizeof(RAMCacheItem);
+    return const_cast<RAMCacheItem*>(this) + 1;
   }
   uint32_t getMemorySize() const noexcept override {
-    return item_->getSize() - sizeof(RAMCacheItem);
+    return item()->getSize() - sizeof(RAMCacheItem);
   }
   uint32_t getTotalSize() const noexcept override {
-    return item_->getTotalSize();
+    return item()->getTotalSize();
   }
 
  private:
-  LruCacheItem* item_;
+  ptrdiff_t offset_;
 
-  explicit RAMCacheItem(LruCacheItem* item) : item_(item) {}
+  explicit RAMCacheItem(LruCacheItem* item)
+      : offset_(reinterpret_cast<std::byte*>(this) -
+                reinterpret_cast<std::byte*>(item)) {
+    XDCHECK_GT(reinterpret_cast<uintptr_t>(this),
+               reinterpret_cast<uintptr_t>(item));
+  }
 
   void move(void* /* dest */) noexcept override {
     // We don't use the inline Handle buffer, move() should never be called
     XLOG(FATAL) << "Should not use RAMCacheItem::move()";
   }
 };
-// RAMCacheItem should only contain vtable and LruCacheItem pointers
-static_assert(sizeof(RAMCacheItem) == (2 * sizeof(void*)));
+// RAMCacheItem should only contain vtable pointer and offset
+static_assert(sizeof(RAMCacheItem) == sizeof(void*) + sizeof(ptrdiff_t));
 
 namespace {
 
