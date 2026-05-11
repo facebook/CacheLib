@@ -17,7 +17,6 @@
 #include <cachelib/common/Utils.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
-#include <sanitizer/asan_interface.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -39,7 +38,8 @@ constexpr size_t SerializationBufferSize = 100 * 1024;
 
 namespace {
 SlabAllocator::Config getDefaultConfig() {
-  return {true /* disableFullCoredump */, false /* lockMemory */};
+  return {true /* disableFullCoredump */, false /* lockMemory */,
+          true /* enableAsanPoisoning */};
 }
 } // namespace
 

@@ -320,7 +320,8 @@ TEST_F(MemoryAllocatorTest, Serialization) {
       deserializer.deserialize<serialization::MemoryAllocatorObject>(),
       memory2,
       size,
-      true /* disableCoredump*/);
+      true /* disableCoredump*/,
+      true /* enableAsanPoisoning */);
   ASSERT_TRUE(isSameMemoryAllocator(m, m2));
 
   for (const auto& itr : allocatedPools) {
@@ -365,7 +366,8 @@ TEST_F(MemoryAllocatorTest, Restorable) {
         deserializer.deserialize<serialization::MemoryAllocatorObject>(),
         memory,
         size,
-        true /* disableCoredump*/);
+        true /* disableCoredump*/,
+        true /* enableAsanPoisoning */);
     ASSERT_TRUE(isSameMemoryAllocator(m, m2));
     ASSERT_TRUE(m2.isRestorable());
 
@@ -376,20 +378,23 @@ TEST_F(MemoryAllocatorTest, Restorable) {
     Deserializer deserializer2(begin, end);
     auto correctState =
         deserializer2.deserialize<serialization::MemoryAllocatorObject>();
-    MemoryAllocator m3(correctState, memory, size, true /* disableCoredump*/);
+    MemoryAllocator m3(correctState, memory, size, true /* disableCoredump*/,
+                       true /* enableAsanPoisoning */);
     ASSERT_TRUE(m2.isRestorable());
 
     size_t randomSize =
         size + ((folly::Random::rand32() % 5) + 1) * Slab::kSize;
 
     ASSERT_THROW(MemoryAllocator m4(correctState, memory, randomSize,
-                                    true /* disableCoredump*/),
+                                    true /* disableCoredump*/,
+                                    true /* enableAsanPoisoning */),
                  std::invalid_argument);
 
     randomSize = size - ((folly::Random::rand32() % 5) + 1) * Slab::kSize;
 
     ASSERT_THROW(MemoryAllocator m4(correctState, memory, randomSize,
-                                    true /* disableCoredump*/),
+                                    true /* disableCoredump*/,
+                                    true /* enableAsanPoisoning */),
                  std::invalid_argument);
   }
 
@@ -627,7 +632,7 @@ TEST_F(MemoryAllocatorTest, ZeroedSlabAllocs) {
                          Slab::kSize}, // one for small allocation
                                        // the other for slab allocation
       true /* enableZeroedSlabAllocs */, true /* disableFullCoredump*/,
-      false /* lockMemory */};
+      false /* lockMemory */, true /* enableAsanPoisoning */};
 
   void* memory = allocate(allocatorSize);
   MemoryAllocator m(config, memory, allocatorSize);
@@ -668,7 +673,7 @@ TEST_F(MemoryAllocatorTest, ZeroedSlabAllocs) {
   // save and restore
   auto serializedData = m.saveState();
   MemoryAllocator m2(serializedData, memory, allocatorSize,
-                     true /* disableCoredump*/);
+                     true /* disableCoredump*/, true /* enableAsanPoisoning */);
 
   // write to all the slabs and then free them using restored memory allocator
   for (void* slabAlloc : slabAllocations) {
@@ -778,4 +783,32 @@ TEST_F(MemoryAllocatorTest, isValidAllocSize) {
   EXPECT_TRUE(MemoryAllocator::isValidAllocSize(1024));
   EXPECT_TRUE(MemoryAllocator::isValidAllocSize(4096));
 }
+
+#if FOLLY_SANITIZE_ADDRESS
+TEST_F(MemoryAllocatorTest, AsanPoisoningDisabled) {
+  const size_t poolSize = 10 * Slab::kSize;
+  const size_t allocatorSize = poolSize + 2 * Slab::kSize;
+  const uint32_t allocSize = 1024;
+
+  MemoryAllocator::Config config{
+      std::set<uint32_t>{allocSize}, false /* enableZeroedSlabAllocs */,
+      true /* disableFullCoredump */, false /* lockMemory */,
+      false /* enableAsanPoisoning */};
+
+  void* memory = allocate(allocatorSize);
+  MemoryAllocator m(config, memory, allocatorSize);
+  auto pid = m.addPool(getRandomStr(), poolSize);
+
+  void* alloc = m.allocate(pid, allocSize);
+  ASSERT_NE(alloc, nullptr);
+  memset(alloc, 0xAB, allocSize);
+
+  m.free(alloc);
+
+  // With poisoning disabled, accessing freed memory should not trigger ASAN
+  uint8_t byte = reinterpret_cast<uint8_t*>(alloc)[0];
+  ASSERT_EQ(byte, 0xAB);
+}
+#endif
+
 } // namespace facebook::cachelib

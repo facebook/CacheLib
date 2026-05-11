@@ -65,7 +65,8 @@ MemoryAllocator::MemoryAllocator(Config config,
     : config_(std::move(config)),
       slabAllocator_(memoryStart,
                      memSize,
-                     {config_.disableFullCoredump, config_.lockMemory}),
+                     {config_.disableFullCoredump, config_.lockMemory,
+                      config_.enableAsanPoisoning}),
       memoryPoolManager_(slabAllocator_) {
   checkConfig(config_);
 }
@@ -73,7 +74,8 @@ MemoryAllocator::MemoryAllocator(Config config,
 MemoryAllocator::MemoryAllocator(Config config, size_t memSize)
     : config_(std::move(config)),
       slabAllocator_(memSize,
-                     {config_.disableFullCoredump, config_.lockMemory}),
+                     {config_.disableFullCoredump, config_.lockMemory,
+                      config_.enableAsanPoisoning}),
       memoryPoolManager_(slabAllocator_) {
   checkConfig(config_);
 }
@@ -82,16 +84,19 @@ MemoryAllocator::MemoryAllocator(
     const serialization::MemoryAllocatorObject& object,
     void* memoryStart,
     size_t memSize,
-    bool disableCoredump)
+    bool disableCoredump,
+    bool enableAsanPoisoning)
     : config_(std::set<uint32_t>{object.allocSizes()->begin(),
                                  object.allocSizes()->end()},
               *object.enableZeroedSlabAllocs(),
               disableCoredump,
-              *object.lockMemory()),
+              *object.lockMemory(),
+              enableAsanPoisoning),
       slabAllocator_(*object.slabAllocator(),
                      memoryStart,
                      memSize,
-                     {config_.disableFullCoredump, config_.lockMemory}),
+                     {config_.disableFullCoredump, config_.lockMemory,
+                      config_.enableAsanPoisoning}),
       memoryPoolManager_(*object.memoryPoolManager(), slabAllocator_) {
   checkConfig(config_);
 }

@@ -16,8 +16,6 @@
 
 #include "cachelib/allocator/memory/MemoryPool.h"
 
-#include <sanitizer/asan_interface.h>
-
 #include <algorithm>
 #include <numeric>
 #include <utility>
@@ -86,7 +84,7 @@ MemoryPool::MemoryPool(const serialization::MemoryPoolObject& object,
 
   for (auto freeSlabIdx : *object.freeSlabIdxs()) {
     auto* slab = slabAllocator_.getSlabForIdx(freeSlabIdx);
-    ASAN_POISON_MEMORY_REGION(slab->memoryAtOffset(0), Slab::kSize);
+    slabAllocator_.asanPoisonMemoryRegion(slab->memoryAtOffset(0), Slab::kSize);
     freeSlabs_.push_back(slab);
   }
   checkState();
@@ -406,7 +404,11 @@ void MemoryPool::releaseSlab(SlabReleaseMode mode,
                              ClassId receiverClassId) {
   if (zeroOnRelease) {
 #if FOLLY_SANITIZE_ADDRESS
-    memsetNoAsan(slab->memoryAtOffset(0), 0, Slab::kSize);
+    if (slabAllocator_.isAsanPoisoningEnabled()) {
+      memsetNoAsan(slab->memoryAtOffset(0), 0, Slab::kSize);
+    } else {
+      memset(slab->memoryAtOffset(0), 0, Slab::kSize);
+    }
 #else
     memset(slab->memoryAtOffset(0), 0, Slab::kSize);
 #endif

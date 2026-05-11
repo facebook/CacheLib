@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <sanitizer/asan_interface.h>
 #include <sys/mman.h>
 
 #include <atomic>
@@ -50,14 +51,23 @@ class SlabAllocator {
  public:
   struct Config {
     Config() {}
-    Config(bool _excludeFromCoreDump, bool _lockMemory)
-        : excludeFromCoredump(_excludeFromCoreDump), lockMemory(_lockMemory) {}
+    Config(bool _excludeFromCoreDump,
+           bool _lockMemory,
+           bool _enableAsanPoisoning)
+        : excludeFromCoredump(_excludeFromCoreDump),
+          lockMemory(_lockMemory),
+          enableAsanPoisoning(_enableAsanPoisoning) {}
+
     // exclude the memory region from core dumps
     bool excludeFromCoredump{false};
 
     // lock the pages in memory, forcing to allocate them and retaining them in
     // memory even when untouched.
     bool lockMemory{false};
+
+    // When true, slab memory is ASAN-poisoned on free and unpoisoned on
+    // allocation so ASAN can detect use-after-free bugs.
+    bool enableAsanPoisoning{false};
   };
 
   // initialize the slab allocator for the range of memory starting from
@@ -328,6 +338,32 @@ class SlabAllocator {
     return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
   }
 
+  bool isAsanPoisoningEnabled() const noexcept {
+#if FOLLY_SANITIZE_ADDRESS
+    return asanPoisoningEnabled_;
+#else
+    return false;
+#endif
+  }
+
+  void asanPoisonMemoryRegion([[maybe_unused]] const volatile void* addr,
+                              [[maybe_unused]] size_t size) const {
+#if FOLLY_SANITIZE_ADDRESS
+    if (asanPoisoningEnabled_) {
+      ASAN_POISON_MEMORY_REGION(addr, size);
+    }
+#endif
+  }
+
+  void asanUnpoisonMemoryRegion([[maybe_unused]] const volatile void* addr,
+                                [[maybe_unused]] size_t size) const {
+#if FOLLY_SANITIZE_ADDRESS
+    if (asanPoisoningEnabled_) {
+      ASAN_UNPOISON_MEMORY_REGION(addr, size);
+    }
+#endif
+  }
+
  private:
   // null Slab* presenttation. With 4M Slab size, a valid slab index would never
   // reach 2^16 - 1;
@@ -424,6 +460,11 @@ class SlabAllocator {
 
   // whether the memory this slab allocator manages is mmaped by the caller.
   const bool ownsMemory_{true};
+
+#if FOLLY_SANITIZE_ADDRESS
+  // whether to poison free slab memory to detect use-after-free bugs
+  const bool asanPoisoningEnabled_{false};
+#endif
 
   // thread that does back-ground job of paging in and locking the memory if
   // enabled.

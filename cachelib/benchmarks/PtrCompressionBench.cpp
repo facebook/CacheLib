@@ -117,7 +117,8 @@ int main(int argc, char** argv) {
   const size_t totalSize = numPools * poolSize + 2 * Slab::kSize;
 
   MemoryAllocator::Config c(allocSizes, false /* enableZeroedSlabAllocs */,
-                            true /* disableCoredump */, true /* lockMemory */);
+                            true /* disableCoredump */, true /* lockMemory */,
+                            false /* enableAsanPoisoning */);
   m = std::make_unique<MemoryAllocator>(c, totalSize);
 
   buildAllocs(poolSize);

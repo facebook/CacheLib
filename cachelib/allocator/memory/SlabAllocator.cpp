@@ -20,7 +20,6 @@
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
-#include <sanitizer/asan_interface.h>
 #include <sys/mman.h>
 
 #include <chrono>
@@ -118,7 +117,12 @@ SlabAllocator::SlabAllocator(void* memoryStart,
       memorySize_(roundDownToSlabSize(memorySize)),
       slabMemoryStart_(computeSlabMemoryStart(memoryStart_, memorySize_)),
       nextSlabAllocation_(slabMemoryStart_),
-      ownsMemory_(ownsMemory) {
+      ownsMemory_(ownsMemory)
+#if FOLLY_SANITIZE_ADDRESS
+      ,
+      asanPoisoningEnabled_(config.enableAsanPoisoning)
+#endif
+{
   checkState();
 
   static_assert(!(sizeof(Slab) & (sizeof(Slab) - 1)),
@@ -132,7 +136,7 @@ SlabAllocator::SlabAllocator(void* memoryStart,
     memoryLocker_ = std::thread{[this]() { lockMemoryAsync(); }};
   }
 
-  ASAN_POISON_MEMORY_REGION(
+  asanPoisonMemoryRegion(
       slabMemoryStart_,
       reinterpret_cast<const uint8_t*>(getSlabMemoryEnd()) -
           reinterpret_cast<const uint8_t*>(slabMemoryStart_));
@@ -153,7 +157,12 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
       slabMemoryStart_(computeSlabMemoryStart(memoryStart_, memorySize_)),
       nextSlabAllocation_(getSlabForIdx(*object.nextSlabIdx())),
       canAllocate_(*object.canAllocate()),
-      ownsMemory_(false) {
+      ownsMemory_(false)
+#if FOLLY_SANITIZE_ADDRESS
+      ,
+      asanPoisoningEnabled_(config.enableAsanPoisoning)
+#endif
+{
   if (Slab::kSize != *object.slabSize()) {
     throw std::invalid_argument(folly::sformat(
         "current slab size {} does not match the previous one {}",
@@ -217,17 +226,17 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
   // Poison slabs that are not allocated. Tests depend on this running after
   // checkState().
 
-  ASAN_POISON_MEMORY_REGION(
+  asanPoisonMemoryRegion(
       nextSlabAllocation_,
       reinterpret_cast<const uint8_t*>(getSlabMemoryEnd()) -
           reinterpret_cast<const uint8_t*>(nextSlabAllocation_));
 
   for (const auto* slab : freeSlabs_) {
-    ASAN_POISON_MEMORY_REGION(slab, Slab::kSize);
+    asanPoisonMemoryRegion(slab, Slab::kSize);
   }
 
   for (const auto* slab : advisedSlabs_) {
-    ASAN_POISON_MEMORY_REGION(slab, Slab::kSize);
+    asanPoisonMemoryRegion(slab, Slab::kSize);
   }
 }
 

@@ -81,8 +81,8 @@ class AllocTestBase : public testing::Test {
                                                uint32_t slabIdx,
                                                uint32_t allocIdx,
                                                bool isMultiTiered) {
-    return ptr.compress(
-        slabIdx, allocIdx, isMultiTiered, isMultiTiered ? 1 : 0);
+    return ptr.compress(slabIdx, allocIdx, isMultiTiered,
+                        isMultiTiered ? 1 : 0);
   }
 
   bool compareCompressedPtr(const CompressedPtr4B& ptr1,
@@ -141,8 +141,10 @@ class SlabAllocatorTestBase : public AllocTestBase {
     // 2 slabs for the headers.
     const auto size = (numSlabs + 2) * Slab::kSize;
     auto memory = allocate(size);
-    auto allocator = std::unique_ptr<SlabAllocator>(
-        new SlabAllocator(memory, size, SlabAllocator::Config{}));
+    auto allocator = std::unique_ptr<SlabAllocator>(new SlabAllocator(
+        memory, size,
+        {false /* excludeFromCoredump */, false /* lockMemory */,
+         true /* enableAsanPoisoning */}));
     if (allocator == nullptr) {
       throw std::bad_alloc();
     }
@@ -154,7 +156,8 @@ class SlabAllocatorTestBase : public AllocTestBase {
       std::set<uint32_t> allocSizes) {
     return {
         std::move(allocSizes), false /* enabledZerodSlabAllocs */,
-        true /* disableFullCoreDump */, false /* lockMemory */
+        true /* disableFullCoreDump */, false /* lockMemory */,
+        true /* enableAsanPoisoning */
     };
   }
 

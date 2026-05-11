@@ -88,11 +88,13 @@ class MemoryAllocator {
     Config(std::set<uint32_t> sizes,
            bool zeroOnRelease,
            bool disableCoredump,
-           bool _lockMemory)
+           bool _lockMemory,
+           bool _enableAsanPoisoning)
         : allocSizes(std::move(sizes)),
           enableZeroedSlabAllocs(zeroOnRelease),
           disableFullCoredump(disableCoredump),
-          lockMemory(_lockMemory) {}
+          lockMemory(_lockMemory),
+          enableAsanPoisoning(_enableAsanPoisoning) {}
 
     // Hint to determine the allocation class sizes
     std::set<uint32_t> allocSizes;
@@ -110,6 +112,10 @@ class MemoryAllocator {
     // allocator is not shared, user needs to ensure there are appropriate
     // rlimits setup to lock the memory.
     bool lockMemory{false};
+
+    // When true, slab memory is ASAN-poisoned on free and unpoisoned on
+    // allocation so ASAN can detect use-after-free bugs.
+    bool enableAsanPoisoning{false};
   };
 
   // Creates a memory allocator out of the caller allocated memory region. The
@@ -147,10 +153,12 @@ class MemoryAllocator {
   // @param memSize         the size of the memory region that was originally
   //                        used to create this memory allocator
   // @param disableCoredump exclude mapped region from core dumps
+  // @param enableAsanPoisoning When true, slab memory is ASAN-poisoned
   MemoryAllocator(const serialization::MemoryAllocatorObject& object,
                   void* memoryStart,
                   size_t memSize,
-                  bool disableCoredump);
+                  bool disableCoredump,
+                  bool enableAsanPoisoning);
 
   MemoryAllocator(const MemoryAllocator&) = delete;
   MemoryAllocator& operator=(const MemoryAllocator&) = delete;

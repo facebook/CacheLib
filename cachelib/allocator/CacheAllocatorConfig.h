@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/CPortability.h>
 #include <folly/Optional.h>
 #include <folly/json/DynamicConverter.h>
 #include <folly/json/json.h>
@@ -370,6 +371,21 @@ class CacheAllocatorConfig {
     return skipPromoteChildrenWhenParentFailed;
   }
 
+  // Enable or disable ASAN slab poisoning. When enabled, freed slab memory is
+  // poisoned so that ASAN can detect use-after-free bugs. This is disabled by
+  // default to avoid overhead in ASAN builds. Enable this for testing or when
+  // actively debugging memory issues. This is a no-op in non-ASAN builds.
+  CacheAllocatorConfig& setSlabAsanPoisoning(bool enable);
+
+  // @return whether slab ASAN poisoning is enabled
+  bool isSlabAsanPoisoningEnabled() const noexcept {
+#if FOLLY_SANITIZE_ADDRESS
+    return enableSlabAsanPoisoning;
+#else
+    return false;
+#endif
+  }
+
   // Enable aggregating pool stats to a single stat
   //
   // When enabled, pool stats from all pools will be aggregated into a single
@@ -717,6 +733,13 @@ class CacheAllocatorConfig {
 
   // If true, aggregate pool stats into a single stat before exporting
   bool aggregatePoolStats{false};
+
+#if FOLLY_SANITIZE_ADDRESS
+  // If true, slab memory is ASAN-poisoned on free and unpoisoned on allocation.
+  // Disabled by default to avoid overhead in ASAN builds. Enable for testing
+  // or when actively debugging memory issues.
+  bool enableSlabAsanPoisoning{false};
+#endif
 
   friend CacheT;
 
@@ -1211,6 +1234,15 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDelayCacheWorkersStart() {
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNumShards(size_t shards) {
   numShards = shards;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabAsanPoisoning(
+    [[maybe_unused]] bool enable) {
+#if FOLLY_SANITIZE_ADDRESS
+  enableSlabAsanPoisoning = enable;
+#endif
   return *this;
 }
 

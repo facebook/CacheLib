@@ -19,7 +19,6 @@
 #include <folly/Random.h>
 #include <folly/Singleton.h>
 #include <folly/synchronization/Latch.h>
-#include <sanitizer/asan_interface.h>
 
 #include <algorithm>
 #include <chrono>

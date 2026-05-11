@@ -25,7 +25,6 @@
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
-#include <sanitizer/asan_interface.h>
 
 #include <chrono>
 #include <functional>
@@ -1631,23 +1630,25 @@ class CacheAllocator : public CacheBase {
       return {};
     }
 #if FOLLY_SANITIZE_ADDRESS
-    // Copy the key out so we can use it without disabling instrumentation for
-    // the whole find path. Don't use std utilities (like std::string or
-    // std::memcpy) because they still have ASAN enabled. If it's a small key,
-    // store on the stack. Otherwise malloc on the heap.
     char stackBuf[KAllocation::kKeyMaxLenSmall];
     std::unique_ptr<char[]> heapBuf;
-    char* buffer;
-    if (key.size() <= KAllocation::kKeyMaxLenSmall) {
-      buffer = stackBuf;
-    } else {
-      heapBuf = std::unique_ptr<char[]>(new char[key.size()]);
-      buffer = heapBuf.get();
+    if (config_.isSlabAsanPoisoningEnabled()) {
+      // Copy the key out so we can use it without disabling instrumentation for
+      // the whole find path. Don't use std utilities (like std::string or
+      // std::memcpy) because they still have ASAN enabled. If it's a small key,
+      // store on the stack. Otherwise malloc on the heap.
+      char* buffer;
+      if (key.size() <= KAllocation::kKeyMaxLenSmall) {
+        buffer = stackBuf;
+      } else {
+        heapBuf = std::unique_ptr<char[]>(new char[key.size()]);
+        buffer = heapBuf.get();
+      }
+      for (size_t i = 0; i < key.size(); i++) {
+        buffer[i] = key[i];
+      }
+      key = Key(buffer, key.size());
     }
-    for (size_t i = 0; i < key.size(); i++) {
-      buffer[i] = key[i];
-    }
-    key = Key(buffer, key.size());
 #endif
     if (Item::getRequiredSize(key, /* size */ 0) > allocSize) {
       return {};
@@ -2182,7 +2183,7 @@ class CacheAllocator : public CacheBase {
                   config.reduceFragmentationInAllocationClass)
             : config.defaultAllocSizes,
         config.enableZeroedSlabAllocs, config.disableFullCoredump,
-        config.lockMemory};
+        config.lockMemory, config.isSlabAsanPoisoningEnabled()};
   }
 
   // starts one of the cache workers passing the current instance and the args
@@ -2766,8 +2767,8 @@ CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
           ->attachShm(detail::kShmCacheName, config_.slabMemoryBaseAddr,
                       createShmCacheOpts())
           .addr,
-      config_.getCacheSize(),
-      config_.disableFullCoredump);
+      config_.getCacheSize(), config_.disableFullCoredump,
+      config_.isSlabAsanPoisoningEnabled());
 }
 
 template <typename CacheTrait>
