@@ -289,7 +289,6 @@ size_t PosixShmSegment::getSize() const {
         "Trying to get size of  segment with name {} in an invalid state",
         getName()));
   }
-  return 0;
 }
 
 void PosixShmSegment::resize(size_t size) const {
