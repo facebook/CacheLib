@@ -48,6 +48,9 @@ struct Error {
     SHUTDOWN_FAILED,
     RECOVER_FAILED,
 
+    // Ref-counting errors
+    INC_REF_FAILED,
+
     // Other
     UNIMPLEMENTED,
   };

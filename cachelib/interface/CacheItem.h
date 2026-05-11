@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cachelib/allocator/KAllocation.h"
+#include "cachelib/interface/Result.h"
 
 namespace facebook::cachelib::interface {
 
@@ -49,8 +50,10 @@ class CacheItem {
 
   /**
    * Increment the refcount on the item.
+   *
+   * @return success or an error if the refcount could not be incremented
    */
-  virtual void incrementRefCount() noexcept = 0;
+  virtual UnitResult incrementRefCount() noexcept = 0;
 
   /**
    * Decrement the refcount on the item. Return whether the item is ready to be

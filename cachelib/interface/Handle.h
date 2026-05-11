@@ -18,12 +18,15 @@
 
 #include <folly/CPortability.h>
 
+#include <concepts>
 #include <cstdint>
+
+#include "cachelib/interface/CacheItem.h"
+#include "cachelib/interface/Result.h"
 
 namespace facebook::cachelib::interface {
 
 class CacheComponent;
-class CacheItem;
 
 // Tag type for constructing handles that store cache items inline
 struct InlineItemTag {};
@@ -33,9 +36,9 @@ constexpr InlineItemTag InlineItem;
  * Generic RAII handle referencing a cache item. If you have a handle, it
  * points to a valid cache item (unless it has been moved out of).
  *
- * Automatically increments and decrements the cache item's refcounts during
- * construction/destruction.  If this handle is the last reference to a cache
- * item, then upon this handle's destruction the cache item is released.
+ * Use tryCreateHandle() to create handles -- it increments the item's refcount
+ * before constructing the handle. On destruction, the handle decrements the
+ * refcount and releases the item if it reaches zero.
  *
  * Designed to work with any cache item, concrete implementations shouldn't need
  * to override handles.
@@ -58,6 +61,7 @@ class Handle {
  protected:
   /**
    * Construct a handle. Only called from sub-classes.
+   *
    * @param cache the cache component that owns the cache item
    * @param item the cache item
    * @param inserted whether the cache item has been inserted into cache
@@ -111,7 +115,6 @@ class Handle {
  */
 class WriteHandle : public Handle {
  public:
-  WriteHandle(CacheComponent& cache, CacheItem& item) noexcept;
   WriteHandle(CacheComponent& cache, InlineItemTag) noexcept;
   ~WriteHandle() noexcept;
 
@@ -138,6 +141,13 @@ class WriteHandle : public Handle {
   // Only used by AllocatedHandle
   WriteHandle(CacheComponent& cache, CacheItem& item, bool inserted) noexcept;
   WriteHandle(CacheComponent& cache, bool inserted, InlineItemTag) noexcept;
+
+ private:
+  WriteHandle(CacheComponent& cache, CacheItem& item) noexcept;
+
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
 };
 
 /**
@@ -146,8 +156,14 @@ class WriteHandle : public Handle {
  */
 class AllocatedHandle : public WriteHandle {
  public:
-  AllocatedHandle(CacheComponent& cache, CacheItem& item) noexcept;
   AllocatedHandle(CacheComponent& cache, InlineItemTag) noexcept;
+
+ private:
+  AllocatedHandle(CacheComponent& cache, CacheItem& item) noexcept;
+
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
 };
 
 /**
@@ -155,7 +171,6 @@ class AllocatedHandle : public WriteHandle {
  */
 class ReadHandle : public Handle {
  public:
-  ReadHandle(CacheComponent& cache, CacheItem& item) noexcept;
   ReadHandle(CacheComponent& cache, InlineItemTag) noexcept;
 
   FOLLY_ALWAYS_INLINE const CacheItem* operator->() const noexcept {
@@ -165,6 +180,27 @@ class ReadHandle : public Handle {
     return *item_;
   }
   FOLLY_ALWAYS_INLINE const CacheItem* get() const noexcept { return item_; }
+
+ private:
+  ReadHandle(CacheComponent& cache, CacheItem& item) noexcept;
+
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
 };
+
+/**
+ * Create a handle by atomically incrementing the item's refcount. Returns an
+ * error if the refcount could not be incremented (e.g., item is being evicted).
+ */
+template <typename HandleT>
+  requires std::derived_from<HandleT, Handle>
+Result<HandleT> tryCreateHandle(CacheComponent& cache, CacheItem& item) {
+  auto result = item.incrementRefCount();
+  if (result.hasError()) {
+    return folly::makeUnexpected(std::move(result).error());
+  }
+  return HandleT(cache, item);
+}
 
 } // namespace facebook::cachelib::interface

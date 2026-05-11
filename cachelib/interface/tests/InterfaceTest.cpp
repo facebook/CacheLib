@@ -37,7 +37,15 @@ class TestCacheItem : public CacheItem {
 
   uint32_t getCreationTime() const noexcept override { return creationTime_; }
   uint32_t getExpiryTime() const noexcept override { return expiryTime_; }
-  void incrementRefCount() noexcept override { ++refCount_; }
+  UnitResult incrementRefCount() noexcept override {
+    if (failIncRef_) {
+      return makeError(Error::Code::INC_REF_FAILED, "test: incRef forced fail");
+    }
+    ++refCount_;
+    return folly::unit;
+  }
+
+  void setFailIncRef(bool fail) noexcept { failIncRef_ = fail; }
   bool decrementRefCount() noexcept override { return --refCount_ == 0; }
   Key getKey() const noexcept override { return Key(key_); }
   void* getMemory() const noexcept override {
@@ -55,6 +63,7 @@ class TestCacheItem : public CacheItem {
   std::string key_;
   std::vector<uint8_t> memory_;
   std::atomic_size_t refCount_;
+  bool failIncRef_{false};
 
   void move(void* /* dest */) noexcept override {
     XLOG(FATAL) << "Should not use TestCacheItem::move()";
@@ -75,7 +84,7 @@ class TestCacheComponent : public CacheComponent {
       uint32_t ttlSecs) override {
     auto& allocated = allocatedItems_.emplace_back(
         new TestCacheItem(key, size, creationTime, ttlSecs));
-    co_return AllocatedHandle(*this, *allocated);
+    co_return ASSERT_OK(tryCreateHandle<AllocatedHandle>(*this, *allocated));
   }
 
   folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) override {
@@ -109,7 +118,7 @@ class TestCacheComponent : public CacheComponent {
       // Replaced item is moved back to the allocated list
       std::swap(it->second, *itemIt);
       (*itemIt)->decrementRefCount();
-      co_return AllocatedHandle(*this, **itemIt);
+      co_return ASSERT_OK(tryCreateHandle<AllocatedHandle>(*this, **itemIt));
     }
 
     allocatedItems_.erase(itemIt);
@@ -117,10 +126,14 @@ class TestCacheComponent : public CacheComponent {
   }
 
   template <typename HandleT>
-  std::optional<HandleT> findImpl(Key key) {
+  Result<std::optional<HandleT>> findImpl(Key key) {
     auto it = cachedItems_.find(key);
     if (it != cachedItems_.end()) {
-      return HandleT(*this, *it->second);
+      auto result = tryCreateHandle<HandleT>(*this, *it->second);
+      if (result.hasError()) {
+        return folly::makeUnexpected(std::move(result).error());
+      }
+      return std::move(result).value();
     }
     return std::nullopt;
   }
@@ -278,7 +291,7 @@ TYPED_TEST_SUITE(HandleTest, HandleTypes);
 TYPED_TEST(HandleTest, basic) {
   auto* item = this->template makeItem<TypeParam>();
   {
-    TypeParam handle(this->cache_, *item);
+    auto handle = ASSERT_OK(tryCreateHandle<TypeParam>(this->cache_, *item));
     this->checkItemFields(handle);
   }
   this->template checkReleased<TypeParam>(item, /* removedFromCache */ false);
@@ -287,7 +300,8 @@ TYPED_TEST(HandleTest, basic) {
 TYPED_TEST(HandleTest, move) {
   auto* item = this->template makeItem<TypeParam>();
   {
-    TypeParam handle1(this->cache_, *item);
+    TypeParam handle1 =
+        ASSERT_OK(tryCreateHandle<TypeParam>(this->cache_, *item));
     TypeParam handle2(std::move(handle1));
     EXPECT_FALSE(handle1); // NOLINT(bugprone-use-after-move)
     this->checkItemFields(handle2);
@@ -351,5 +365,23 @@ CO_TEST_F(InterfaceTest, duplicate) {
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
   EXPECT_ERROR(co_await cache_.insert(std::move(allocHandle)),
                Error::Code::ALREADY_INSERTED);
+  EXPECT_OK(co_await cache_.remove(key_));
+}
+
+CO_TEST_F(InterfaceTest, incRefFailed) {
+  co_await allocateAndInsertItem();
+
+  auto* item = static_cast<TestCacheItem*>(cache_.cachedItems_.at(key_));
+  item->setFailIncRef(true);
+
+  EXPECT_ERROR(co_await cache_.find(key_), Error::Code::INC_REF_FAILED);
+  EXPECT_ERROR(co_await cache_.findToWrite(key_), Error::Code::INC_REF_FAILED);
+
+  item->setFailIncRef(false);
+
+  auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
+  CO_ASSERT_TRUE(readHandle.has_value());
+  checkItemFields(readHandle.value());
+
   EXPECT_OK(co_await cache_.remove(key_));
 }

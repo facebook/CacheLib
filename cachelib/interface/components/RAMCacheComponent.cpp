@@ -74,8 +74,24 @@ class RAMCacheItem : public interface::CacheItem {
   uint32_t getExpiryTime() const noexcept override {
     return item()->getExpiryTime();
   }
-  // TODO return error result if this fails
-  void incrementRefCount() noexcept override { item()->incRef(); }
+  UnitResult incrementRefCount() noexcept override {
+    try {
+      switch (item()->incRef()) {
+      case RefcountWithFlags::IncResult::kIncOk:
+        return folly::unit;
+      case RefcountWithFlags::IncResult::kIncFailedMoving:
+        return makeError(Error::Code::INC_REF_FAILED, "item is being moved");
+      case RefcountWithFlags::IncResult::kIncFailedEviction:
+        return makeError(Error::Code::INC_REF_FAILED, "item is being evicted");
+      default:
+        XLOG(DFATAL) << "unhandled refcount increment result";
+        return makeError(Error::Code::INC_REF_FAILED,
+                         "unhandled refcount increment result");
+      }
+    } catch (const exception::RefcountOverflow& e) {
+      return makeError(Error::Code::INC_REF_FAILED, e.what());
+    }
+  }
   bool decrementRefCount() noexcept override { return item()->decRef() == 0; }
   Key getKey() const noexcept override { return item()->getKey(); }
   void* getMemory() const noexcept override {
@@ -135,10 +151,11 @@ LruCacheItem* getImplItemFromHandle(HandleT& handle) {
 }
 
 template <typename HandleT, typename ImplHandleT>
-HandleT toGenericHandle(RAMCacheComponent& cache,
-                        const ImplHandleT& implHandle) {
+Result<HandleT> toGenericHandle(RAMCacheComponent& cache,
+                                const ImplHandleT& implHandle) {
   auto* implItem = const_cast<LruCacheItem*>(implHandle.get());
-  return HandleT(cache, *implItem->getMemoryAs<RAMCacheItem>());
+  return tryCreateHandle<HandleT>(cache,
+                                  *implItem->getMemoryAs<RAMCacheItem>());
 }
 
 } // namespace
@@ -226,7 +243,13 @@ folly::coro::Task<Result<AllocatedHandle>> RAMCacheComponent::allocate(
           fmt::format("could not find room in cache for {}", key));
     }
     stats_->allocate_.throughput_.successes_.inc();
-    co_return AllocatedHandle(*this, *RAMCacheItem::init(implHandle.get()));
+    co_return tryCreateHandle<AllocatedHandle>(
+        *this, *RAMCacheItem::init(implHandle.get()));
+  } catch (const exception::RefcountOverflow& ro) {
+    XLOG(DFATAL) << "ERROR: refcount overflow in allocate which shouldn't be "
+                    "possible (nobody else can access the item)";
+    stats_->allocate_.throughput_.errors_.inc();
+    co_return makeError(Error::Code::INC_REF_FAILED, ro.what());
   } catch (const std::exception& e) {
     stats_->allocate_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS, e.what());
@@ -305,11 +328,17 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
     co_return makeError(Error::Code::INSERT_FAILED, e.what());
   }
 
-  stats_->insertOrReplace_.throughput_.successes_.inc();
   auto _ = std::move(handle);
   if (replacedHandle) {
-    co_return toGenericHandle<AllocatedHandle>(*this, replacedHandle);
+    auto result = toGenericHandle<AllocatedHandle>(*this, replacedHandle);
+    if (result.hasError()) {
+      stats_->insertOrReplace_.throughput_.errors_.inc();
+      co_return folly::makeUnexpected(std::move(result).error());
+    }
+    stats_->insertOrReplace_.throughput_.successes_.inc();
+    co_return std::move(result).value();
   } else {
+    stats_->insertOrReplace_.throughput_.successes_.inc();
     co_return std::nullopt;
   }
 }
@@ -320,9 +349,14 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> RAMCacheComponent::find(
   auto latencyGuard = stats_->find_.latency_.start();
 
   if (auto handle = cache_->find(key)) {
+    auto result = toGenericHandle<ReadHandle>(*this, handle);
+    if (result.hasError()) {
+      stats_->find_.throughput_.errors_.inc();
+      co_return folly::makeUnexpected(std::move(result).error());
+    }
     stats_->find_.throughput_.hits_.inc();
     stats_->find_.throughput_.successes_.inc();
-    co_return toGenericHandle<ReadHandle>(*this, handle);
+    co_return std::move(result).value();
   }
   stats_->find_.throughput_.misses_.inc();
   stats_->find_.throughput_.successes_.inc();
@@ -335,9 +369,14 @@ RAMCacheComponent::findToWrite(Key key) {
   auto latencyGuard = stats_->findToWrite_.latency_.start();
 
   if (auto handle = cache_->findToWrite(key)) {
+    auto result = toGenericHandle<WriteHandle>(*this, handle);
+    if (result.hasError()) {
+      stats_->findToWrite_.throughput_.errors_.inc();
+      co_return folly::makeUnexpected(std::move(result).error());
+    }
     stats_->findToWrite_.throughput_.hits_.inc();
     stats_->findToWrite_.throughput_.successes_.inc();
-    co_return toGenericHandle<WriteHandle>(*this, handle);
+    co_return std::move(result).value();
   }
   stats_->findToWrite_.throughput_.misses_.inc();
   stats_->findToWrite_.throughput_.successes_.inc();

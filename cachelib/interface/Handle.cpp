@@ -23,9 +23,7 @@
 namespace facebook::cachelib::interface {
 
 Handle::Handle(CacheComponent& cache, CacheItem& item, bool inserted) noexcept
-    : cache_(&cache), item_(&item), inserted_(inserted) {
-  item_->incrementRefCount();
-}
+    : cache_(&cache), item_(&item), inserted_(inserted) {}
 
 Handle::Handle(CacheComponent& cache, bool inserted, InlineItemTag) noexcept
     : cache_(&cache),
