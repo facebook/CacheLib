@@ -1488,6 +1488,7 @@ TEST_F(NvmCacheTest, FullAllocSize) {
   {
     // Make sure we end up with a different item in free list
     auto it = cache.allocate(pid, "placeholder", 1);
+    ASAN_UNPOISON_MEMORY_REGION(it->getMemory(), totalSize);
     for (uint32_t i = 0; i < totalSize; ++i) {
       it->template getMemoryAs<char>()[i] = 0;
     }
@@ -1537,6 +1538,7 @@ TEST_F(NvmCacheTest, TruncatedAllocSize) {
   {
     // Make sure we end up with a different item in free list
     auto it = cache.allocate(pid, "placeholder", valSize);
+    ASAN_UNPOISON_MEMORY_REGION(it->getMemory(), totalSize);
     for (uint32_t i = 0; i < totalSize; ++i) {
       it->template getMemoryAs<char>()[i] = 0;
     }

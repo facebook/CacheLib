@@ -217,7 +217,6 @@ TEST(ItemTest, SizedLargeKey) {
   constexpr size_t bufSize = 128;
   constexpr size_t halfBufSize = bufSize / 2;
   constexpr size_t headerSize = 4;
-  constexpr size_t largeKeyMetadataSize = 4;
   // Key size is half of buffer (minus header)
   constexpr size_t keySize = halfBufSize - headerSize;
 
@@ -237,20 +236,10 @@ TEST(ItemTest, SizedLargeKey) {
 
   // Internally the KAllocation thinks that we have a large key (key size = 0)
   // so it will jump to the 4 bytes after the header to get the large key size
-  // (which should be uint32_t max).  getKeySize() should prune the key size to
-  // the passed in allocation size minus the header (8 bytes for large keys).
-  auto retrievedKey = data.kalloc.getKeySized(bufSize);
-  // Retrieved key size = 128 (alloc size) - 8 (large key header size)
-  EXPECT_EQ(retrievedKey.size(), bufSize - headerSize - largeKeyMetadataSize);
-  // Check the first 56 bytes against the key
-  EXPECT_EQ(std::memcmp(retrievedKey.data(), keyBuffer + largeKeyMetadataSize,
-                        keySize - largeKeyMetadataSize),
-            0);
-  // Check the remaining 64 bytes against the value
-  EXPECT_EQ(std::memcmp(retrievedKey.data() + keySize - largeKeyMetadataSize,
-                        data.buffer + halfBufSize,
-                        halfBufSize),
-            0);
+  // (which should be uint32_t max). getKeySize() should detect that the key
+  // won't fit in our allocation size and return an empty value.
+  auto retrievedKey = data.kalloc.getKeyCheckedNoAsan(bufSize);
+  EXPECT_TRUE(retrievedKey.empty());
 }
 
 } // namespace cachelib

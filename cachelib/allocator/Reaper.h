@@ -45,8 +45,12 @@ struct ReaperAPIWrapper {
     cache.traverseAndExpireItems(std::forward<Fn>(f));
   }
 
-  static WriteHandle findInternal(C& cache, Key key) {
-    return cache.findInternal(key);
+  static WriteHandle findFromRawAlloc(C& cache,
+                                      const void* rawItem,
+                                      uint32_t allocSize,
+                                      uint32_t expirationCheckTime) {
+    return cache.findFromRawAlloc(
+        rawItem, allocSize, /* wantExpiredItems */ true, expirationCheckTime);
   }
 };
 
@@ -169,25 +173,13 @@ void Reaper<CacheT>::reapSlabWalkMode() {
           return false;
         }
 
-        // get an item and check if it is expired and is in the access
-        // container before we actually grab the
-        // handle to the item and proceed to expire it.
-        const auto& item = *reinterpret_cast<const Item*>(ptr);
-        if (!item.isExpired(currentTimeSec) || !item.isAccessible()) {
-          return true;
-        }
-
-        // Item has to be smaller than the alloc size to be a valid item.
-        auto key = item.getKey();
-        if (Item::getRequiredSize(key, 0 /* value size*/) >
-            allocInfo.allocSize) {
-          return true;
-        }
-
         try {
-          // obtain a valid handle without disturbing the state of the item in
-          // cache.
-          auto handle = ReaperAPIWrapper<CacheT>::findInternal(cache_, key);
+          auto handle = ReaperAPIWrapper<CacheT>::findFromRawAlloc(
+              cache_, ptr, allocInfo.allocSize, currentTimeSec);
+          if (!handle) {
+            return true;
+          }
+
           auto reaped =
               ReaperAPIWrapper<CacheT>::removeIfExpired(cache_, handle);
           if (reaped) {

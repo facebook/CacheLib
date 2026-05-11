@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/CPortability.h>
 #include <folly/lang/Aligned.h>
 #include <folly/synchronization/DistributedMutex.h>
 
@@ -24,7 +25,11 @@
 #include <unordered_map>
 #include <vector>
 
+#if FOLLY_SANITIZE_ADDRESS
+#include "cachelib/allocator/datastruct/AsanSList.h"
+#else
 #include "cachelib/allocator/datastruct/SList.h"
+#endif
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"
 #include "cachelib/allocator/memory/Slab.h"
@@ -449,7 +454,11 @@ class AllocationClass {
   };
 
   // list of freed allocations for this allocation class.
+#if FOLLY_SANITIZE_ADDRESS
+  using FreeList = AsanSList<FreeAlloc, &FreeAlloc::hook_>;
+#else
   using FreeList = SList<FreeAlloc, &FreeAlloc::hook_>;
+#endif
   FreeList freedAllocations_;
 
   // Partition the 'freeAllocs' into two different SList depending on whether

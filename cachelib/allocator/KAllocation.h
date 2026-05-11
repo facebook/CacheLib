@@ -127,19 +127,22 @@ class CACHELIB_PACKED_ATTR KAllocation {
 
   // returns the key corresponding to the allocation.
   const Key getKey() const noexcept {
-    // Reaper will call this function on unallocated data, so ensure key size is
-    // within the limit
-    auto keySize = std::min(kKeyMaxLen, getKeySize());
-    return Key{reinterpret_cast<char*>(getData()), keySize};
+    return Key{reinterpret_cast<char*>(getData()), getKeySize()};
   }
 
   // same as getKey() but ensures we don't create a key that could extend
   // outside the given allocation size (safe to call on unallocated data)
-  const Key getKeySized(uint32_t allocSize) const noexcept {
-    uint32_t headerSize = isSmallKey() ? sizeof(PackedSize)
-                                       : sizeof(PackedSize) + sizeof(LargeKey);
-    auto keySize = std::min(allocSize - headerSize, getKeySize());
-    return Key{reinterpret_cast<char*>(getData()), keySize};
+  FOLLY_DISABLE_ADDRESS_SANITIZER const Key
+  getKeyCheckedNoAsan(uint32_t allocSize) const noexcept {
+    uint32_t headerSize = isSmallKeyNoAsan()
+                              ? sizeof(PackedSize)
+                              : sizeof(PackedSize) + sizeof(LargeKey);
+    uint32_t keySize = getKeySizeNoAsan();
+    if (allocSize < headerSize || keySize > allocSize - headerSize) {
+      // Key size is bigger than what can fit in the allocation, invalid
+      return {};
+    }
+    return Key{reinterpret_cast<char*>(getDataNoAsan()), keySize};
   }
 
   // updates the current key with the new one. The key size must match.
@@ -180,14 +183,27 @@ class CACHELIB_PACKED_ATTR KAllocation {
   };
 
   bool isSmallKey() const noexcept { return size_.keySize_ != 0; }
+  FOLLY_DISABLE_ADDRESS_SANITIZER bool isSmallKeyNoAsan() const noexcept {
+    return size_.keySize_ != 0;
+  }
 
   unsigned char* getData() const noexcept {
     return isSmallKey() ? data_ : reinterpret_cast<LargeKey*>(data_)->data_;
+  }
+  FOLLY_DISABLE_ADDRESS_SANITIZER unsigned char* getDataNoAsan()
+      const noexcept {
+    return isSmallKeyNoAsan() ? data_
+                              : reinterpret_cast<LargeKey*>(data_)->data_;
   }
 
   uint32_t getKeySize() const noexcept {
     return isSmallKey() ? size_.keySize_
                         : reinterpret_cast<LargeKey*>(data_)->largeKeySize_;
+  }
+  FOLLY_DISABLE_ADDRESS_SANITIZER uint32_t getKeySizeNoAsan() const noexcept {
+    return isSmallKeyNoAsan()
+               ? size_.keySize_
+               : reinterpret_cast<LargeKey*>(data_)->largeKeySize_;
   }
 
   // Check if the key is valid.  The length of the key needs to be in (0,

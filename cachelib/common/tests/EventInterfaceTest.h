@@ -87,7 +87,7 @@ class TestEventInterface : public facebook::cachelib::EventInterface<Key> {
 
  private:
   AllocatorApiEvent lastEvent{AllocatorApiEvent::INVALID};
-  Key lastKey{};
+  std::string lastKey{};
   AllocatorApiResult lastResult{AllocatorApiResult::FAILED};
   SizeT lastValueSize{folly::none};
   TtlT lastTtl{0};

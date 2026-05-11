@@ -19,6 +19,7 @@
 #include <folly/Random.h>
 #include <folly/Singleton.h>
 #include <folly/synchronization/Latch.h>
+#include <sanitizer/asan_interface.h>
 
 #include <algorithm>
 #include <chrono>
@@ -40,6 +41,7 @@
 #include "cachelib/allocator/PoolRebalancer.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/common/TestUtils.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 namespace facebook {
@@ -4100,7 +4102,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   void testReaperOutOfBound() {
-    // This test is to test a reaper will not crash when it is checking the last
+    // This test validates a reaper will not crash when it is checking the last
     // item in a slab and it happens to have a large key beyond the end of cache
     // space.
     const int numSlabs = 2;
@@ -4125,12 +4127,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_NE(nullptr, largeIt);
 
     std::vector<typename AllocatorT::WriteHandle> handles;
-    for (int i = 0;; ++i) {
-      auto it = util::allocateAccessible(allocator, poolId,
-                                         folly::to<std::string>(i), 0);
-      if (!it) {
-        break;
-      }
+    int i = 0;
+    while (auto it = util::allocateAccessible(allocator, poolId,
+                                              folly::to<std::string>(i++), 0)) {
       handles.push_back(std::move(it));
     }
     ASSERT_FALSE(handles.empty());
@@ -4147,34 +4146,32 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // simulate a garbage memory with a seemingly large key. What we want to
     // copy over is the expiry timestamp and also the key size. Key itself
     // doesn't actually matter.
-    std::memcpy(lastIt, largeIt.get(),
-                AllocatorT::Item::getRequiredSize("small", 0));
+    auto copySize = AllocatorT::Item::getRequiredSize("small", 0);
+    ASAN_UNPOISON_MEMORY_REGION(lastIt, copySize);
+    std::memcpy(lastIt, largeIt.get(), copySize);
+    ASAN_POISON_MEMORY_REGION(lastIt, copySize);
     largeIt.reset();
 
-    // Sleep for 1 second to ensure large item to have expired
+    // Sleep for >1 second to ensure large item has expired
     std::this_thread::sleep_for(std::chrono::seconds{2});
 
-    auto params = allocator.serializeConfigParams();
-    EXPECT_TRUE(
-        !params["reaperInterval"].compare(util::toString(reaperInterval)));
+    auto checkReaperInterval = [&]() {
+      auto params = allocator.serializeConfigParams();
+      EXPECT_EQ(params["reaperInterval"], util::toString(reaperInterval));
+    };
+
+    checkReaperInterval();
     // Start reaper, we should not crash
     reaperInterval = std::chrono::milliseconds{1};
     allocator.startNewReaper(reaperInterval,
                              util::Throttler::Config::makeNoThrottleConfig());
 
-    params = allocator.serializeConfigParams();
-
     // Check if relevent configuration is changed
-    EXPECT_TRUE(
-        !params["reaperInterval"].compare(util::toString(reaperInterval)));
+    checkReaperInterval();
 
     // Loop until we have reaped at least one iteration
-    while (true) {
-      auto stats = allocator.getReaperStats();
-      if (stats.numTraversals >= 1) {
-        break;
-      }
-    }
+    ASSERT_EVENTUALLY_TRUE(
+        [&]() { return allocator.getReaperStats().numTraversals >= 1; });
     auto stats = allocator.getReaperStats();
     EXPECT_EQ(1, stats.numReapedItems);
   }

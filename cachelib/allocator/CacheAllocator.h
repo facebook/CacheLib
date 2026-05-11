@@ -25,6 +25,7 @@
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
+#include <sanitizer/asan_interface.h>
 
 #include <chrono>
 #include <functional>
@@ -1584,6 +1585,80 @@ class CacheAllocator : public CacheBase {
     // Note: this method can not be const because we need  a non-const
     // reference to create the ItemReleaser.
     return accessContainer_->find(key);
+  }
+
+  // Safely obtain a refcounted handle from a raw pointer
+  //
+  // @param rawItem              raw pointer
+  // @param allocSize            allocation size for the slot containing rawItem
+  // @param wantExpiredItems     whether the caller is looking exclusively for
+  //                             expired items or exclusively non-expired items
+  // @param expirationCheckTime  optional time to use for expiration check
+  //
+  // @return  a valid WriteHandle if the memory contains an accessible item,
+  //          empty handle otherwise.
+  FOLLY_DISABLE_ADDRESS_SANITIZER WriteHandle
+  findFromRawAlloc(const void* rawItem,
+                   uint32_t allocSize,
+                   bool wantExpiredItems = false,
+                   std::optional<uint32_t> expirationCheckTime = {}) {
+    if (!allocator_->isValidAllocMemory(rawItem)) {
+      return {};
+    }
+    auto item = reinterpret_cast<const Item*>(rawItem);
+
+    if (!item->isAccessibleNoAsan()) {
+      return {};
+    }
+
+    auto isExpired = expirationCheckTime.has_value()
+                         ? item->isExpiredNoAsan(expirationCheckTime.value())
+                         : item->isExpiredNoAsan();
+    // The caller determines how we check expiration. There's 2 cases:
+    // 1. The caller *only* wants expired items (e.g., Reaper)
+    // 2. The caller *does not* want expired items (e.g., getSampleItem())
+    if (wantExpiredItems && !isExpired) {
+      return {};
+    } else if (!wantExpiredItems && isExpired) {
+      return {};
+    }
+
+    auto key = item->getKeyCheckedNoAsan(allocSize);
+    // Validate the entire key is in slab memory: rawItem < key start < key end,
+    // only need to validate end of key
+    if (key.empty() ||
+        !allocator_->isValidAllocMemory(key.data() + key.size() - 1)) {
+      return {};
+    }
+#if FOLLY_SANITIZE_ADDRESS
+    // Copy the key out so we can use it without disabling instrumentation for
+    // the whole find path. Don't use std utilities (like std::string or
+    // std::memcpy) because they still have ASAN enabled. If it's a small key,
+    // store on the stack. Otherwise malloc on the heap.
+    char stackBuf[KAllocation::kKeyMaxLenSmall];
+    std::unique_ptr<char[]> heapBuf;
+    char* buffer;
+    if (key.size() <= KAllocation::kKeyMaxLenSmall) {
+      buffer = stackBuf;
+    } else {
+      heapBuf = std::unique_ptr<char[]>(new char[key.size()]);
+      buffer = heapBuf.get();
+    }
+    for (size_t i = 0; i < key.size(); i++) {
+      buffer[i] = key[i];
+    }
+    key = Key(buffer, key.size());
+#endif
+    if (Item::getRequiredSize(key, /* size */ 0) > allocSize) {
+      return {};
+    }
+
+    auto handle = findInternal(key);
+    if (handle.get() != item) {
+      return {};
+    }
+
+    return handle;
   }
 
   // TODO: do another round of audit to refactor our lookup paths. This is
@@ -4593,18 +4668,13 @@ CacheAllocator<CacheTrait>::getSampleItem() {
 
   // Sampling from DRAM cache
   auto [allocSize, rawItem] = allocator_->getRandomAlloc();
-  auto item = reinterpret_cast<const Item*>(rawItem);
-  if (!item || UNLIKELY(item->isExpired())) {
+  auto handle = findFromRawAlloc(rawItem, allocSize);
+  if (!handle) {
     return SampleItem{false /* fromNvm */};
   }
 
-  // Check that item returned is the same that was sampled
-
-  auto sharedHdl =
-      std::make_shared<ReadHandle>(findInternal(item->getKeySized(allocSize)));
-  if (sharedHdl->get() != item) {
-    return SampleItem{false /* fromNvm */};
-  }
+  auto item = handle.get();
+  auto sharedHdl = std::make_shared<ReadHandle>(std::move(handle));
 
   const auto allocInfo = allocator_->getAllocInfo(item->getMemory());
 

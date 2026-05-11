@@ -172,7 +172,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   // Same as above but safe to call for unallocated data.  User must specify an
   // allocation size.
-  const Key getKeySized(uint32_t allocSize) const noexcept;
+  const Key getKeyCheckedNoAsan(uint32_t allocSize) const noexcept;
 
   // Readonly memory for this allocation.
   const void* getMemory() const noexcept;
@@ -222,6 +222,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   // Check if the item is expired relative to the provided timestamp.
   bool isExpired(uint32_t currentTimeSecs) const noexcept;
+
+  // Same as above but safe to call for unallocated data
+  bool isExpiredNoAsan() const noexcept;
+  bool isExpiredNoAsan(uint32_t currentTimeSec) const noexcept;
 
   /**
    * Access specific flags for an item
@@ -289,6 +293,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   // Returns true if the item is in access container, false otherwise
   bool isAccessible() const noexcept;
+
+  // Same as above but safe to call for unallocated data
+  bool isAccessibleNoAsan() const noexcept;
 
  protected:
   // construct an item without expiry timestamp.
@@ -654,9 +661,9 @@ const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
 }
 
 template <typename CacheTrait>
-const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKeySized(
-    uint32_t allocSize) const noexcept {
-  return alloc_.getKeySized(allocSize);
+const typename CacheItem<CacheTrait>::Key
+CacheItem<CacheTrait>::getKeyCheckedNoAsan(uint32_t allocSize) const noexcept {
+  return alloc_.getKeyCheckedNoAsan(allocSize);
 }
 
 template <typename CacheTrait>
@@ -711,7 +718,19 @@ bool CacheItem<CacheTrait>::isExpired() const noexcept {
 }
 
 template <typename CacheTrait>
+FOLLY_DISABLE_ADDRESS_SANITIZER bool CacheItem<CacheTrait>::isExpiredNoAsan()
+    const noexcept {
+  return util::isExpired(expiryTime_);
+}
+
+template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isExpired(uint32_t currentTimeSec) const noexcept {
+  return (expiryTime_ > 0 && expiryTime_ < currentTimeSec);
+}
+
+template <typename CacheTrait>
+FOLLY_DISABLE_ADDRESS_SANITIZER bool CacheItem<CacheTrait>::isExpiredNoAsan(
+    uint32_t currentTimeSec) const noexcept {
   return (expiryTime_ > 0 && expiryTime_ < currentTimeSec);
 }
 
@@ -802,6 +821,11 @@ void CacheItem<CacheTrait>::unmarkInMMContainer() noexcept {
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isAccessible() const noexcept {
   return ref_.isAccessible();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isAccessibleNoAsan() const noexcept {
+  return ref_.isAccessibleNoAsan();
 }
 
 template <typename CacheTrait>

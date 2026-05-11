@@ -20,6 +20,7 @@
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
+#include <sanitizer/asan_interface.h>
 #include <sys/mman.h>
 
 #include <chrono>
@@ -40,6 +41,12 @@ using namespace facebook::cachelib;
 namespace {
 static inline size_t roundDownToSlabSize(size_t size) {
   return size - (size % sizeof(Slab));
+}
+
+FOLLY_DISABLE_ADDRESS_SANITIZER void touchAddr(const uint8_t* addr) {
+  // Use volatile to fool the compiler to not optimize this away in opt mode.
+  volatile const uint8_t val = *addr; // NOLINT(facebook-hte-Volatile)
+  (void)val;
 }
 } // namespace
 
@@ -125,6 +132,11 @@ SlabAllocator::SlabAllocator(void* memoryStart,
     memoryLocker_ = std::thread{[this]() { lockMemoryAsync(); }};
   }
 
+  ASAN_POISON_MEMORY_REGION(
+      slabMemoryStart_,
+      reinterpret_cast<const uint8_t*>(getSlabMemoryEnd()) -
+          reinterpret_cast<const uint8_t*>(slabMemoryStart_));
+
   XDCHECK_EQ(0u, reinterpret_cast<uintptr_t>(memoryStart_) % sizeof(Slab));
   XDCHECK_EQ(0u, memorySize_ % sizeof(Slab));
   XDCHECK(nextSlabAllocation_ != nullptr);
@@ -201,6 +213,22 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
   }
 
   checkState();
+
+  // Poison slabs that are not allocated. Tests depend on this running after
+  // checkState().
+
+  ASAN_POISON_MEMORY_REGION(
+      nextSlabAllocation_,
+      reinterpret_cast<const uint8_t*>(getSlabMemoryEnd()) -
+          reinterpret_cast<const uint8_t*>(nextSlabAllocation_));
+
+  for (const auto* slab : freeSlabs_) {
+    ASAN_POISON_MEMORY_REGION(slab, Slab::kSize);
+  }
+
+  for (const auto* slab : advisedSlabs_) {
+    ASAN_POISON_MEMORY_REGION(slab, Slab::kSize);
+  }
 }
 
 void SlabAllocator::lockMemoryAsync() noexcept {
@@ -230,10 +258,8 @@ void SlabAllocator::lockMemoryAsync() noexcept {
         // shared memory pages. For memory that is not shared, touching the
         // memory won't page them in until the page gets written to. We default
         // to mlock for that and require the caller to set the appropriate
-        // rlimits. Use volatile to fool the compiler to not optimize this away
-        // in opt mode.
-        volatile const uint8_t val = *pageAddr; // NOLINT(facebook-hte-Volatile)
-        (void)val;
+        // rlimits.
+        touchAddr(pageAddr);
       }
 
       ++pageOffset;
@@ -415,11 +441,7 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   XDCHECK(util::isPageAlignedAddr(mem));
 
   for (size_t pageOffset = 0; pageOffset < numPages; pageOffset++) {
-    // Use volatile to fool the compiler to not optimize this away in opt
-    // mode.
-    volatile const uint8_t val =
-        *(mem + pageOffset * pageSize); // NOLINT(facebook-hte-Volatile)
-    (void)val;
+    touchAddr(mem + pageOffset * pageSize);
   }
   memoryPoolSize_[id] += sizeof(Slab);
   // initialize the header for the slab.

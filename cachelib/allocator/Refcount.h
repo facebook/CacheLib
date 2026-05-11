@@ -224,6 +224,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // relaxed ordering.
     return __atomic_load_n(&refCount_, __ATOMIC_RELAXED);
   }
+  FOLLY_DISABLE_ADDRESS_SANITIZER Value getRawNoAsan() const noexcept {
+    return __atomic_load_n(&refCount_, __ATOMIC_RELAXED);
+  }
 
   /**
    * The following three functions correspond to the state of the allocation
@@ -259,6 +262,13 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   }
   bool isAccessible() const noexcept {
     return getRaw() & getAdminRef<kAccessible>();
+  }
+
+  /**
+   * Same as above but with ASAN instrumentation disabled.
+   */
+  bool isAccessibleNoAsan() const noexcept {
+    return getRawNoAsan() & getAdminRef<kAccessible>();
   }
 
   /**

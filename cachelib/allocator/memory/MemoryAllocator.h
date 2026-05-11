@@ -45,7 +45,7 @@ class AllocTestBase;
  *
  * MemoryAllocator -- provides allocation by any size up to Slab::kSize.  It
  * consists of a set of MemoryPools. To make an allocation from a pool, the
- * corresponding pool id is  to be used. The memory allocator uses the slab
+ * corresponding pool id is to be used. The memory allocator uses the slab
  * allocator to make allocations of Slab::kSize and divides that into smaller
  * allocations. It also takes care of dividing the available memory into
  * different pools at the granularity of a slab.
@@ -478,6 +478,16 @@ class MemoryAllocator {
           fmt::format("invalid header for slab memory addr: {}", memory));
     }
     return AllocInfo{header->poolId, header->classId, header->allocSize};
+  }
+
+  // Check whether a pointer falls within a valid, allocated slab managed by
+  // this allocator.
+  //
+  // @param memory  the memory address to check
+  // @return        true if the address belongs to a slab with a valid header
+  bool isValidAllocMemory(const void* memory) const noexcept {
+    auto* slab = slabAllocator_.getSlabForMemory(memory);
+    return (slab && slabAllocator_.isValidSlab(slab));
   }
 
   // fetch the allocation size for the pool id and class id.
