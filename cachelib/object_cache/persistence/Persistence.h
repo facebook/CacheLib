@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/File.h>
 #include <folly/MPMCQueue.h>
 
@@ -54,7 +55,7 @@ class PersistWorker : public PeriodicWorker {
   // Consume the MPMC queue to persist objects.
   void work() override;
 
-  std::string getName() { return folly::sformat("PersistWorker_{}", id_); }
+  std::string getName() { return fmt::format("PersistWorker_{}", id_); }
 
  private:
   uint32_t id_;
@@ -123,7 +124,7 @@ class Persistor {
   // @return the file path for ith worker
   static inline std::string getPersistFilePath(std::string& basePath,
                                                uint32_t workerId) {
-    return folly::sformat("{}_{}", basePath, workerId);
+    return fmt::format("{}_{}", basePath, workerId);
   }
 
  private:
@@ -160,7 +161,7 @@ class RestoreWorker {
   // @return number of expired objects in a worker thread
   uint32_t getNumExpired() { return numExpired_; }
 
-  std::string getName() { return folly::sformat("RestoreWorker_{}", id_); }
+  std::string getName() { return fmt::format("RestoreWorker_{}", id_); }
 
  private:
   uint32_t id_;
@@ -201,7 +202,7 @@ void PersistWorker<ObjectCache>::work() {
     auto payloadIobuf = serializeCb_(
         typename ObjectCache::Serializer(workUnit.key, workUnit.objectPtr));
     if (!payloadIobuf) {
-      XLOG_EVERY_N(ERR, 1000) << folly::sformat(
+      XLOG_EVERY_N(ERR, 1000) << fmt::format(
           "Failed to serialize object for key = {}", workUnit.key);
       continue;
     }
@@ -269,7 +270,7 @@ bool Persistor<ObjectCache>::run() {
   // stop all workers
   for (auto& worker : workers_) {
     if (!worker->stop()) {
-      XLOG(ERR) << folly::sformat("{} failed to stop", worker->getName());
+      XLOG(ERR) << fmt::format("{} failed to stop", worker->getName());
     }
   }
   return true;
@@ -340,11 +341,11 @@ void RestoreWorker<ObjectCache>::work() {
           persistentItem.objectSize().value(), ttlSecs, objCache_));
       if (!success) {
         XLOG_EVERY_N(ERR, 1000)
-            << folly::sformat("{} failed to deserialize object for key = {}",
-                              getName(), persistentItem.key().value());
+            << fmt::format("{} failed to deserialize object for key = {}",
+                           getName(), persistentItem.key().value());
       }
     } catch (const std::exception& e) {
-      XLOG_EVERY_N(ERR, 1000) << folly::sformat(
+      XLOG_EVERY_N(ERR, 1000) << fmt::format(
           "{} failed to deserialize object for key = {}, exception "
           "= {}",
           getName(),

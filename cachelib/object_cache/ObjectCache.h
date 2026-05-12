@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/RelaxedAtomic.h>
@@ -827,7 +828,7 @@ void ObjectCache<AllocatorT>::init() {
         config_.l1ShardName.empty() ? "pool" : config_.l1ShardName;
     // Add the shard index as the suffix of pool name if needed
     if (config_.l1NumShards > 1) {
-      shardName += folly::sformat("_{}", i);
+      shardName += fmt::format("_{}", i);
     }
 
     if (config_.provisionPool) {
