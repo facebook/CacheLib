@@ -513,6 +513,8 @@ TEST_F(TinyLFUAllocatorTest, AllocateInAccessible) {
   testAllocateInAccessible(config);
 }
 
+TEST_F(LruAllocatorTest, EvictionPredicate) { this->testEvictionPredicate(); }
+
 TEST_F(LruAllocatorTest, EvictionSearchLimit) {
   LruAllocator::MMConfig config;
   testEvictionSearchLimit(config);

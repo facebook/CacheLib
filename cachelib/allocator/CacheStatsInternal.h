@@ -238,6 +238,9 @@ struct Stats {
   std::unique_ptr<PerPoolClassAtomicCounters> chainedItemEvictions{};
   std::unique_ptr<PerPoolClassAtomicCounters> regularItemEvictions{};
 
+  // Evictions skipped due to filtering
+  AtomicCounter evictFiltered{0};
+
   // Eviction failures due to parent cannot be removed from access container
   AtomicCounter evictFailParentAC{0};
 

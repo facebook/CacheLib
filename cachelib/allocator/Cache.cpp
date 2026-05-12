@@ -384,6 +384,8 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   counters_.updateCount(statPrefix + "slabs.release_stuck",
                         slabReleaseStats.numSlabReleaseStuck);
 
+  counters_.updateDelta(statPrefix + "evictions.filtered",
+                        stats.numEvictionsFiltered);
   counters_.updateDelta(statPrefix + "evictions.concurrent_fill_failure",
                         stats.numEvictionFailureFromConcurrentFill);
   counters_.updateDelta(statPrefix + "evictions.concurrent_access_failure",

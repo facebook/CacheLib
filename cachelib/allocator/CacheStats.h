@@ -502,6 +502,9 @@ struct GlobalCacheStats {
   // Number of insertOrReplace calls that resulted in replace
   uint64_t numInsertOrReplaceReplaced{0};
 
+  // Number of evictions that were skipped due to filtering
+  uint64_t numEvictionsFiltered{0};
+
   // number of eviction failures
   uint64_t numEvictionFailureFromAccessContainer{0};
   uint64_t numEvictionFailureFromConcurrentFill{0};

@@ -54,10 +54,10 @@ struct SizeVerify {};
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
 #ifdef __GLIBCXX__
-#define EXPECTED_SIZE 16912
+#define EXPECTED_SIZE 16928
 #endif
 #ifdef _LIBCPP_VERSION
-#define EXPECTED_SIZE 16912
+#define EXPECTED_SIZE 16928
 #endif
   SizeVerify<sizeof(Stats)> a = SizeVerify<EXPECTED_SIZE>{};
   std::ignore = a;
@@ -145,6 +145,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.invalidAllocs = invalidAllocs.get();
   ret.numRefcountOverflow = numRefcountOverflow.get();
 
+  ret.numEvictionsFiltered = evictFiltered.get();
   ret.numEvictionFailureFromAccessContainer = evictFailAC.get();
   ret.numEvictionFailureFromConcurrentFill = evictFailConcurrentFill.get();
   ret.numEvictionFailureFromConcurrentAccess = evictFailConcurrentAccess.get();

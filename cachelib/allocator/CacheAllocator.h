@@ -351,6 +351,25 @@ class CacheAllocator : public CacheBase {
   // tracked.
   using ItemDestructor = std::function<void(const DestructorData& data)>;
 
+  // Predicate called during eviction to decide whether a candidate may be
+  // evicted.  Return true to allow eviction, false to skip the candidate and
+  // try the next item in the LRU.
+  //
+  // Caveats:
+  //  - The predicate is called while the MMContainer lock is held, so it must
+  //    be fast and must not call back into the cache.
+  //  - The item has NOT been marked for eviction yet; its memory may be
+  //    concurrently mutated by writers holding a WriteHandle.  Use std::atomic
+  //    or tolerate benign races.
+  //  - If too many candidates are skipped, the eviction search will exhaust
+  //    evictionSearchTries and the allocation will fail.  Ensure skipped items
+  //    are eventually made evictable.
+  //  - For chained items the predicate receives the parent item, not the
+  //    chained child.
+  //  - This only applies to evictions caused by new allocations, not
+  //    evictions from slab releases.
+  using EvictionPredicate = std::function<bool(const Item&)>;
+
   using NvmCacheT = NvmCache<CacheT>;
   using NvmCacheConfig = typename NvmCacheT::Config;
   using DeleteTombStoneGuard = typename NvmCacheT::DeleteTombStoneGuard;
@@ -4030,6 +4049,13 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
           toRecycle_->isChainedItem()
               ? &toRecycle_->asChainedItem().getParentItem(compressor_)
               : toRecycle_;
+
+      if (config_.evictionPredicate &&
+          !config_.evictionPredicate(*candidate_)) {
+        ++itr;
+        stats_.evictFiltered.inc();
+        continue;
+      }
 
       typename NvmCacheT::PutToken putToken{};
       const bool evictToNvmCache = shouldWriteToNvmCache(*candidate_);

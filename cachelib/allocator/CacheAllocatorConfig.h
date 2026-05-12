@@ -62,6 +62,7 @@ class CacheAllocatorConfig {
   using NvmCacheMakeObjCb = typename CacheT::NvmCacheT::MakeObjCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
   using MoveCb = typename CacheT::MoveCb;
+  using EvictionPredicate = typename CacheT::EvictionPredicate;
   using NvmCacheConfig = typename CacheT::NvmCacheT::Config;
   using MemoryTierConfigs = std::vector<MemoryTierCacheConfig>;
   using Key = typename CacheT::Key;
@@ -329,6 +330,15 @@ class CacheAllocatorConfig {
   // Unless you're very familiar with caching, come talk to Cache Library team
   // before you start customizing this option.
   CacheAllocatorConfig& setEvictionSearchLimit(uint32_t limit);
+
+  // Set a predicate that is called for each eviction candidate. Return true to
+  // allow eviction, false to skip the candidate. See the doc comment on
+  // CacheAllocator::EvictionPredicate for caveats.
+  //
+  // Note: this only filters evictions caused by new allocations, not for
+  // evictions caused by slab releases (rebalancing, resizing or memory
+  // advising). Use enableMovingOnSlabRelease() for those situations.
+  CacheAllocatorConfig& setEvictionPredicate(EvictionPredicate pred);
 
   // Specify a threshold for per-item outstanding references, beyond which,
   // shared_ptr will be allocated instead of handles to support having  more
@@ -632,6 +642,9 @@ class CacheAllocatorConfig {
   // the number of tries to search for an item to evict
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
+
+  // user defined predicate to filter eviction candidates
+  EvictionPredicate evictionPredicate{};
 
   // the amount of time to wait for a slab to be released before giving up
   // and aborting the release. 0 means we will wait forever
@@ -1178,6 +1191,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEvictionSearchLimit(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEvictionPredicate(
+    EvictionPredicate pred) {
+  evictionPredicate = std::move(pred);
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>&
 CacheAllocatorConfig<T>::setRefcountThresholdForConvertingToIOBuf(
     uint32_t threshold) {
@@ -1381,6 +1401,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
+  configMap["evictionPredicate"] = evictionPredicate ? "set" : "empty";
   configMap["thresholdForConvertingToIOBuf"] =
       std::to_string(thresholdForConvertingToIOBuf);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
