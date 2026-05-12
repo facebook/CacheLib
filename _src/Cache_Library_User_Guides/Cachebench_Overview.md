@@ -51,8 +51,14 @@ developer's need. The following are few examples.
    this can be enabled. All code changes and new features to CacheLib from
    Facebook go through correctness stress tests with CacheBench.
 
-## Building  cachebench
+## Building cachebench
 
 Follow instructions in [Installation](/docs/installation) to build
-cachebench. This should install cachebench in your local machine under
-```opt/cachelib/bin/cachebench```
+CacheLib and cachebench. After building, locate the `cachebench` binary using:
+
+```sh
+INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
+$INST_DIR/bin/cachebench --help
+```
+
+See [Locating build output](/docs/installation#locating-build-output) for more details.

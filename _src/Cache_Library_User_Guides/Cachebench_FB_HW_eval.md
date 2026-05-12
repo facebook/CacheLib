@@ -29,112 +29,34 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
 
 ## Installing cachebench
 
-1. If you have not already, clone the cachelib repository from github.com:
+1. Clone the CacheLib repository and build:
 
-   ```sh
-   git clone https://github.com/facebook/CacheLib.git
-   ```
-
-2. Build cachelib and `cachebench`:
     ```sh
+    git clone https://github.com/facebook/CacheLib
     cd CacheLib
-    ./contrib/build.sh -j
-    ```
-    Notes:
-    * It will take several minutes to build and install all dependencies.
-    * Remove `-j` flag to build using only a single CPU (build will take longer)
-    * The script will automatically use `sudo` to install several OS packages (using `apt`, `dnf`, etc.)
-    * The build script has been tested to work on stable Debian, Ubuntu, CentOS, RockyLinux.
-      Other systems are possible but not officially supported.
-
-3. The resulting binaries and libraries will be in `./opt/cachelib`:
-    ```sh
-    ./opt/cachelib/bin/cachebench --help
-    ```
-    or
-    ```sh
-    cd ./opt/cachelib/bin/
-    ./cachebench --help
+    sudo python3 ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
+    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
     ```
 
-4. Sample test configurations are provided in `./opt/cachelib/test_configs/`.
+    Note: it will take several minutes to build and install all dependencies.
+
+2. Locate the install directory and verify `cachebench` works:
+
+    ```sh
+    INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
+    $INST_DIR/bin/cachebench --help
+    ```
+
+3. Sample test configurations are provided in the install directory.
     Example:
 
     ```sh
-    cd ./opt/cachelib
-    ./bin/cachebench --json_test_config ./test_configs/simple_test.json
+    $INST_DIR/bin/cachebench --json_test_config $INST_DIR/test_configs/simple_test.json
     ```
 
-<details>
-<summary>Expected Output of test run</summary>
+See [Installation](/docs/installation) for full build details and [Locating build output](/docs/installation#locating-build-output) for more on finding artifacts.
 
-    $ cd ./opt/cachelib
-    $ ./bin/cachebench --json_test_config ./test_configs/simple_test.json
-    ===JSON Config===
-    // @nolint instantiates a small cache and runs a quick run of basic operations.
-    {
-      "cache_config" : {
-        "cacheSizeMB" : 512,
-        "poolRebalanceIntervalSec" : 1,
-        "moveOnSlabRelease" : false,
-
-        "numPools" : 2,
-        "poolSizes" : [0.3, 0.7]
-      },
-      "test_config" : {
-
-          "numOps" : 100000,
-          "numThreads" : 32,
-          "numKeys" : 1000000,
-
-          "keySizeRange" : [1, 8, 64],
-          "keySizeRangeProbability" : [0.3, 0.7],
-
-          "valSizeRange" : [1, 32, 10240, 409200],
-          "valSizeRangeProbability" : [0.1, 0.2, 0.7],
-
-          "getRatio" : 0.15,
-          "setRatio" : 0.8,
-          "delRatio" : 0.05,
-          "keyPoolDistribution": [0.4, 0.6],
-          "opPoolDistribution" : [0.5, 0.5]
-        }
-    }
-
-    Welcome to OSS version of cachebench
-    Created 897,355 keys in 0.00 mins
-    Generating 1.60M sampled accesses
-    Generating 1.60M sampled accesses
-    Generated access patterns in 0.00 mins
-    Total 3.20M ops to be run
-    12:07:12       0.00M ops completed
-    == Test Results ==
-    == Allocator Stats ==
-    Items in RAM  : 96,995
-    Items in NVM  : 0
-    Alloc Attempts: 2,559,176 Success: 100.00%
-    RAM Evictions : 2,163,672
-    Cache Gets    : 480,592
-    Hit Ratio     :  10.97%
-    NVM Gets      :               0, Coalesced : 100.00%
-    NVM Puts      :               0, Success   :   0.00%, Clean   : 100.00%, AbortsFromDel   :        0, AbortsFromGet   :        0
-    NVM Evicts    :               0, Clean     : 100.00%, Unclean :       0, Double          :        0
-    NVM Deletes   :               0 Skipped Deletes: 100.00%
-    Released 21 slabs
-      Moves     : attempts:          0, success: 100.00%
-      Evictions : attempts:      3,040, success:  99.57%
-
-    == Throughput for  ==
-    Total Ops : 3.20 million
-    Total sets: 2,559,176
-    get       :    49,453/s, success   :  10.97%
-    set       :   263,344/s, success   : 100.00%
-    del       :    16,488/s, found     :  10.83%
-
-</details>
-
-
-5. If fio is not installed, build it with:
+4. If fio is not installed, build it with:
     ```sh
     git clone https://github.com/axboe/fio.git
     cd fio
@@ -143,39 +65,37 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     make install
     ```
 
-See [build and installation](/docs/installation) for further details.
-
 ## Running the benchmark for SSD perf testing
 
 Cachebench has three configs packaged for SSD validation. These are under `test_configs/ssd_perf/<service-domain>`. Currently, we have "graph_cache_leader", "kvcache_reg", and "kvcache_wc" which represent three distinct cache workloads from Facebook. Below, we show how the benchmarks can be run for two of these workloads. It is important to trim the ssds between the runs to ensure any interference is avoided.
 
 
-1. Change to the path where you previously copied cachebench to.
+1. Set the install directory path:
     ```sh
-    cd <your path>
+    INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
     ```
-2. If `/dev/md0` is not being used, edit workload files appropiately.
+2. If `/dev/md0` is not being used, edit workload files appropriately.
    Change all instances of `/dev/md0` to raw path of data SSD(s):
     ```sh
-    vi ./test_configs/ssd_perf/graph_cache_leader/config.json
-    vi ./test_configs/ssd_perf/kvcache_l2_wc/config.json
+    vi $INST_DIR/test_configs/ssd_perf/graph_cache_leader/config.json
+    vi $INST_DIR/test_configs/ssd_perf/kvcache_l2_wc/config.json
     ```
-    See [configuring storage path](Configuring_cachebench_parameters#storage-filedevicedirectory-path-info)  for more details on how to configure the storage path.
+    See [configuring storage path](Configuring_cachebench_parameters#storage-filedevicedirectory-path-info) for more details on how to configure the storage path.
 3. Before each benchmark run, fully trim the drive with fio:
     ```sh
-   fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
+    fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
     ```
-3. Execute social graph leader cache workload:
+4. Execute social graph leader cache workload:
     ```sh
-    ./cachebench -json_test_config test_configs/ssd_perf/graph_cache_leader/config.json --progress_stats_file=/tmp/graph_cache_leader.log
+    $INST_DIR/bin/cachebench -json_test_config $INST_DIR/test_configs/ssd_perf/graph_cache_leader/config.json --progress_stats_file=/tmp/graph_cache_leader.log
     ```
-4. Fully trim the drive with fio again:
+5. Fully trim the drive with fio again:
     ```sh
-   fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
-   ```
-5. Execute the `kvcache` workload:
+    fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
+    ```
+6. Execute the `kvcache` workload:
     ```sh
-    ./cachebench -json_test_config test_configs/ssd_perf/kvcache_l2_wc/config.json —progress_stats_file=/tmp/mc-l2-wc.log
+    $INST_DIR/bin/cachebench -json_test_config $INST_DIR/test_configs/ssd_perf/kvcache_l2_wc/config.json --progress_stats_file=/tmp/mc-l2-wc.log
     ```
 
 ### Tuning the workload and cache parameters
@@ -220,7 +140,7 @@ Meta is sharing anonymized traces captured from large scale production cache ser
 
 4. Execute the trace workload
     ```sh
-    ./cachebench -json_test_config ./config_kvcache.json —progress_stats_file=/tmp/kvcache-trace.log
+    $INST_DIR/bin/cachebench -json_test_config ./config_kvcache.json --progress_stats_file=/tmp/kvcache-trace.log
     ```
 
 ### List of traces
