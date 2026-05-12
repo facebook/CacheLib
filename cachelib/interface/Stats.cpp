@@ -16,7 +16,7 @@
 
 #include "cachelib/interface/Stats.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <set>
 
@@ -43,26 +43,26 @@ void printRate(std::ostream& os,
                size_t numerator,
                size_t denominator) {
   XDCHECK_GT(denominator, 0UL);
-  os << folly::sformat(" {}={:.2f}%",
-                       name,
-                       static_cast<double>(numerator) / denominator * 100.0);
+  os << fmt::format(" {}={:.2f}%",
+                    name,
+                    static_cast<double>(numerator) / denominator * 100.0);
 }
 
 std::ostream& operator<<(std::ostream& os, const Estimates& e) {
   os << std::endl
-     << folly::sformat(
+     << fmt::format(
             "           avg={:>10d} ns    p50={:>10d} ns     p99={:>10d} ns",
             e.avg,
             e.p50,
             e.p99)
      << std::endl
-     << folly::sformat(
+     << fmt::format(
             "         p99.9={:>10d} ns p99.99={:>10d} ns p99.999={:>10d} ns",
             e.p999,
             e.p9999,
             e.p99999)
      << std::endl
-     << folly::sformat(
+     << fmt::format(
             "      p99.9999={:>10d} ns   p100={:>10d} ns", e.p999999, e.p100);
   return os;
 }
