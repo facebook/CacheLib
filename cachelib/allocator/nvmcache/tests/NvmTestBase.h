@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -150,7 +151,7 @@ class NvmCacheTest : public testing::Test {
     auto pid = poolId();
 
     for (int i = 0; i < nKeys; i++) {
-      auto key = folly::sformat("{}_{}", keyPrefix, i);
+      auto key = fmt::format("{}_{}", keyPrefix, i);
       auto it = nvm.allocate(pid, key, itemAllocSize);
       ASSERT_NE(nullptr, it);
       nvm.insertOrReplace(it);
@@ -159,7 +160,7 @@ class NvmCacheTest : public testing::Test {
     nvm.flushNvmCache();
 
     for (int i = 0; i < nKeys; i++) {
-      removeFromRamForTesting(folly::sformat("{}_{}", keyPrefix, i));
+      removeFromRamForTesting(fmt::format("{}_{}", keyPrefix, i));
     }
 
     auto* atm = getAccessTimeMap();
@@ -167,7 +168,7 @@ class NvmCacheTest : public testing::Test {
     EXPECT_EQ(0, atm->size());
 
     for (int i = 0; i < nKeys; i++) {
-      auto key = folly::sformat("{}_{}", keyPrefix, i);
+      auto key = fmt::format("{}_{}", keyPrefix, i);
       auto hdl = fetch(key, false /* ramOnly */);
       ASSERT_NE(nullptr, hdl);
       ASSERT_TRUE(hdl->isNvmClean());
@@ -179,7 +180,7 @@ class NvmCacheTest : public testing::Test {
         config_.blockCache().getRegionSize() / fillerAllocSize;
     auto evictBefore = getStats().numEvictions;
     for (int i = 0; i < 1024; i++) {
-      auto key = folly::sformat("filler_{}", i);
+      auto key = fmt::format("filler_{}", i);
       auto it = nvm.allocate(pid, key, fillerAllocSize);
       ASSERT_NE(nullptr, it);
       cache_->insertOrReplace(it);

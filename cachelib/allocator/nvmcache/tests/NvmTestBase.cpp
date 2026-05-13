@@ -24,7 +24,7 @@ namespace cachelib {
 namespace tests {
 
 NvmCacheTest::NvmCacheTest() {
-  cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
+  cacheDir_ = fmt::format("/tmp/nvmcache-cachedir/{}", ::getpid());
   util::makeDir(cacheDir_);
   config_ = utils::getNvmTestConfig(cacheDir_);
 
@@ -116,13 +116,13 @@ void NvmCacheTest::iceRoll() {
 
   if (!util::getStatIfExists(fileName, nullptr)) {
     throw std::runtime_error(
-        folly::sformat("Failed to create drop file {}", fileName));
+        fmt::format("Failed to create drop file {}", fileName));
   }
 
   cache_ = std::make_unique<LruAllocator>(LruAllocator::SharedMemAttach,
                                           allocConfig_);
   if (util::getStatIfExists(fileName, nullptr)) {
-    throw std::runtime_error(folly::sformat(
+    throw std::runtime_error(fmt::format(
         "Drop file {} exists after re-initializing the cache", fileName));
   }
 }
@@ -139,7 +139,7 @@ void NvmCacheTest::iceColdRoll() {
 
   if (!util::getStatIfExists(fileName, nullptr)) {
     throw std::runtime_error(
-        folly::sformat("Failed to create drop file {}", fileName));
+        fmt::format("Failed to create drop file {}", fileName));
   }
 
   cache_ =

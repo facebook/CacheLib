@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/File.h>
 #include <gtest/gtest.h>
 
@@ -33,8 +34,8 @@ namespace {
 // Throw if the file does not exist.
 void changeMode(const std::string& name, mode_t mode) {
   if (!util::pathExists(name)) {
-    throw std::invalid_argument(folly::sformat(
-        "Trying to chmod on file {} that does not exist!", name));
+    throw std::invalid_argument(
+        fmt::format("Trying to chmod on file {} that does not exist!", name));
   }
   char tmp[256];
   snprintf(tmp, sizeof(tmp), "%s", name.c_str());
@@ -55,8 +56,7 @@ TEST(NavySetupTest, RAID0DeviceSize) {
   // Verify size is reduced when we pass in a size that's not aligned to
   // stripeSize for RAID0Device
 
-  auto filePath =
-      folly::sformat("/tmp/navy_device_raid0io_test-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/navy_device_raid0io_test-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
@@ -84,8 +84,7 @@ TEST(NavySetupTest, RAID0DeviceSize) {
 
 // Make sure that we throw when the device failed to create.
 TEST(NavySetupTest, FileCreationFailure) {
-  auto filePath =
-      folly::sformat("/tmp/navy_device_raid0io_test-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/navy_device_raid0io_test-{}", ::getpid());
   util::makeDir(filePath);
   // Change the directory permission so that cachelib can't create file.
   changeMode(filePath, 0111);
@@ -123,7 +122,7 @@ TEST(NavySetupTest, FileCreationFailure) {
 // Test the file size will change when the requested file size is different from
 // the existing file size for FileDevice
 TEST(NavySetupTest, FileDeviceResizeFile) {
-  auto filePath = folly::sformat("/tmp/navy_device_test-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/navy_device_test-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
   std::string file = filePath + "/CACHE0";
@@ -167,8 +166,7 @@ TEST(NavySetupTest, FileDeviceResizeFile) {
 // Test the file size will change when the requested file size is different from
 // the existing file size for RAID0Device
 TEST(NavySetupTest, RAID0DeviceResizeFile) {
-  auto filePath =
-      folly::sformat("/tmp/navy_device_raid0io_test-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/navy_device_raid0io_test-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
