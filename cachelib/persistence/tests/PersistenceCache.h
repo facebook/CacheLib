@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
@@ -75,7 +76,7 @@ class PersistenceCache {
     std::vector<PoolId> pools;
     for (uint32_t i = 0; i < numPools; ++i) {
       pools.push_back(
-          cache.addPool(folly::sformat("pool_{}", i),
+          cache.addPool(fmt::format("pool_{}", i),
                         cache.getCacheMemoryStats().ramCacheSize / numPools));
     }
 
@@ -88,7 +89,7 @@ class PersistenceCache {
       std::memcpy(handle->getMemory(), val.data(), val.size());
 
       for (uint32_t j = 0; j < numChained; ++j) {
-        std::string chainedData = folly::sformat("{}_Chained_{}", val, j);
+        std::string chainedData = fmt::format("{}_Chained_{}", val, j);
         auto chainedHandle =
             cache.allocateChainedItem(handle, chainedData.length());
         EXPECT_NE(chainedHandle, nullptr);
@@ -160,7 +161,7 @@ class PersistenceCache {
                 reinterpret_cast<const char*>(chained_item->getMemory()),
                 chained_item->getSize());
             ASSERT_EQ(chained_data,
-                      folly::sformat("{}_Chained_{}", key.second, j));
+                      fmt::format("{}_Chained_{}", key.second, j));
           }
         }
       } else {
@@ -201,7 +202,7 @@ class PersistenceCache {
       uint32_t numKeys) {
     std::vector<std::pair<std::string, std::string>> keys;
     for (uint32_t i = 0; i < numKeys; ++i) {
-      std::string k = folly::sformat("key_{}", i);
+      std::string k = fmt::format("key_{}", i);
       std::string v;
       v.resize(folly::Random::rand32(2048));
       folly::Random::secureRandom(v.data(), v.length());
