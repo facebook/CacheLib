@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
@@ -44,10 +45,9 @@ TEST(Util, MemRSS) {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     auto newVal = util::getRSSBytes();
-    EXPECT_GT(newVal, val) << folly::sformat("newVal = {}, val = {}", newVal,
-                                             val);
-    XLOG(INFO) << folly::sformat("newVal = {}, val = {}, len = {}", newVal, val,
-                                 len);
+    EXPECT_GT(newVal, val) << fmt::format("newVal = {}, val = {}", newVal, val);
+    XLOG(INFO) << fmt::format("newVal = {}, val = {}, len = {}", newVal, val,
+                              len);
     if (newVal - val >= len) {
       return;
     }

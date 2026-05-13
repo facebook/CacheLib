@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/testing/TestUtil.h>
 #include <gtest/gtest.h>
 
@@ -62,7 +63,7 @@ class EventTrackerTest : public ::testing::Test {
     for (uint64_t i = 0; i < numItems; i++) {
       EventInfo eventInfo;
       eventInfo.eventTimestamp = i;
-      eventInfo.key = folly::sformat("{}-{}", key, i);
+      eventInfo.key = fmt::format("{}-{}", key, i);
       if (i % 2 == 0) {
         eventInfo.event = AllocatorApiEvent::FIND;
         eventInfo.result = (i % 2 == 0) ? AllocatorApiResult::NOT_FOUND
@@ -374,7 +375,7 @@ TEST_F(EventTrackerTest, NvmCacheWithEventTracker) {
 
   // Insert items - this will fill RAM, then spill to NVM, then evict from NVM
   for (int i = 0; i < nItems; i++) {
-    std::string key = folly::sformat("key_{}", i);
+    std::string key = fmt::format("key_{}", i);
     auto handle = allocator.allocate(poolId, key, itemSize, itemTtl);
     if (handle) {
       allocator.insertOrReplace(handle);
@@ -394,13 +395,13 @@ TEST_F(EventTrackerTest, NvmCacheWithEventTracker) {
 
   // Perform some finds to trigger NVM lookups
   for (int i = 0; i < nItems; i++) {
-    std::string key = folly::sformat("key_{}", i);
+    std::string key = fmt::format("key_{}", i);
     allocator.find(key);
   }
 
   // Perform some removes
   for (int i = 0; i < nItems / 2; i++) {
-    std::string key = folly::sformat("key_{}", i);
+    std::string key = fmt::format("key_{}", i);
     allocator.remove(key);
   }
 
