@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <algorithm>
@@ -194,7 +195,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::WriteHandle> handles;
     size_t i = 0;
     while (true) {
-      std::string key = folly::sformat("key_{}", i++);
+      std::string key = fmt::format("key_{}", i++);
       auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
       if (!handle) {
         break;
@@ -345,8 +346,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     const std::vector<uint32_t> sizes = {keyLen + valLen + 100};
 
     for (int i = 0; i < 10; i++) {
-      util::allocateAccessible(alloc, poolId, folly::sformat("foo{}", i),
-                               valLen);
+      util::allocateAccessible(alloc, poolId, fmt::format("foo{}", i), valLen);
     }
 
     ASSERT_EQ(alloc.getPool(poolId).getStats().allocatedSlabs(), 1);
@@ -1381,7 +1381,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::WriteHandle> handles;
     for (size_t i = 0; i < numItems; ++i) {
       auto handle = util::allocateAccessible(
-          alloc, poolId, folly::sformat("key_{}", i), itemSize);
+          alloc, poolId, fmt::format("key_{}", i), itemSize);
       ASSERT_NE(nullptr, handle);
       handles.push_back(std::move(handle));
     }
@@ -1487,7 +1487,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::WriteHandle> handles;
     // Allocate 20 slabs
     for (size_t i = 0; i < numItems; ++i) {
-      std::string key = folly::sformat("key_{}", i);
+      std::string key = fmt::format("key_{}", i);
       auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
       ASSERT_NE(nullptr, handle);
       // hold handle, so that cachelib cannot release slab and slab release will

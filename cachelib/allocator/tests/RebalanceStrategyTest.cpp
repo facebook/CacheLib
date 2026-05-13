@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -93,7 +94,7 @@ class RebalanceStrategyTest : public testing::Test {
     int handleCount = 0;
     for (;; ++handleCount) {
       auto handle = util::allocateAccessible(
-          *cache, pid, folly::sformat("key_{}", handleCount), 50000);
+          *cache, pid, fmt::format("key_{}", handleCount), 50000);
       if (!handle) {
         break;
       }
@@ -171,8 +172,7 @@ class RebalanceStrategyTest : public testing::Test {
     /* Allocate until rebalance */
     uint i = 0;
     while (!cache->getAllSlabReleaseEvents(pid).rebalancerEvents.size()) {
-      util::allocateAccessible(*cache, pid, folly::sformat("key_{}", i++),
-                               50000);
+      util::allocateAccessible(*cache, pid, fmt::format("key_{}", i++), 50000);
     }
     /* At least one rebalance occurred */
     ASSERT_NE(i, 0);
@@ -310,7 +310,7 @@ class RebalanceStrategyTest : public testing::Test {
            cache->getPoolStats(pid).numSlabsForClass(largeAC) < kTargetSlabs;
            ++i) {
         auto handle = util::allocateAccessible(
-            *cache, pid, folly::sformat("key_{}", i), kBigItemSz);
+            *cache, pid, fmt::format("key_{}", i), kBigItemSz);
         if (!handle) {
           break;
         }
@@ -323,7 +323,7 @@ class RebalanceStrategyTest : public testing::Test {
            cache->getPoolStats(pid).numSlabsForClass(smallAC) < kTargetSlabs;
            ++i) {
         auto handle = util::allocateAccessible(
-            *cache, pid, folly::sformat("keySmall_{}", i), kSmallItemSz);
+            *cache, pid, fmt::format("keySmall_{}", i), kSmallItemSz);
         if (!handle) {
           break;
         }
@@ -344,24 +344,24 @@ class RebalanceStrategyTest : public testing::Test {
       size_t nEvicts = cache->getPoolStats(pid).numEvictions();
       while (nEvicts == cache->getPoolStats(pid).numEvictions()) {
         auto handle = util::allocateAccessible(
-            *cache, pid, folly::sformat("keyE_{}", ++id), kBigItemSz);
+            *cache, pid, fmt::format("keyE_{}", ++id), kBigItemSz);
       }
 
       nEvicts = cache->getPoolStats(pid).numEvictions();
       while (nEvicts == cache->getPoolStats(pid).numEvictions()) {
         auto handle = util::allocateAccessible(
-            *cache, pid, folly::sformat("keySmallE_{}", ++id), 1);
+            *cache, pid, fmt::format("keySmallE_{}", ++id), 1);
       }
 
       // Generate nBigFinds, nSmallFinds hits on the ACs
       for (unsigned i = 0, f = 0; f < nBigFinds; i = (i + 1) % filledBig) {
-        auto handle = cache->find(folly::sformat("key_{}", i));
+        auto handle = cache->find(fmt::format("key_{}", i));
         if (handle) {
           f++;
         }
       }
       for (unsigned i = 0, f = 0; f < nSmallFinds; i = (i + 1) % filledSmall) {
-        auto handle = cache->find(folly::sformat("keySmall_{}", i));
+        auto handle = cache->find(fmt::format("keySmall_{}", i));
         if (handle) {
           f++;
         }
@@ -462,7 +462,7 @@ class RebalanceStrategyTest : public testing::Test {
     std::vector<typename AllocatorT::WriteHandle> handlesBigItems;
     for (int handleCount = 0;; ++handleCount) {
       auto handle = util::allocateAccessible(
-          *cache, pid, folly::sformat("key_{}", handleCount), 50000);
+          *cache, pid, fmt::format("key_{}", handleCount), 50000);
       if (!handle) {
         break;
       }
@@ -473,7 +473,7 @@ class RebalanceStrategyTest : public testing::Test {
     std::vector<typename AllocatorT::WriteHandle> handlesSmallItems;
     for (int handleCount2 = 0;; ++handleCount2) {
       auto handle2 = util::allocateAccessible(
-          *cache, pid, folly::sformat("keySmall_{}", handleCount2), 1);
+          *cache, pid, fmt::format("keySmall_{}", handleCount2), 1);
       if (!handle2) {
         break;
       }

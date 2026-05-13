@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/io/RecordIO.h>
 #include <gtest/gtest.h>
 
@@ -108,7 +109,7 @@ TEST_F(NvmCacheStateTest, CreationTime) {
     *metadata.creationTime() = 12345;
     *metadata.safeShutDown() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
-    folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
+    folly::File shutDownFile{fmt::format("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
     folly::RecordIOWriter rw{std::move(shutDownFile)};
     rw.write(std::move(metadataIoBuf));
@@ -148,7 +149,7 @@ TEST_F(NvmCacheStateTest, Encryption) {
     *metadata.safeShutDown() = true;
     *metadata.encryptionEnabled() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
-    folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
+    folly::File shutDownFile{fmt::format("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
     folly::RecordIOWriter rw{std::move(shutDownFile)};
     rw.write(std::move(metadataIoBuf));
@@ -186,7 +187,7 @@ TEST_F(NvmCacheStateTest, TruncateAllocSize) {
     *metadata.safeShutDown() = true;
     *metadata.truncateAllocSize() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
-    folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
+    folly::File shutDownFile{fmt::format("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
     folly::RecordIOWriter rw{std::move(shutDownFile)};
     rw.write(std::move(metadataIoBuf));

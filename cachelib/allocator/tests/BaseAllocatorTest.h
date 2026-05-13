@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/Singleton.h>
 #include <folly/synchronization/Latch.h>
@@ -3467,7 +3468,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       // slab rebalancer to free up a slab, but it would not succeed
       // because all items have references
       for (int i = 0; i < 10; i++) {
-        util::allocateAccessible(alloc, poolId, folly::sformat("foo{}", i),
+        util::allocateAccessible(alloc, poolId, fmt::format("foo{}", i),
                                  900 * 1024);
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
@@ -6251,7 +6252,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::WriteHandle> handles;
     for (int i = 0;; i++) {
       auto handle = util::allocateAccessible(
-          alloc, poolId, folly::sformat("small_{}", i), smallSize);
+          alloc, poolId, fmt::format("small_{}", i), smallSize);
       if (handle == nullptr) {
         break;
       }
@@ -6291,7 +6292,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::WriteHandle> handles;
     for (int i = 0;; i++) {
       auto handle = util::allocateAccessible(
-          alloc, poolId, folly::sformat("small_{}", i), smallSize);
+          alloc, poolId, fmt::format("small_{}", i), smallSize);
       if (handle == nullptr) {
         break;
       }
@@ -6654,7 +6655,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           if (name == "stat1") {
             EXPECT_EQ(11, value);
             seen++;
-          } else if (name == folly::sformat("stat2.60")) {
+          } else if (name == fmt::format("stat2.60")) {
             EXPECT_EQ(22, value);
             seen++;
           }
@@ -6668,7 +6669,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           if (name == "stat1") {
             EXPECT_EQ(11, value);
             seen++;
-          } else if (name == folly::sformat("stat2.60")) {
+          } else if (name == fmt::format("stat2.60")) {
             EXPECT_EQ(44, value);
             seen++;
           }

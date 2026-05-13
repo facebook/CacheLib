@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
@@ -138,7 +139,7 @@ class SimpleRebalanceTest : public testing::Test {
     std::vector<PoolId> pidList;
     for (unsigned int i = 0; i < numPools; ++i) {
       pidList.push_back(
-          alloc.addPool(folly::sformat("foobar{}", i), numBytes / numPools));
+          alloc.addPool(fmt::format("foobar{}", i), numBytes / numPools));
     }
 
     const std::vector<uint32_t> sizes{64,   128,  256,  512,

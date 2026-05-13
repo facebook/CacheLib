@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 
@@ -401,7 +402,7 @@ TEST_F(MMLruTest, InsertionPointStress) {
       std::string out;
       auto it = c.begin();
       while (it != c.end()) {
-        out += folly::sformat("{}:{} ", it->getId(), it->isTail() ? 'T' : 'H');
+        out += fmt::format("{}:{} ", it->getId(), it->isTail() ? 'T' : 'H');
         ++it;
       }
       XLOG(INFO) << out;

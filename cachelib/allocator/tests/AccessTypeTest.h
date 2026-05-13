@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <memory>
@@ -60,8 +60,8 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
     void decRef() noexcept { refcount_--; }
 
     std::string toString() const {
-      return folly::sformat(" key = {}, ref = {}, accessible = ", key_,
-                            refcount_.load(), accessible_);
+      return fmt::format(" key = {}, ref = {}, accessible = ", key_,
+                         refcount_.load(), accessible_);
     }
 
     void triggerHandleException(bool state) {
