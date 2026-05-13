@@ -162,7 +162,7 @@ rocksdb::Status RocksCachelibWrapper::Insert(
         try {
           cache->insertOrReplace(handle);
         } catch (const std::exception& ex) {
-          s = rocksdb::Status::Aborted(folly::sformat(
+          s = rocksdb::Status::Aborted(fmt::format(
               "Cachelib insertOrReplace exception, error:{}", ex.what()));
         }
       }
