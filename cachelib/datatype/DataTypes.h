@@ -21,7 +21,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/memory/Slab.h"
@@ -56,8 +56,10 @@ class ForwardIterator
   void checkSanity() const {
     if (reinterpret_cast<uintptr_t>(element_) >=
         reinterpret_cast<uintptr_t>(end_)) {
-      throw std::out_of_range(folly::sformat(
-          "Moving past end pointer. curr: {}, end: {}", element_, end_));
+      throw std::out_of_range(
+          fmt::format("Moving past end pointer. curr: {}, end: {}",
+                      fmt::ptr(element_),
+                      fmt::ptr(end_)));
     }
   }
 

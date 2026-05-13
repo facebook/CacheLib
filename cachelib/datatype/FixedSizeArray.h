@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/datatype/DataTypes.h"
@@ -126,7 +126,7 @@ class FixedSizeArrayLayout {
   void checkBounds(uint32_t index) const {
     if (index >= numElements_) {
       const auto str =
-          folly::sformat("index: {}, numElemnts: {}", index, numElements_);
+          fmt::format("index: {}, numElemnts: {}", index, numElements_);
       throw std::out_of_range(str);
     }
   }
@@ -197,9 +197,9 @@ class FixedSizeArray {
     const auto requiredSize = computeStorageSize(numElements);
     const auto itemSize = layout_.viewWriteHandle()->getSize();
     if (requiredSize > itemSize) {
-      throw std::invalid_argument(folly::sformat(
-          "Item size too small. Expected at least: {}, Actual: {}",
-          requiredSize, itemSize));
+      throw std::invalid_argument(
+          fmt::format("Item size too small. Expected at least: {}, Actual: {}",
+                      requiredSize, itemSize));
     }
     new (layout_.viewWriteHandle()->getMemory())
         detail::FixedSizeArrayLayout<Element>(numElements);

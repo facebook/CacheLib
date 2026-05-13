@@ -16,6 +16,8 @@
 
 #include "cachelib/datatype/Buffer.h"
 
+#include <fmt/core.h>
+
 namespace facebook {
 namespace cachelib {
 namespace detail {
@@ -66,7 +68,7 @@ const void* Buffer::getData(uint32_t offset) const { return data_ + offset; }
 void Buffer::compact(Buffer& dest) const {
   XDCHECK_EQ(dest.capacity(), dest.remainingBytes());
   if (dest.capacity() < capacity() - wastedBytes() - remainingBytes()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "destination buffer is too small. Dest Capacity: {}, "
         "Current Capacity: {}, Current Wasted Space: {}, Current Remaining "
         "Capacity: {}",
@@ -99,7 +101,7 @@ const Buffer::Slot* Buffer::getSlotImpl(uint32_t dataOffset) const {
     // Need this to compile due to alignment requirement for uint32_t& in
     // folly::sformat()
     const auto tmp = nextByte_;
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "invliad dataOffset. dataOffset: {}, nextByte: {}, sizeof(Slot): {}",
         dataOffset, tmp, sizeof(Slot)));
   }

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <fmt/core.h>
+
 #include <limits>
 
 #include "cachelib/allocator/TypedHandle.h"
@@ -508,9 +510,9 @@ RangeMap<K, V, C>::RangeMap(Cache& cache,
           pid, key, BinaryIndex::computeStorageSize(numEntries))} {
   if (!handle_) {
     throw cachelib::exception::OutOfMemory(
-        folly::sformat("Failed allocate index for range map. Key: {}, "
-                       "numEntries: {}, numBytes: {}",
-                       key, numEntries, numBytes));
+        fmt::format("Failed allocate index for range map. Key: {}, "
+                    "numEntries: {}, numBytes: {}",
+                    key, numEntries, numBytes));
   }
 
   bufferManager_ = BufferManager{*cache_, handle_, numBytes};
@@ -753,9 +755,9 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
                        BinaryIndex::computeStorageSize(newIndexCapacity));
   if (!newHandle) {
     throw cachelib::exception::OutOfMemory(
-        folly::sformat("Unable to clone the index during range map expansion. "
-                       "Parent item: {}",
-                       handle_->toString()));
+        fmt::format("Unable to clone the index during range map expansion. "
+                    "Parent item: {}",
+                    handle_->toString()));
   }
   auto* newIndex =
       BinaryIndex::createNewIndex(newHandle->getMemory(), newIndexCapacity);
@@ -767,9 +769,9 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
   auto newBufferManager = bufferManager_.clone(newHandle);
   if (newBufferManager.empty()) {
     throw cachelib::exception::OutOfMemory(
-        folly::sformat("Unable to clone the buffers associated with range map. "
-                       "Parent item: {}",
-                       handle_->toString()));
+        fmt::format("Unable to clone the buffers associated with range map. "
+                    "Parent item: {}",
+                    handle_->toString()));
   }
 
   auto addr = newBufferManager.allocate(allocSize);
@@ -779,9 +781,9 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
     }
     if (!addr) {
       throw cachelib::exception::OutOfMemory(
-          folly::sformat("Unable to allocate for a new entry for range map. "
-                         "Alloc size: {}, Parent item: {}",
-                         allocSize, handle_->toString()));
+          fmt::format("Unable to allocate for a new entry for range map. "
+                      "Alloc size: {}, Parent item: {}",
+                      allocSize, handle_->toString()));
     }
   }
 

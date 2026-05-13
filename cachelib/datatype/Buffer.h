@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <fmt/core.h>
+
 #include <limits>
 
 #include "cachelib/allocator/TypedHandle.h"
@@ -313,16 +315,16 @@ class BufferManager {
       : cache_(&cache), parent_(&parent) {
     if (initialCapacity > kMaxBufferCapacity) {
       throw std::invalid_argument(
-          folly::sformat("A buffer's max capacity is {}, but requested "
-                         "initialCapacity is: {}",
-                         kMaxBufferCapacity, initialCapacity));
+          fmt::format("A buffer's max capacity is {}, but requested "
+                      "initialCapacity is: {}",
+                      kMaxBufferCapacity, initialCapacity));
     }
 
     auto* buffer = addNewBuffer(initialCapacity);
     if (!buffer) {
       throw cachelib::exception::OutOfMemory(
-          folly::sformat("Couldn't allocate a new buffer for parent item: {}",
-                         parent->toString()));
+          fmt::format("Couldn't allocate a new buffer for parent item: {}",
+                      parent->toString()));
     }
   }
 

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <fmt/core.h>
+
 #include <limits>
 
 #include "cachelib/allocator/TypedHandle.h"
@@ -54,7 +56,7 @@ class FOLLY_PACK_ATTR HashTable {
   static uint32_t computeStorageSize(size_t capacity) {
     const auto totalSize = sizeof(HashTable) + capacity * sizeof(Entry);
     if (totalSize > std::numeric_limits<uint32_t>::max()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "required storage size: {} is bigger than max(uint32_t)", totalSize));
     }
     return static_cast<uint32_t>(totalSize);
@@ -116,7 +118,7 @@ template <typename Key, typename Hasher>
 HashTable<Key, Hasher>::HashTable(size_t capacity, const HashTable& other)
     : HashTable(capacity) {
   if (capacity_ < other.capacity_) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "capacity too small. self: {}, other: {}", capacity_, other.capacity_));
   }
   for (size_t i = 0; i < other.capacity_; ++i) {
@@ -297,7 +299,7 @@ auto copyHashTable(
       C::Item::getRequiredSize(oldHashTable.viewWriteHandle()->getKey(), 0);
   if (newSize > kMaxHashTableSize) {
     // This shouldn't happen. Too many entries for a single object in memory.
-    auto exStr = folly::sformat(
+    auto exStr = fmt::format(
         "Index has maxed out for the provided key. Existing entries: {}, New "
         "requested capacity: {}. New requested size: {}",
         oldHashTable->numEntries(), newCapacity, newSize);
@@ -731,7 +733,7 @@ void Map<K, V, C>::compact() {
     }
     if (!oldAddr) {
       auto key = itr->first;
-      throw std::runtime_error(folly::sformat(
+      throw std::runtime_error(fmt::format(
           "old entry is missing, this should never happen. key: {}", key));
     }
   }
