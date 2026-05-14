@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/SysResource.h>
 #include <folly/system/ThreadName.h>
@@ -47,8 +47,8 @@ ThreadPoolExecutor::ThreadPoolExecutor(uint32_t numThreads,
   for (uint32_t i = 0; i < numThreads; i++) {
     queues_[i] = std::make_unique<JobQueue>();
     workers_.emplace_back([&q = queues_[i],
-                           threadName = folly::sformat("navy_{}_{}",
-                                                       name.subpiece(0, 6), i),
+                           threadName = fmt::format("navy_{}_{}",
+                                                    name.subpiece(0, 6), i),
                            priority] {
       folly::setThreadName(threadName);
       if (priority != 0) {
@@ -153,14 +153,13 @@ void ThreadPoolJobScheduler::finish() {
 void ThreadPoolJobScheduler::getCounters(const CounterVisitor& visitor) const {
   auto getStats = [&visitor](ThreadPoolExecutor::Stats stats,
                              folly::StringPiece name) {
-    const std::string maxQueueLen =
-        folly::sformat("navy_{}_max_queue_len", name);
-    const std::string reschedules = folly::sformat("navy_{}_reschedules", name);
+    const std::string maxQueueLen = fmt::format("navy_{}_max_queue_len", name);
+    const std::string reschedules = fmt::format("navy_{}_reschedules", name);
     const std::string highReschedules =
-        folly::sformat("navy_{}_jobs_high_reschedule", name);
-    const std::string jobsDone = folly::sformat("navy_{}_jobs_done", name);
+        fmt::format("navy_{}_jobs_high_reschedule", name);
+    const std::string jobsDone = fmt::format("navy_{}_jobs_done", name);
     const std::string maxPendingJobs =
-        folly::sformat("navy_max_{}_pending_jobs", name);
+        fmt::format("navy_max_{}_pending_jobs", name);
     visitor(maxQueueLen, stats.maxQueueLen);
     visitor(reschedules, stats.reschedules, CounterVisitor::CounterType::RATE);
     visitor(highReschedules, stats.jobsHighReschedule);

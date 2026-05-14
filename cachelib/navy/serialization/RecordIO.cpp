@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/serialization/RecordIO.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Range.h>
 #include <folly/io/RecordIO.h>
 
@@ -118,7 +118,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
 
       if (!dev_.write(offset_, std::move(buffer))) {
         throw std::invalid_argument(
-            folly::sformat("write failed: offset = {}", offset_));
+            fmt::format("write failed: offset = {}", offset_));
       }
 
       offset_ += blockSize_;
@@ -198,7 +198,7 @@ class DeviceMetaDataReader final : public RecordReader {
         // read from device to the middle of the buffer 'kReadOffset'
         if (!dev_.read(offset_, blockSize_, bufferData)) {
           throw std::invalid_argument(
-              folly::sformat("read failed: offset = {}", offset_));
+              fmt::format("read failed: offset = {}", offset_));
         }
         offset_ += blockSize_;
         bufIndex_ = 0;
@@ -238,7 +238,7 @@ class DeviceMetaDataReader final : public RecordReader {
     auto record =
         validateRecordData(folly::Range<unsigned char*>(data, buf->length()));
     if (record.fileId == 0) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Invalid record : offset = {}, length = {}", offset_, buf->length()));
     }
     // skip the header part and return

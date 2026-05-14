@@ -17,6 +17,7 @@
 #include "cachelib/navy/common/FdpNvme.h"
 
 #include <errno.h>
+#include <fmt/core.h>
 #include <linux/nvme_ioctl.h>
 #include <sys/ioctl.h>
 
@@ -112,7 +113,7 @@ Buffer FdpNvme::nvmeFdpStatus() {
     throw std::system_error(
         errno,
         std::system_category(),
-        folly::sformat("failed to get ruh status header, fd: {}", file_.fd()));
+        fmt::format("failed to get ruh status header, fd: {}", file_.fd()));
   }
 
   auto size = sizeof(struct nvme_fdp_ruh_status) +
@@ -126,7 +127,7 @@ Buffer FdpNvme::nvmeFdpStatus() {
     throw std::system_error(
         errno,
         std::system_category(),
-        folly::sformat("failed to get ruh status, fd: {}", file_.fd()));
+        fmt::format("failed to get ruh status, fd: {}", file_.fd()));
   }
 
   return buffer;
@@ -203,7 +204,7 @@ std::string readDevAttr(const std::string& bName, const std::string& attr) {
   std::string path = "/sys/block/" + bName + '/' + attr;
   std::string entry;
   if (!folly::readFile(path.c_str(), entry)) {
-    throw std::runtime_error(folly::sformat("Unable to read {}", path));
+    throw std::runtime_error(fmt::format("Unable to read {}", path));
   }
   return entry;
 }

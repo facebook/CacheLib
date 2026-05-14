@@ -16,8 +16,8 @@
 
 #include "cachelib/navy/common/Device.h"
 
+#include <fmt/core.h>
 #include <folly/File.h>
-#include <folly/Format.h>
 #include <folly/Function.h>
 #include <folly/ThreadLocal.h>
 #include <folly/container/Reserve.h>
@@ -610,7 +610,7 @@ bool IOOp::done(ssize_t len) {
   bool result = (len == size_);
   if (!result) {
     // Report IO errors
-    XLOG_N_PER_MS(ERR, 10, 1000) << folly::sformat(
+    XLOG_N_PER_MS(ERR, 10, 1000) << fmt::format(
         "[{}] IO error: {} len={} errno={} ({})", parent_.context_.getName(),
         toString(), len, errno, std::strerror(errno));
   }
@@ -1011,9 +1011,9 @@ FileDevice::FileDevice(std::vector<folly::File>&& fvec,
 
     if (fileSize % stripeSize != 0) {
       throw std::invalid_argument(
-          folly::sformat("Invalid size because individual device size: {} is "
-                         "not aligned to stripe size: {}",
-                         fileSize, stripeSize));
+          fmt::format("Invalid size because individual device size: {} is "
+                      "not aligned to stripe size: {}",
+                      fileSize, stripeSize));
     }
   }
 
@@ -1181,7 +1181,7 @@ folly::File openCacheFile(const std::string& fileName,
     throw std::system_error(
         errno,
         std::system_category(),
-        folly::sformat("failed to get the file stat for file {}", fileName));
+        fmt::format("failed to get the file stat for file {}", fileName));
   }
 
   uint64_t curfileSize = fileStat.st_size;
@@ -1193,7 +1193,7 @@ folly::File openCacheFile(const std::string& fileName,
       throw std::system_error(
           errno,
           std::system_category(),
-          folly::sformat(
+          fmt::format(
               "ftruncate failed with requested size {}, current size {}", size,
               curfileSize));
     }
@@ -1212,7 +1212,7 @@ folly::File openCacheFile(const std::string& fileName,
       throw std::system_error(
           errno,
           std::system_category(),
-          folly::sformat(
+          fmt::format(
               "fallocate failed with requested size {}, current size {}", size,
               curfileSize));
     }
@@ -1260,7 +1260,7 @@ std::unique_ptr<Device> createDirectIoFileDevice(
   if (isFDPEnabled) {
     try {
       if (filePaths.size() > 1) {
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "{} input files; but FDP mode does not support RAID files yet",
             filePaths.size()));
       }

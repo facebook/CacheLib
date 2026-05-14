@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/admission_policy/RejectRandomAP.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include "cachelib/navy/common/Utils.h"
@@ -25,7 +25,7 @@ namespace facebook::cachelib::navy {
 RejectRandomAP::Config& RejectRandomAP::Config::validate() {
   if (!between(probability, 0, 1)) {
     throw std::invalid_argument{
-        folly::sformat("probability out of [0, 1] range: {}", probability)};
+        fmt::format("probability out of [0, 1] range: {}", probability)};
   }
   return *this;
 }

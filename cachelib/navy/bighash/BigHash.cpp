@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/bighash/BigHash.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <chrono>
@@ -32,25 +32,25 @@ constexpr uint32_t kBigHashValidBucketCheckerBucketsPerBit = 100;
 BigHash::Config& BigHash::Config::validate() {
   if (cacheSize < bucketSize) {
     throw std::invalid_argument(
-        folly::sformat("cache size: {} cannot be smaller than bucket size: {}",
-                       cacheSize,
-                       bucketSize));
+        fmt::format("cache size: {} cannot be smaller than bucket size: {}",
+                    cacheSize,
+                    bucketSize));
   }
 
   if (!folly::isPowTwo(bucketSize)) {
     throw std::invalid_argument(
-        folly::sformat("invalid bucket size: {}", bucketSize));
+        fmt::format("invalid bucket size: {}", bucketSize));
   }
 
   if (cacheSize > uint64_t{bucketSize} << 32) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Can't address big hash with 32 bits. Cache size: {}, bucket size: {}",
         cacheSize,
         bucketSize));
   }
 
   if (cacheBaseOffset % bucketSize != 0 || cacheSize % bucketSize != 0) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "cacheBaseOffset and cacheSize need to be a multiple of bucketSize. "
         "cacheBaseOffset: {}, cacheSize:{}, bucketSize: {}.",
         cacheBaseOffset,
@@ -64,9 +64,9 @@ BigHash::Config& BigHash::Config::validate() {
 
   if (bloomFilter && bloomFilter->numFilters() != numBuckets()) {
     throw std::invalid_argument(
-        folly::sformat("bloom filter #filters mismatch #buckets: {} vs {}",
-                       bloomFilter->numFilters(),
-                       numBuckets()));
+        fmt::format("bloom filter #filters mismatch #buckets: {} vs {}",
+                    bloomFilter->numFilters(),
+                    numBuckets()));
   }
   return *this;
 }
@@ -253,9 +253,9 @@ bool BigHash::recover(RecordReader& rr) {
     auto pd = deserializeProto<serialization::BigHashPersistentData>(rr);
     if (*pd.version() != kFormatVersion) {
       throw std::logic_error{
-          folly::sformat("invalid format version {}, expected {}",
-                         *pd.version(),
-                         kFormatVersion)};
+          fmt::format("invalid format version {}, expected {}",
+                      *pd.version(),
+                      kFormatVersion)};
     }
 
     auto configEquals =

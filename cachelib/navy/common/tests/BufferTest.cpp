@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -100,7 +100,7 @@ TEST(Buffer, ToStringBinaryLong) {
   auto v = buf.view();
 
   const auto formatExpected = [](size_t size, const std::string& data) {
-    return folly::sformat("BufferView size={} <{}>", size, data);
+    return fmt::format("BufferView size={} <{}>", size, data);
   };
   EXPECT_EQ(formatExpected(81, replicate("07", 80) + "..."), toString(v));
   EXPECT_EQ(formatExpected(81, replicate("07", 81)), toString(v, false));

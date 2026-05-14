@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -32,7 +32,7 @@ size_t getEndOffset(size_t n, T... args) {
 bool checkContent(MutableBufferView view, uint8_t c) {
   bool match = true;
   for (size_t i = 0; i < view.size(); ++i) {
-    SCOPED_TRACE(folly::sformat("index of view: {}", i));
+    SCOPED_TRACE(fmt::format("index of view: {}", i));
     EXPECT_EQ(view.data()[i], c);
     if (view.data()[i] != c) {
       match = false;

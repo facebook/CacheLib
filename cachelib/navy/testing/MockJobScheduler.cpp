@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/testing/MockJobScheduler.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <cstdint>
 
@@ -66,7 +66,7 @@ bool MockJobScheduler::runFirstIfLocked(folly::StringPiece expected,
   if (!first.nameIs(expected)) {
     q_.push_front(std::move(first));
     throwLogicError(
-        folly::sformat("found job '{}', expected '{}'", first.name, expected));
+        fmt::format("found job '{}', expected '{}'", first.name, expected));
   }
   JobExitCode ec;
   {

@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/lang/Bits.h>
 
 #include <algorithm>
@@ -37,29 +37,29 @@ uint64_t minus(uint64_t a, uint64_t b) { return a < b ? 0ULL : a - b; }
 } // namespace
 DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
   if (targetRate == 0) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Target rate must be greater than 0. Target rate: {}", targetRate)};
   }
   if (updateInterval == std::chrono::seconds{0}) {
     throw std::invalid_argument{
-        folly::sformat("Update interval must be greater than 0. Interval: {}",
-                       updateInterval.count())};
+        fmt::format("Update interval must be greater than 0. Interval: {}",
+                    updateInterval.count())};
   }
   if (probabilitySeed <= 0) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Probability seed must be greater than 0. Seed: {}", probabilitySeed)};
   }
   if (baseSize == 0) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Base size must be greater than 0. Base size: {}", baseSize)};
   }
   if (!between(probabilitySizeDecay, 0, 1)) {
-    throw std::invalid_argument{folly::sformat(
-        "Probability size decay must be in range [0, 1]. Decay: {}",
-        probabilitySizeDecay)};
+    throw std::invalid_argument{
+        fmt::format("Probability size decay must be in range [0, 1]. Decay: {}",
+                    probabilitySizeDecay)};
   }
   if (!betweenStrict(changeWindow, 0, 1)) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Change window must be in range (0, 1). Change: {}", changeWindow)};
   }
   if (!fnBytesWritten) {

@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <numeric>
 
@@ -27,7 +27,7 @@ unsigned int accumulate(const std::vector<unsigned int>& nums) {
       nums.begin(), nums.end(), 0u, [](unsigned int a, unsigned int b) {
         if (b == 0) {
           throw std::invalid_argument(
-              folly::sformat("Expected non-zero element. Actual: {}", b));
+              fmt::format("Expected non-zero element. Actual: {}", b));
         }
         return a + b;
       });
@@ -87,8 +87,8 @@ void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {
 
 void FifoPolicy::getCounters(const CounterVisitor& v) const {
   std::lock_guard lock{mutex_};
-  v(folly::sformat("navy_bc_fifo_size"), queue_.size());
-  v(folly::sformat("navy_bc_fifo_age"),
+  v(fmt::format("navy_bc_fifo_size"), queue_.size());
+  v(fmt::format("navy_bc_fifo_age"),
     queue_.empty() ? 0 : queue_.front().secondsSinceTracking().count());
 }
 
@@ -179,8 +179,8 @@ void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
   int idx = 0;
   std::lock_guard lock{mutex_};
   for (auto& segment : segments_) {
-    v(folly::sformat("navy_bc_sfifo_segment_{}_size", idx), segment.size());
-    v(folly::sformat("navy_bc_sfifo_segment_{}_age", idx),
+    v(fmt::format("navy_bc_sfifo_segment_{}_size", idx), segment.size());
+    v(fmt::format("navy_bc_sfifo_segment_{}_age", idx),
       segment.empty() ? 0 : segment.front().secondsSinceTracking().count());
     idx++;
   }

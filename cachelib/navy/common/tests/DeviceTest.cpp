@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/File.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
@@ -397,7 +398,7 @@ struct DeviceParamTest
 
 TEST_P(DeviceParamTest, ExclusiveOwner) {
   auto filePath =
-      folly::sformat("/tmp/DEVICE_EXCLUSIVE_OWNER_TEST-{}", ::getpid());
+      fmt::format("/tmp/DEVICE_EXCLUSIVE_OWNER_TEST-{}", ::getpid());
   std::vector<std::string> filePaths{filePath};
 
   int deviceSize = 16 * 1024;
@@ -419,7 +420,7 @@ TEST_P(DeviceParamTest, ExclusiveOwner) {
 }
 
 TEST_P(DeviceParamTest, MaxWriteSize) {
-  auto filePath = folly::sformat("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());
   std::vector<std::string> filePaths{filePath};
 
   int deviceSize = 16 * 1024;
@@ -454,7 +455,7 @@ TEST_P(DeviceParamTest, MaxWriteSize) {
 }
 
 TEST_P(DeviceParamTest, RAID0IO) {
-  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
@@ -532,7 +533,7 @@ TEST_P(DeviceParamTest, RAID0IOAlignment) {
   // The goal of this test is to ensure we cannot create a RAID0 device
   // if each individual device is not aligned to stripe size. This is to
   // test against a bug that was uncovered in T68874972.
-  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
+  auto filePath = fmt::format("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 

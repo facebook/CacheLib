@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <vector>
 
@@ -408,7 +408,7 @@ void SparseMapIndex::recover(
     auto bucketMap = deserializeProto<serialization::IndexBucket>(rr->get());
     uint32_t id = *bucketMap.bucketId();
     if (id >= numBucketMaps_) {
-      throw std::invalid_argument{folly::sformat(
+      throw std::invalid_argument{fmt::format(
           "Invalid bucket map id. Max bucketMaps: {}, bucket map id: {}",
           numBucketMaps_,
           id)};

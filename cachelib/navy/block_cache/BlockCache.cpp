@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/block_cache/BlockCache.h"
 
+#include <fmt/core.h>
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 
@@ -49,10 +50,10 @@ BlockCache::Config& BlockCache::Config::validate() {
   }
   if (cacheSize % regionSize != 0) {
     throw std::invalid_argument(
-        folly::sformat("Cache size is not aligned to region size! cache size: "
-                       "{}, region size: {}",
-                       cacheSize,
-                       regionSize));
+        fmt::format("Cache size is not aligned to region size! cache size: "
+                    "{}, region size: {}",
+                    cacheSize,
+                    regionSize));
   }
   if (getNumRegions() < cleanRegionsPool) {
     throw std::invalid_argument("not enough space on device");
@@ -88,7 +89,7 @@ void BlockCache::validate(BlockCache::Config& config) const {
       facebook::cachelib::NumBits<decltype(RelAddress().offset())>::value;
   if (config.cacheSize > static_cast<uint64_t>(allocAlignSize) << shiftWidth) {
     throw std::invalid_argument(
-        folly::sformat("can't address cache with {} bits", shiftWidth));
+        fmt::format("can't address cache with {} bits", shiftWidth));
   }
 }
 
@@ -1194,7 +1195,7 @@ BlockCache::AllocData BlockCache::allocateImpl(const HashedKey& hk,
   if (desc.isReady()) {
     XDCHECK_LE(addr.offset() + size, regionManager_.regionSize());
     XDCHECK_EQ(size % allocAlignSize_, 0ULL)
-        << folly::sformat(" alignSize={}, size={}", allocAlignSize_, size);
+        << fmt::format(" alignSize={}, size={}", allocAlignSize_, size);
   }
   return std::make_tuple(std::move(desc), size, std::move(addr), view);
 }
@@ -1290,7 +1291,7 @@ Status BlockCache::readEntry(LookupData& ld,
   // size. So we need to ensure we're not reading past the region's beginning.
   approxSize = std::min(approxSize, addrEnd.offset());
 
-  XDCHECK_EQ(approxSize % allocAlignSize_, 0ULL) << folly::sformat(
+  XDCHECK_EQ(approxSize % allocAlignSize_, 0ULL) << fmt::format(
       " alignSize={}, approxSize={}", allocAlignSize_, approxSize);
 
   // Because we are going to look for EntryDesc in the buffer read, the buffer
@@ -1346,7 +1347,7 @@ Status BlockCache::readEntry(LookupData& ld,
   ld.lastAccessTimeSecs_ = desc.lastAccessTimeSecs;
   auto slice = ld.buffer_.view().slice(0, desc.valueSize);
   if (checksumData_ && desc.cs != checksum(slice)) {
-    XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
+    XLOG_N_PER_MS(ERR, 10, 10'000) << fmt::format(
         "Item value checksum mismatch in readEntry() looking up key {} in "
         "Region {}. Expected: {}, Actual: {}, Offset: {}, Physical-offset: {}, "
         "Value-size: {} Payload (hex): {}",

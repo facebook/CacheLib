@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/scheduler/NavyRequestScheduler.h"
 
+#include <fmt/core.h>
 #include <folly/fibers/ForEach.h>
 
 #include "cachelib/common/Profiled.h"
@@ -239,7 +240,7 @@ void NavyRequestScheduler::checkHealth(
   folly::fibers::forEach(funcs.begin(), funcs.end(), [](size_t, bool) {});
   if (!healthy) {
     numUnhealthy_++;
-    XLOG_N_PER_MS(ERR, 10, 600000) << folly::sformat(
+    XLOG_N_PER_MS(ERR, 10, 600000) << fmt::format(
         "Navy job scheduler health check failed ({})", numUnhealthy_);
   }
 }

@@ -16,7 +16,7 @@
 
 #include "cachelib/navy/Factory.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <stdexcept>
@@ -46,7 +46,7 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
                  uint64_t size,
                  uint32_t regionSize) override {
     if (size <= 0 || regionSize <= 0) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Invalid layout. size: {}, regionSize: {}.", size, regionSize));
     }
     config_.cacheBaseOffset = baseOffset;

@@ -326,7 +326,7 @@ void EnginePair::validate() {
       throw std::invalid_argument("Small item cache is set without a max size");
     }
     if (smallItemMaxSize_ > smallItemCache_->getMaxItemSize()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "small item max size should not exceed {} but is set to be {}.",
           smallItemCache_->getMaxItemSize(),
           smallItemMaxSize_));
