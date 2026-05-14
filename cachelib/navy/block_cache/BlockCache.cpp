@@ -1034,7 +1034,7 @@ void BlockCache::recordEvent(folly::StringPiece key,
       }
     }
 
-    eventTracker->recordWithoutSampling(eventInfo);
+    eventTracker->recordWithoutSampling(std::move(eventInfo));
   } else if (legacyEventTracker_.has_value()) {
     legacyEventTracker_->get().record(event, key, result, size);
   }

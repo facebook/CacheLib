@@ -112,18 +112,20 @@ class EventTracker {
 
   // This calls sampleKey and if sampled, adds the event
   // to the queue.
-  RecordResult record(EventInfo& eventInfo);
+  RecordResult record(EventInfo&& eventInfo);
 
-  // Sample key and track stats such as sample attempts
-  // and sucess. This function is also called from
-  // record. If you want one sample call per event
-  // then consider using sampleKey + recordWithoutSampling.
-  bool sampleKey(folly::StringPiece key);
+  FOLLY_ALWAYS_INLINE bool sampleKey(folly::StringPiece key) {
+    if (sampler_->shouldSample(key)) {
+      sampleSuccessCount_.inc();
+      return true;
+    }
+    return false;
+  }
 
   // For users who want to first call sampleKey and then call
   // recordWithoutSampling() if sampleKey returns true to avoid
   // allocating EventInfo object when it is not going to be sampled.
-  RecordResult recordWithoutSampling(EventInfo& eventInfo);
+  RecordResult recordWithoutSampling(EventInfo&& eventInfo);
 
   void getStats(folly::F14FastMap<std::string, uint64_t>& statsMap) const;
 
@@ -139,11 +141,9 @@ class EventTracker {
   std::function<void(EventInfo&)> preQueueCallback_;
   std::function<void(EventInfo&)> postQueueCallback_;
 
-  AtomicCounter recordCount_{0};
-  AtomicCounter sampleAttemptCount_{0};
-  AtomicCounter sampleSuccessCount_{0};
-  AtomicCounter dropCount_{0};
-  AtomicCounter addToQueueCount_{0};
+  TLCounter sampleSuccessCount_{0};
+  TLCounter dropCount_{0};
+  TLCounter addToQueueCount_{0};
 };
 
 } // namespace facebook::cachelib

@@ -191,7 +191,7 @@ void CacheBase::updateLegacyEventTrackerStats(
 void CacheBase::updateEventTrackerStats(const std::string& statPrefix) const {
   const std::string prefix = statPrefix + "event_tracker.";
   for (const auto& kv : getEventTrackerStatsMap()) {
-    counters_.updateCount(prefix + kv.first, kv.second);
+    counters_.updateDelta(prefix + kv.first, kv.second);
   }
 }
 

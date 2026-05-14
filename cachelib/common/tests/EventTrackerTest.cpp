@@ -194,7 +194,7 @@ class EventTrackerTest : public ::testing::Test {
     }
     for (uint32_t i = startIdx; i < endIdx; i++) {
       EventInfo event = events.at(i);
-      tracker->record(event);
+      tracker->record(std::move(event));
     }
   }
 };
@@ -292,7 +292,7 @@ TEST_F(EventTrackerTest, NvmAdmitWithSize) {
     eventInfo.size = testSize;
     eventInfo.usecaseId = testUsecaseId;
 
-    eventTracker->record(eventInfo);
+    eventTracker->record(std::move(eventInfo));
   }
 
   auto csvRows = readCsvRows(tmpFile);
@@ -501,7 +501,7 @@ TEST_F(EventTrackerTest, PreAndPostQueueCallbacks) {
     eventInfo.eventTimestamp = 12345;
     eventInfo.size = 512;
 
-    auto result = tracker->record(eventInfo);
+    auto result = tracker->record(std::move(eventInfo));
     ASSERT_EQ(result, RecordResult::QUEUED);
 
     // Wait for background thread to process the event

@@ -1957,6 +1957,17 @@ class CacheAllocator : public CacheBase {
     return 0;
   }
 
+  // Returns true iff a configured tracker would consume this event. Hot-path
+  // gate that lets callers skip both the sampling-related work and any
+  // EventRecordParams construction (e.g., getAllocInfo) when no tracker is
+  // configured or sampling rejects the key.
+  FOLLY_ALWAYS_INLINE bool shouldRecordEvent(Key key) const {
+    if (auto* eventTracker = getEventTracker()) {
+      return eventTracker->sampleKey(key);
+    }
+    return getLegacyEventTracker() != nullptr;
+  }
+
   /**
    * Record event, key, result and info from a struct of type EventRecordParams.
    *
@@ -1976,12 +1987,9 @@ class CacheAllocator : public CacheBase {
                    Key key,
                    AllocatorApiResult result,
                    EventRecordParams params = {}) const {
-    if (auto* eventTracker = getEventTracker()) {
-      if (!eventTracker->sampleKey(key)) {
-        return;
-      }
+    if (shouldRecordEvent(key)) {
+      recordEventWithoutSampling(event, key, result, std::move(params));
     }
-    recordEventWithoutSampling(event, key, result, std::move(params));
   }
 
   // Record event without calling sampleKey(). Use when the caller has already
@@ -2015,7 +2023,7 @@ class CacheAllocator : public CacheBase {
         eventInfo.poolId = *params.poolId;
       }
 
-      eventTracker->recordWithoutSampling(eventInfo);
+      eventTracker->recordWithoutSampling(std::move(eventInfo));
     } else if (auto legacyEventTracker = getLegacyEventTracker()) {
       folly::Optional<uint32_t> size =
           params.size
@@ -2024,6 +2032,17 @@ class CacheAllocator : public CacheBase {
       uint32_t ttl = params.ttlSecs ? *params.ttlSecs : 0;
       legacyEventTracker->record(event, key, result, size, ttl);
     }
+  }
+
+  template <typename HandleT>
+  EventRecordParams makeEventRecordParams(const HandleT& handle) const {
+    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
+    return EventRecordParams{
+        .size = handle->getSize(),
+        .ttlSecs = static_cast<uint32_t>(handle->getConfiguredTTL().count()),
+        .expiryTime = handle->getExpiryTime(),
+        .allocSize = allocInfo.allocSize,
+        .poolId = allocInfo.poolId};
   }
 
   /**
@@ -2042,19 +2061,15 @@ class CacheAllocator : public CacheBase {
                    Key key,
                    AllocatorApiResult result,
                    const HandleT& handle) const {
-    if (!handle) {
-      recordEvent(event, key, result);
+    if (!shouldRecordEvent(key)) {
       return;
     }
-
-    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
-    recordEvent(event, key, result,
-                EventRecordParams{.size = handle->getSize(),
-                                  .ttlSecs = static_cast<uint32_t>(
-                                      handle->getConfiguredTTL().count()),
-                                  .expiryTime = handle->getExpiryTime(),
-                                  .allocSize = allocInfo.allocSize,
-                                  .poolId = allocInfo.poolId});
+    if (handle) {
+      recordEventWithoutSampling(event, key, result,
+                                 makeEventRecordParams(handle));
+    } else {
+      recordEventWithoutSampling(event, key, result);
+    }
   }
 
  public:
@@ -3081,21 +3096,21 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     }
   }
 
-  const auto result =
-      handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-  uint32_t ttl =
-      handle ? static_cast<uint32_t>(handle->getConfiguredTTL().count())
-             : (expiryTime > creationTime ? (expiryTime - creationTime) : 0);
-
-  // Get allocInfo when handle is available to log poolId and allocSize
-  EventRecordParams eventParams{
-      .size = size, .ttlSecs = ttl, .expiryTime = expiryTime};
-  if (handle) {
-    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
-    eventParams.allocSize = allocInfo.allocSize;
-    eventParams.poolId = allocInfo.poolId;
+  if (shouldRecordEvent(key)) {
+    if (handle) {
+      auto eventParams = makeEventRecordParams(handle);
+      eventParams.size = size;
+      recordEventWithoutSampling(AllocatorApiEvent::ALLOCATE, key,
+                                 AllocatorApiResult::ALLOCATED, eventParams);
+    } else {
+      const uint32_t ttl =
+          expiryTime > creationTime ? (expiryTime - creationTime) : 0;
+      recordEventWithoutSampling(
+          AllocatorApiEvent::ALLOCATE, key, AllocatorApiResult::FAILED,
+          EventRecordParams{
+              .size = size, .ttlSecs = ttl, .expiryTime = expiryTime});
+    }
   }
-  recordEvent(AllocatorApiEvent::ALLOCATE, key, result, eventParams);
 
   return handle;
 }

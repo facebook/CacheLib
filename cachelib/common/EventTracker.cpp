@@ -43,16 +43,6 @@ void EventTracker::validateConfig() {
   }
 }
 
-bool EventTracker::sampleKey(folly::StringPiece key) {
-  sampleAttemptCount_.inc();
-
-  if (sampler_->shouldSample(key)) {
-    sampleSuccessCount_.inc();
-    return true;
-  }
-  return false;
-}
-
 void EventTracker::runBackgroundThread() {
   try {
     while (true) {
@@ -78,20 +68,19 @@ void EventTracker::runBackgroundThread() {
   }
 }
 
-RecordResult EventTracker::record(EventInfo& eventInfo) {
-  recordCount_.inc();
+RecordResult EventTracker::record(EventInfo&& eventInfo) {
   if (!sampleKey(eventInfo.key)) {
     return RecordResult::NOT_SAMPLED;
   }
-  return recordWithoutSampling(eventInfo);
+  return recordWithoutSampling(std::move(eventInfo));
 }
 
-RecordResult EventTracker::recordWithoutSampling(EventInfo& eventInfo) {
+RecordResult EventTracker::recordWithoutSampling(EventInfo&& eventInfo) {
   addToQueueCount_.inc();
   if (preQueueCallback_) {
     preQueueCallback_(eventInfo);
   }
-  bool addedToQueue = eventInfoQueue_.write(eventInfo);
+  bool addedToQueue = eventInfoQueue_.write(std::move(eventInfo));
   if (!addedToQueue) {
     dropCount_.inc();
   }
@@ -100,8 +89,6 @@ RecordResult EventTracker::recordWithoutSampling(EventInfo& eventInfo) {
 
 void EventTracker::getStats(
     folly::F14FastMap<std::string, uint64_t>& statsMap) const {
-  statsMap["record"] = recordCount_.get();
-  statsMap["sample_attempts"] = sampleAttemptCount_.get();
   statsMap["sample_success"] = sampleSuccessCount_.get();
   statsMap["dropped"] = dropCount_.get();
   statsMap["add_to_queue"] = addToQueueCount_.get();
