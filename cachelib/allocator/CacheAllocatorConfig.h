@@ -749,9 +749,13 @@ class CacheAllocatorConfig {
 
 #if FOLLY_SANITIZE_ADDRESS
   // If true, slab memory is ASAN-poisoned on free and unpoisoned on allocation.
-  // Disabled by default to avoid overhead in ASAN builds. Enable for testing
-  // or when actively debugging memory issues.
+#ifdef CACHELIB_TEST_BUILD
+  // Enabled by default in test builds
+  bool enableSlabAsanPoisoning{true};
+#else
+  // Disabled by default in production ASAN builds to avoid overhead.
   bool enableSlabAsanPoisoning{false};
+#endif
 #endif
 
   friend CacheT;
