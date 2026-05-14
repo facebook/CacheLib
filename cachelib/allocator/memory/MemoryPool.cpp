@@ -25,7 +25,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #pragma GCC diagnostic pop
 
 using namespace facebook::cachelib;
@@ -92,17 +92,16 @@ MemoryPool::MemoryPool(const serialization::MemoryPoolObject& object,
 
 void MemoryPool::checkState() const {
   if (id_ < 0) {
-    throw std::invalid_argument(
-        folly::sformat("Invaild MemoryPool id {}", id_));
+    throw std::invalid_argument(fmt::format("Invaild MemoryPool id {}", id_));
   }
 
   const size_t currAlloc = currAllocSize_;
   const size_t currSlabAlloc = currSlabAllocSize_;
   if (currAlloc > currSlabAlloc) {
     throw std::invalid_argument(
-        folly::sformat("Alloc size {} is more than total slab alloc size {}",
-                       currAlloc,
-                       currSlabAlloc));
+        fmt::format("Alloc size {} is more than total slab alloc size {}",
+                    currAlloc,
+                    currSlabAlloc));
   }
 
   if (acSizes_.empty() || ac_.empty()) {
@@ -110,7 +109,7 @@ void MemoryPool::checkState() const {
   }
 
   if (acSizes_.size() != ac_.size()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Allocation classes are not setup correctly. acSize.size = {}, but "
         "ac.size() = {}",
         acSizes_.size(), ac_.size()));
@@ -124,13 +123,13 @@ void MemoryPool::checkState() const {
       std::adjacent_find(acSizes_.begin(), acSizes_.end());
   if (firstDuplicate != acSizes_.end()) {
     throw std::invalid_argument(
-        folly::sformat("Duplicate allocation size: {}", *firstDuplicate));
+        fmt::format("Duplicate allocation size: {}", *firstDuplicate));
   }
 
   for (size_t i = 0; i < acSizes_.size(); i++) {
     if (acSizes_[i] != ac_[i]->getAllocSize() ||
         acSizes_[i] < Slab::kMinAllocSize || acSizes_[i] > Slab::kSize) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Allocation Class with id {} and size {}, does not match the "
           "allocation size we expect {}",
           ac_[i]->getId(), ac_[i]->getAllocSize(), acSizes_[i]));
@@ -139,7 +138,8 @@ void MemoryPool::checkState() const {
 
   for (const auto slab : freeSlabs_) {
     if (!slabAllocator_.isValidSlab(slab)) {
-      throw std::invalid_argument(folly::sformat("Invalid free slab {}", slab));
+      throw std::invalid_argument(
+          fmt::format("Invalid free slab {}", fmt::ptr(slab)));
     }
   }
 }
@@ -150,7 +150,7 @@ MemoryPool::ACVector MemoryPool::createAllocationClasses() const {
   for (const auto size : acSizes_) {
     if (size < Slab::kMinAllocSize || size > Slab::kSize) {
       throw std::invalid_argument(
-          folly::sformat("Invalid allocation class size {}", size));
+          fmt::format("Invalid allocation class size {}", size));
     }
     ac.emplace_back(new AllocationClass(id++, getId(), size, slabAllocator_));
   }
@@ -184,7 +184,7 @@ AllocationClass& MemoryPool::getAllocationClassFor(ClassId cid) const {
     XDCHECK(ac_[cid] != nullptr);
     return *ac_[cid];
   }
-  throw std::invalid_argument(folly::sformat("Invalid classId {}", cid));
+  throw std::invalid_argument(fmt::format("Invalid classId {}", cid));
 }
 
 const AllocationClass& MemoryPool::getAllocationClass(ClassId cid) const {
@@ -194,7 +194,7 @@ const AllocationClass& MemoryPool::getAllocationClass(ClassId cid) const {
 ClassId MemoryPool::getAllocationClassId(uint32_t size) const {
   if (size > acSizes_.back() || size == 0) {
     throw std::invalid_argument(
-        folly::sformat("Invalid size for alloc {} ", size));
+        fmt::format("Invalid size for alloc {} ", size));
   }
 
   // can operate without holding the mutex since the vector does not change.
@@ -216,7 +216,7 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
   // unallocated slab or slab not allocated to this pool or slab that is
   // allocated to this pool but not any allocation class is a failure.
   if (header == nullptr || header->poolId != id_) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Memory {} [PoolId = {}] does not belong to this pool with id {}",
         memory,
         header ? header->poolId : Slab::kInvalidPoolId,
@@ -230,7 +230,7 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
     // at this point, the slab indicates that it belongs to a bogus classId and
     // things are corrupt and the caller cant do anything about it. so throw an
     // exception to abort.
-    throw std::runtime_error(folly::sformat(
+    throw std::runtime_error(fmt::format(
         "corrupt slab header/memory pool with class id {}", classId));
   }
 
@@ -268,8 +268,8 @@ Slab* MemoryPool::getSlabLocked() noexcept {
 bool MemoryPool::provision(const std::vector<uint32_t>& slabsDistribution) {
   if (slabsDistribution.size() != ac_.size()) {
     throw std::invalid_argument(
-        folly::sformat("Invalid slabs distribution. Expected {} ACs, Got {}",
-                       ac_.size(), slabsDistribution.size()));
+        fmt::format("Invalid slabs distribution. Expected {} ACs, Got {}",
+                    ac_.size(), slabsDistribution.size()));
   }
 
   auto freeAllSlabs = [this](const std::list<Slab*>& slabs) {
@@ -496,7 +496,7 @@ SlabReleaseContext MemoryPool::startSlabRelease(
     SlabReleaseAbortFn shouldAbortFn) {
   if (receiver != Slab::kInvalidClassId &&
       mode != SlabReleaseMode::kRebalance) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "A valid receiver {} is specified but the rebalancing mode is "
         "not SlabReleaseMode::kRebalance",
         receiver));
@@ -541,7 +541,7 @@ void MemoryPool::completeSlabRelease(const SlabReleaseContext& context) {
 
   if (context.getReceiverClassId() != Slab::kInvalidClassId &&
       context.getMode() != SlabReleaseMode::kRebalance) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "A valid receiver {} is specified but the rebalancing mode is "
         "not SlabReleaseMode::kRebalance",
         context.getReceiverClassId()));

@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 
+#include <fmt/core.h>
 #include <folly/Try.h>
 #include <folly/logging/xlog.h>
 
@@ -25,7 +26,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #include <folly/Random.h>
 #pragma GCC diagnostic pop
 
@@ -61,35 +61,35 @@ AllocationClass::AllocationClass(ClassId classId,
 void AllocationClass::checkState() const {
   // classId_ and allocationSize_ must be valid.
   if (classId_ < 0) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid Class Id {}", classId_));
+    throw std::invalid_argument(fmt::format("Invalid Class Id {}", classId_));
   }
 
   // Check size against FreeAlloc to ensure that we have sufficient memory
   // for the intrusive list's hook.
   if (allocationSize_ < sizeof(FreeAlloc) || allocationSize_ > Slab::kSize) {
     throw std::invalid_argument(
-        folly::sformat("Invalid alloc size {}", allocationSize_));
+        fmt::format("Invalid alloc size {}", allocationSize_));
   }
 
   const auto header = slabAlloc_.getSlabHeader(currSlab_);
   if (currSlab_ != nullptr && header == nullptr) {
-    throw std::invalid_argument(folly::sformat(
-        "Could not locate header for our current slab {}", currSlab_));
+    throw std::invalid_argument(
+        fmt::format("Could not locate header for our current slab {}",
+                    fmt::ptr(currSlab_)));
   }
 
   if (header != nullptr && header->classId != classId_) {
-    throw std::invalid_argument(folly::sformat(
-        "ClassId of currSlab {} is not the same as our classId {}",
-        header->classId, classId_));
+    throw std::invalid_argument(
+        fmt::format("ClassId of currSlab {} is not the same as our classId {}",
+                    header->classId, classId_));
   }
 
   if (currSlab_ != nullptr &&
       std::find(allocatedSlabs_.begin(), allocatedSlabs_.end(), currSlab_) ==
           allocatedSlabs_.end()) {
-    throw std::invalid_argument(folly::sformat(
-        "Current allocation slab {} is not in allocated slabs list",
-        currSlab_));
+    throw std::invalid_argument(
+        fmt::format("Current allocation slab {} is not in allocated slabs list",
+                    fmt::ptr(currSlab_)));
   }
 }
 
@@ -252,8 +252,8 @@ SlabReleaseContext AllocationClass::startSlabRelease(
   LockHolder startSlabReleaseLockHolder(startSlabReleaseLock_);
   const auto* hintSlab = slabAlloc_.getSlabForMemory(hint);
   if (hint != nullptr && !slabAlloc_.isValidSlab(hintSlab)) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid hint {} for slab release {}", hint, hintSlab));
+    throw std::invalid_argument(fmt::format(
+        "Invalid hint {} for slab release {}", hint, fmt::ptr(hintSlab)));
   }
 
   const Slab* slab;
@@ -270,10 +270,11 @@ SlabReleaseContext AllocationClass::startSlabRelease(
     // slab header must be valid and NOT marked for release
     if (header == nullptr || header->classId != getId() ||
         header->poolId != getPoolId() || header->isMarkedForRelease()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Slab Header {} is in invalid state for release. id = {}, "
           "markedForRelease = {}, classId = {}",
-          header, header == nullptr ? Slab::kInvalidClassId : header->classId,
+          fmt::ptr(header),
+          header == nullptr ? Slab::kInvalidClassId : header->classId,
           header == nullptr ? false : header->isMarkedForRelease(), getId()));
     }
 
@@ -300,9 +301,9 @@ SlabReleaseContext AllocationClass::startSlabRelease(
       // error, return to caller. This should not happen. throw a run time
       // error.
       throw std::runtime_error(
-          folly::sformat("Slab {} belongs to class {}. But its not present in "
-                         "the free list or allocated list.",
-                         slab, getId()));
+          fmt::format("Slab {} belongs to class {}. But its not present in "
+                      "the free list or allocated list.",
+                      fmt::ptr(slab), getId()));
     }
     *allocIt = allocatedSlabs_.back();
     allocatedSlabs_.pop_back();
@@ -329,9 +330,9 @@ SlabReleaseContext AllocationClass::startSlabRelease(
       slabReleaseAllocMap_.erase(getSlabPtrValue(slab));
     });
     throw exception::SlabReleaseAborted(
-        folly::sformat("Slab Release aborted "
-                       "during pruning free allocs. Slab address: {}",
-                       slab));
+        fmt::format("Slab Release aborted "
+                    "during pruning free allocs. Slab address: {}",
+                    fmt::ptr(slab)));
   }
   std::vector<void*> activeAllocations = std::move(results.second);
   return lock_->lock_combine([&]() {
@@ -354,7 +355,7 @@ SlabReleaseContext AllocationClass::startSlabRelease(
 
 void* AllocationClass::getAllocForIdx(const Slab* slab, size_t idx) const {
   if (idx >= getAllocsPerSlab()) {
-    throw std::invalid_argument(folly::sformat("Invalid index {}", idx));
+    throw std::invalid_argument(fmt::format("Invalid index {}", idx));
   }
   return slab->memoryAtOffset(idx * allocationSize_);
 }
@@ -494,8 +495,9 @@ bool AllocationClass::allFreed(const Slab* slab) const {
   return lock_->lock_combine([this, slab]() {
     const auto it = slabReleaseAllocMap_.find(getSlabPtrValue(slab));
     if (it == slabReleaseAllocMap_.end()) {
-      throw std::runtime_error(folly::sformat(
-          "Slab {} is not in the active slab release allocation map.", slab));
+      throw std::runtime_error(fmt::format(
+          "Slab {} is not in the active slab release allocation map.",
+          fmt::ptr(slab)));
     }
 
     const auto& allocState = it->second;
@@ -522,7 +524,7 @@ void AllocationClass::waitUntilAllFreed(const Slab* slab) {
 
 void AllocationClass::abortSlabRelease(const SlabReleaseContext& context) {
   if (context.isReleased()) {
-    throw std::invalid_argument(folly::sformat("context is already released"));
+    throw std::invalid_argument(fmt::format("context is already released"));
   }
   auto slab = context.getSlab();
   const auto slabPtrVal = getSlabPtrValue(slab);
@@ -567,8 +569,9 @@ void AllocationClass::completeSlabRelease(const SlabReleaseContext& context) {
     // slab header must be valid and marked for release
     if (header == nullptr || header->classId != getId() ||
         !header->isMarkedForRelease()) {
-      throw std::runtime_error(folly::sformat(
-          "The slab at {} with header at {} is invalid", slab, header));
+      throw std::runtime_error(
+          fmt::format("The slab at {} with header at {} is invalid",
+                      fmt::ptr(slab), fmt::ptr(header)));
     }
   });
 
@@ -595,7 +598,7 @@ void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
                                          const void* memory) const {
   const auto* header = slabAlloc_.getSlabHeader(memory);
   if (header == nullptr || header->classId != classId_) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "trying to check memory {} (with ClassId {}), not belonging to this "
         "AllocationClass (ClassID {})",
         memory,
@@ -603,7 +606,7 @@ void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
         classId_));
   }
   if (!header->isMarkedForRelease()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "trying whether memory at {} (with ClassID {}) is freed, but header is "
         "not marked for release",
         memory,
@@ -611,7 +614,7 @@ void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
   }
   const auto* slab = slabAlloc_.getSlabForMemory(memory);
   if (slab != ctx.getSlab()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "trying to check memory {} (with ClassId {}), against an invalid slab "
         "release context (ClassID {})",
         memory,
@@ -629,9 +632,9 @@ bool AllocationClass::isAllocFreedLocked(const SlabReleaseContext& /*ctx*/,
   // this should not happen
   if (it == slabReleaseAllocMap_.end()) {
     throw std::runtime_error(
-        folly::sformat("Invalid slabReleaseAllocMap "
-                       "state when checking if memory is freed. Memory: {}",
-                       memory));
+        fmt::format("Invalid slabReleaseAllocMap "
+                    "state when checking if memory is freed. Memory: {}",
+                    memory));
   }
 
   const auto& allocState = it->second;
@@ -662,7 +665,7 @@ void AllocationClass::free(void* memory) {
   const auto* header = slabAlloc_.getSlabHeader(memory);
   auto* slab = slabAlloc_.getSlabForMemory(memory);
   if (header == nullptr || header->classId != classId_) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "trying to free memory {} (with ClassId {}), not belonging to this "
         "AllocationClass (ClassId {})",
         memory, header ? header->classId : Slab::kInvalidClassId, classId_));
@@ -676,7 +679,7 @@ void AllocationClass::free(void* memory) {
 
       // this should not happen.
       if (it == slabReleaseAllocMap_.end()) {
-        throw std::runtime_error(folly::sformat(
+        throw std::runtime_error(fmt::format(
             "Invalid slabReleaseAllocMap "
             "state when attempting to free an allocation. Memory: {}",
             memory));
@@ -686,7 +689,7 @@ void AllocationClass::free(void* memory) {
       const auto idx = getAllocIdx(slab, memory);
       if (allocState[idx]) {
         throw std::invalid_argument(
-            folly::sformat("Allocation {} is already marked as free", memory));
+            fmt::format("Allocation {} is already marked as free", memory));
       }
       slabAlloc_.asanPoisonMemoryRegion(memory, allocationSize_);
       allocState[idx] = true;
@@ -750,8 +753,8 @@ AllocationClass::createSlabReleaseAllocMapLocked(const Slab* slab) {
       slabReleaseAllocMap_.insert({slabPtrVal, std::move(allocState)});
   if (!res.second) {
     // this should never happen. we must always be able to insert.
-    throw std::runtime_error(
-        folly::sformat("failed to insert allocState map for slab {}", slab));
+    throw std::runtime_error(fmt::format(
+        "failed to insert allocState map for slab {}", fmt::ptr(slab)));
   }
   return res.first;
 }

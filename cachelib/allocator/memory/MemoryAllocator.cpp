@@ -16,7 +16,7 @@
 
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <algorithm>
 #include <utility>
@@ -42,10 +42,10 @@ std::pair<uint32_t, uint32_t> validateAndClampItemSizeRange(
   }
   if (maxItemSize > Slab::kSize) {
     throw std::invalid_argument(
-        folly::sformat("maxItemSize must be <= {} because allocation size "
-                       "must be <= {} (Slab::kSize)",
-                       Slab::kSize,
-                       Slab::kSize));
+        fmt::format("maxItemSize must be <= {} because allocation size "
+                    "must be <= {} (Slab::kSize)",
+                    Slab::kSize,
+                    Slab::kSize));
   }
 
   // Handling items smaller than Slab::kMinAllocSize as Slab::kMinAllocSize
@@ -127,7 +127,7 @@ PoolId MemoryAllocator::addPool(folly::StringPiece name,
 
   if (ensureProvisionable &&
       cachelib::Slab::kSize * poolAllocSizes.size() > size) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Pool {} cannot have at least one slab for each allocation class. "
         "{} bytes required, {} bytes given.",
         name,
@@ -231,12 +231,12 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
     bool reduceFragmentation) {
   if (maxSize > Slab::kSize) {
     throw std::invalid_argument(
-        folly::sformat("maximum alloc size {} is more than the slab size {}",
-                       maxSize, Slab::kSize));
+        fmt::format("maximum alloc size {} is more than the slab size {}",
+                    maxSize, Slab::kSize));
   }
 
   if (factor <= 1.0) {
-    throw std::invalid_argument(folly::sformat("invalid factor {}", factor));
+    throw std::invalid_argument(fmt::format("invalid factor {}", factor));
   }
 
   // Returns the next chunk size. Uses the previous size and factor to select a
@@ -254,7 +254,7 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
                                      kAlignment);
       if (newSize == tmpPrevSize) {
         throw std::invalid_argument(
-            folly::sformat("invalid incFactor {}", incFactor));
+            fmt::format("invalid incFactor {}", incFactor));
       }
 
       if (newSize > Slab::kSize) {
@@ -286,7 +286,7 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
                                   kAlignment);
       if (prevSize == size) {
         throw std::invalid_argument(
-            folly::sformat("invalid incFactor {}", factor));
+            fmt::format("invalid incFactor {}", factor));
       }
     }
   }
@@ -337,10 +337,10 @@ std::set<uint32_t> MemoryAllocator::generateOptimalAllocSizesForItemRange(
     allocSizes.insert(alignedSize);
     if (allocSizes.size() > kMaxClasses) {
       throw std::runtime_error(
-          folly::sformat("Optimal number of allocations required is at least "
-                         "{} which is more than the "
-                         "maximum number of allocation classes allowed {}",
-                         allocSizes.size(), kMaxClasses));
+          fmt::format("Optimal number of allocations required is at least "
+                      "{} which is more than the "
+                      "maximum number of allocation classes allowed {}",
+                      allocSizes.size(), kMaxClasses));
     }
   }
   XDCHECK_LE(maxItemSize, *allocSizes.rbegin());
@@ -358,8 +358,8 @@ std::set<uint32_t> MemoryAllocator::generateEvenlyDistributedAllocSizes(
 
   if (numClassesToAdd > kMaxClasses) {
     throw std::invalid_argument(
-        folly::sformat("numClassesToAdd {} exceeds maximum allowed {}",
-                       numClassesToAdd, kMaxClasses));
+        fmt::format("numClassesToAdd {} exceeds maximum allowed {}",
+                    numClassesToAdd, kMaxClasses));
   }
 
   std::set<uint32_t> allocSizes;

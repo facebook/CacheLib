@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/memory/SlabAllocator.h"
 
+#include <fmt/core.h>
 #include <folly/Likely.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
@@ -52,29 +53,30 @@ FOLLY_DISABLE_ADDRESS_SANITIZER void touchAddr(const uint8_t* addr) {
 void SlabAllocator::checkState() const {
   if (memoryStart_ == nullptr || memorySize_ <= Slab::kSize) {
     throw std::invalid_argument(
-        folly::sformat("Invalid memory spec. memoryStart = {}, size = {}",
-                       memoryStart_,
-                       memorySize_));
+        fmt::format("Invalid memory spec. memoryStart = {}, size = {}",
+                    memoryStart_,
+                    memorySize_));
   }
 
   if (slabMemoryStart_ == nullptr || nextSlabAllocation_ == nullptr) {
     throw std::invalid_argument(
-        folly::sformat("Invalid slabMemoryStart_ {} of nextSlabAllocation_ {}",
-                       slabMemoryStart_,
-                       nextSlabAllocation_));
+        fmt::format("Invalid slabMemoryStart_ {} of nextSlabAllocation_ {}",
+                    fmt::ptr(slabMemoryStart_),
+                    fmt::ptr(nextSlabAllocation_)));
   }
 
   // nextSlabAllocation_ should be valid.
   if (nextSlabAllocation_ > getSlabMemoryEnd()) {
     throw std::invalid_argument(
-        folly::sformat("Invalid nextSlabAllocation_ {}, with SlabMemoryEnd {}",
-                       nextSlabAllocation_,
-                       getSlabMemoryEnd()));
+        fmt::format("Invalid nextSlabAllocation_ {}, with SlabMemoryEnd {}",
+                    fmt::ptr(nextSlabAllocation_),
+                    fmt::ptr(getSlabMemoryEnd())));
   }
 
   for (const auto slab : freeSlabs_) {
     if (!isValidSlab(slab)) {
-      throw std::invalid_argument(folly::sformat("Invalid free slab {}", slab));
+      throw std::invalid_argument(
+          fmt::format("Invalid free slab {}", fmt::ptr(slab)));
     }
   }
 }
@@ -164,14 +166,14 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
 #endif
 {
   if (Slab::kSize != *object.slabSize()) {
-    throw std::invalid_argument(folly::sformat(
-        "current slab size {} does not match the previous one {}",
-        Slab::kSize,
-        *object.slabSize()));
+    throw std::invalid_argument(
+        fmt::format("current slab size {} does not match the previous one {}",
+                    Slab::kSize,
+                    *object.slabSize()));
   }
 
   if (getMinAllocSize() != *object.minAllocSize()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "current min alloc size {} does not match the previous one {}",
         getMinAllocSize(),
         *object.minAllocSize()));
@@ -181,10 +183,10 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
 
   const size_t currSize = roundDownToSlabSize(memSize);
   if (memorySize_ != currSize) {
-    throw std::invalid_argument(folly::sformat(
-        "Memory size {} does not match the saved state's size {}",
-        currSize,
-        memorySize_));
+    throw std::invalid_argument(
+        fmt::format("Memory size {} does not match the saved state's size {}",
+                    currSize,
+                    memorySize_));
   }
 
   if (config.excludeFromCoredump) {
@@ -195,9 +197,9 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
     const PoolId id = pair.first;
     if (id >= static_cast<PoolId>(memoryPoolSize_.size())) {
       throw std::invalid_argument(
-          folly::sformat("Invalid class id {}. Max Class Id {}",
-                         id,
-                         memoryPoolSize_.size() - 1));
+          fmt::format("Invalid class id {}. Max Class Id {}",
+                      id,
+                      memoryPoolSize_.size() - 1));
     }
     memoryPoolSize_[id] = pair.second;
   }
@@ -334,7 +336,7 @@ Slab* SlabAllocator::computeSlabMemoryStart(void* memoryStart,
   if (memoryStart == nullptr ||
       reinterpret_cast<uintptr_t>(memoryStart) % sizeof(Slab)) {
     throw std::invalid_argument(
-        folly::sformat("Invalid memory start {}", memoryStart));
+        fmt::format("Invalid memory start {}", memoryStart));
   }
 
   // reserve the first numHeaderSlabs for storing the header info for all the
@@ -395,7 +397,7 @@ void SlabAllocator::freeSlab(Slab* slab) {
   auto* header = getSlabHeader(slab);
   XDCHECK(header != nullptr);
   if (header == nullptr) {
-    throw std::runtime_error(folly::sformat("Invalid Slab {}", slab));
+    throw std::runtime_error(fmt::format("Invalid Slab {}", fmt::ptr(slab)));
   }
 
   memoryPoolSize_[header->poolId] -= sizeof(Slab);
@@ -410,7 +412,7 @@ bool SlabAllocator::adviseSlab(Slab* slab) {
   // find the header for the slab.
   auto* header = getSlabHeader(slab);
   if (header == nullptr) {
-    throw std::runtime_error(folly::sformat("Invalid Slab {}", slab));
+    throw std::runtime_error(fmt::format("Invalid Slab {}", fmt::ptr(slab)));
   }
   // Mark slab as advised in header prior to advising to avoid it from being
   // touched during memory locking.

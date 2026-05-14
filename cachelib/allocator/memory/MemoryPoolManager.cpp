@@ -18,7 +18,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <memory>
 #pragma GCC diagnostic pop
@@ -69,7 +69,7 @@ MemoryPoolManager::MemoryPoolManager(
   auto slabsAdvised = getNumSlabsAdvised();
   auto slabAllocAdvised = slabAlloc_.numSlabsReclaimable();
   if (slabsAdvised != slabAllocAdvised) {
-    throw std::logic_error(folly::sformat(
+    throw std::logic_error(fmt::format(
         "Aggregate of advised slabs in pools {} is not same as SlabAllocator"
         " number of slabs advised {}",
         slabsAdvised, slabAllocAdvised));
@@ -113,7 +113,7 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
   const size_t remaining = getRemainingSizeLocked();
   if (remaining < poolSize) {
     // not enough memory to create a new pool.
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Not enough memory ({} bytes) to create a new pool of size {} bytes",
         remaining,
         poolSize));
@@ -130,7 +130,7 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
 bool MemoryPoolManager::provisionPool(
     PoolId pid, const std::vector<uint32_t>& slabsDistribution) {
   if (pid >= static_cast<PoolId>(pools_.size())) {
-    throw std::invalid_argument(folly::sformat("Invalid pool id {}", pid));
+    throw std::invalid_argument(fmt::format("Invalid pool id {}", pid));
   }
   return pools_[pid]->provision(slabsDistribution);
 }
@@ -139,7 +139,7 @@ MemoryPool& MemoryPoolManager::getPoolByName(std::string_view name) const {
   std::shared_lock l(lock_);
   auto it = poolsByName_.find(name);
   if (it == poolsByName_.end()) {
-    throw std::invalid_argument(folly::sformat("Invalid pool name {}", name));
+    throw std::invalid_argument(fmt::format("Invalid pool name {}", name));
   }
 
   auto poolId = it->second;
@@ -156,7 +156,7 @@ MemoryPool& MemoryPoolManager::getPoolById(PoolId id) const {
     XDCHECK(pools_[id] != nullptr);
     return *pools_[id];
   }
-  throw std::invalid_argument(folly::sformat("Invalid pool id {}", id));
+  throw std::invalid_argument(fmt::format("Invalid pool id {}", id));
 }
 
 const std::string& MemoryPoolManager::getPoolNameById(PoolId id) const {
@@ -166,7 +166,7 @@ const std::string& MemoryPoolManager::getPoolNameById(PoolId id) const {
       return pair.first;
     }
   }
-  throw std::invalid_argument(folly::sformat("Invalid pool id {}", id));
+  throw std::invalid_argument(fmt::format("Invalid pool id {}", id));
 }
 
 serialization::MemoryPoolManagerObject MemoryPoolManager::saveState() const {
