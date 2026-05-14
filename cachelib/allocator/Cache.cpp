@@ -408,7 +408,7 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   counters_.updateCount(statPrefix + "ram.new_cache", stats.isNewRamCache);
   counters_.updateCount(statPrefix + "nvm.new_cache", stats.isNewNvmCache);
   counters_.updateCount(statPrefix + "cache.new_cache",
-                        stats.isNewRamCache || stats.isNewRamCache);
+                        stats.isNewRamCache || stats.isNewNvmCache);
 
   counters_.updateCount(statPrefix + "nvm.enabled", stats.nvmCacheEnabled);
 
