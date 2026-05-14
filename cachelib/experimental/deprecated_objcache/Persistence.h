@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -191,7 +192,7 @@ class RestorerWorker : public PeriodicWorker {
         objcache_(objcache),
         recordReader_(std::move(rr)),
         breakOut_(false),
-        name_{folly::sformat("thread_{}", threadNum)} {}
+        name_{fmt::format("thread_{}", threadNum)} {}
 
   void work() override {
     XDCHECK(deserializationCallback_);

@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <fmt/core.h>
+
 #include <chrono>
 #include <scoped_allocator>
 
@@ -67,7 +69,7 @@ class CacheObjectHandle {
   explicit CacheObjectHandle(ItemHandle handle) : handle_{std::move(handle)} {
     if (handle_) {
       if (*reinterpret_cast<uint16_t*>(handle_->getMemory()) != 0xbeef) {
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "This item does not have an allocator associated. Key: {}",
             handle_->getKey()));
       }

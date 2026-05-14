@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <gtest/gtest.h>
 
@@ -362,7 +363,7 @@ TEST(MonotonicBufferResource, Alignment) {
   for (int loops = 0; loops < 10; loops++) {
     for (auto alignment : alignments) {
       auto [hdl, mbr] = createMonotonicBufferResource<Mbr>(
-          *cache, 0 /* poolId */, folly::sformat("key_{}", loops),
+          *cache, 0 /* poolId */, fmt::format("key_{}", loops),
           100 /* reserved bytes */, 100 /* additional bytes */, alignment,
           0 /* ttlSec */, 0 /* creationTime */);
 

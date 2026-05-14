@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 
@@ -93,7 +94,7 @@ class TestAllocatorResource {
   const std::string& getPrivateName() const { return privateName_; }
 
  private:
-  std::string name_{folly::sformat("name_{}", folly::Random::rand32())};
+  std::string name_{fmt::format("name_{}", folly::Random::rand32())};
   std::string privateName_{"private"};
   std::shared_ptr<uint64_t> numAllocs_{std::make_shared<uint64_t>()};
   std::shared_ptr<bool> throw_{std::make_shared<bool>(false)};

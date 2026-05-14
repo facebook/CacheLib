@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -68,8 +69,7 @@ TEST(ThriftCustomAllocator, Simple) {
 TEST(ThriftCustomAllocator, Propagation) {
   auto createStr = [](const char* prefix) {
     return TestString{
-        folly::sformat("{}_{}", prefix, "this is too long to be inlined")
-            .c_str()};
+        fmt::format("{}_{}", prefix, "this is too long to be inlined").c_str()};
   };
 
   TestAllocatorResource alloc1{"alloc-1"};

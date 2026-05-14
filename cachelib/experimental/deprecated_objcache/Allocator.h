@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <fmt/core.h>
+
 #include <cstddef>
 #include <memory>
 #include <scoped_allocator>
@@ -402,9 +404,9 @@ void* MonotonicBufferResource<CacheDescriptor>::allocateSlow(size_t bytes,
           .allocateChainedItem(*this->hdl_, newBufferSize + extraBytes);
   if (!chainedItemHandle) {
     throw exception::ObjectCacheAllocationError(
-        folly::sformat("Slow Path. Failed to allocate a chained item. "
-                       "Requested size: {}. Associated Item: {}",
-                       newBufferSize, (*this->hdl_)->toString()));
+        fmt::format("Slow Path. Failed to allocate a chained item. "
+                    "Requested size: {}. Associated Item: {}",
+                    newBufferSize, (*this->hdl_)->toString()));
   }
 
   uintptr_t bufferStart =
@@ -473,7 +475,7 @@ createMonotonicBufferResource(Cache& cache,
   auto hdl =
       cache.allocate(poolId, key, bytes + extraBytes, ttlSecs, creationTime);
   if (!hdl) {
-    throw exception::ObjectCacheAllocationError(folly::sformat(
+    throw exception::ObjectCacheAllocationError(fmt::format(
         "Unable to allocate a new item for allocator. Key: {}, Requested "
         "bytes: {}",
         key, bytes));
