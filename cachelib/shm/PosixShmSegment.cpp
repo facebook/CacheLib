@@ -17,6 +17,7 @@
 #include "cachelib/shm/PosixShmSegment.h"
 
 #include <fcntl.h>
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -178,8 +179,8 @@ void getMempolicyImpl(int& oldMode, NumaBitMask& memBindNumaNodes) {
       get_mempolicy(&oldMode, nodeMask->maskp, nodeMask->size, nullptr, 0);
 
   if (ret != 0) {
-    util::throwSystemError(errno, folly::sformat("get_mempolicy() failed: {}",
-                                                 std::strerror(errno)));
+    util::throwSystemError(
+        errno, fmt::format("get_mempolicy() failed: {}", std::strerror(errno)));
   }
 }
 
@@ -189,8 +190,8 @@ void setMempolicyImpl(int oldMode, const NumaBitMask& memBindNumaNodes) {
   long ret = set_mempolicy(oldMode, nodeMask->maskp, nodeMask->size);
 
   if (ret != 0) {
-    util::throwSystemError(errno, folly::sformat("set_mempolicy() failed: {}",
-                                                 std::strerror(errno)));
+    util::throwSystemError(
+        errno, fmt::format("set_mempolicy() failed: {}", std::strerror(errno)));
   }
 }
 
@@ -285,7 +286,7 @@ size_t PosixShmSegment::getSize() const {
     detail::fstatImpl(fd_, &buf);
     return buf.st_size;
   } else {
-    throw std::runtime_error(folly::sformat(
+    throw std::runtime_error(fmt::format(
         "Trying to get size of  segment with name {} in an invalid state",
         getName()));
   }
@@ -298,9 +299,9 @@ void PosixShmSegment::resize(size_t size) const {
     XDCHECK_NE(fd_, kInvalidFD);
     detail::ftruncateImpl(fd_, size);
   } else {
-    throw std::runtime_error(folly::sformat(
-        "Trying to resize segment with name {} in an invalid state",
-        getName()));
+    throw std::runtime_error(
+        fmt::format("Trying to resize segment with name {} in an invalid state",
+                    getName()));
   }
 }
 

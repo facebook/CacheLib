@@ -16,6 +16,7 @@
 
 #include "cachelib/shm/SysVShmSegment.h"
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -53,11 +54,10 @@ int shmGetImpl(key_t key, size_t size, int flags) {
   case ENFILE:
     util::throwSystemError(
         errno,
-        folly::sformat(
-            "Failed to create segment with key {}, size {}, flags {}",
-            key,
-            size,
-            flags));
+        fmt::format("Failed to create segment with key {}, size {}, flags {}",
+                    key,
+                    size,
+                    flags));
     break;
   case ENOENT:
     if (!(flags & IPC_CREAT)) { // trying to attach
@@ -112,11 +112,10 @@ void* shmAttachImpl(int shmid, const void* addr, int shmFlag) {
   case ENOMEM:
     util::throwSystemError(
         errno,
-        folly::sformat(
-            "Failed to attach segment with key {} at addr {}, flags {}",
-            shmid,
-            addr,
-            shmFlag));
+        fmt::format("Failed to attach segment with key {} at addr {}, flags {}",
+                    shmid,
+                    addr,
+                    shmFlag));
     break;
   default:
     XDCHECK(false);
@@ -199,7 +198,7 @@ void mbindImpl(void* addr,
   long ret = mbind(addr, len, mode, nodesMask->maskp, nodesMask->size, flags);
   if (ret != 0) {
     util::throwSystemError(
-        errno, folly::sformat("mbind() failed: {}", std::strerror(errno)));
+        errno, fmt::format("mbind() failed: {}", std::strerror(errno)));
   }
 }
 

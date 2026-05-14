@@ -16,6 +16,7 @@
 
 #include "cachelib/shm/ShmCommon.h"
 
+#include <fmt/core.h>
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
 #include <folly/Range.h>
@@ -90,7 +91,7 @@ bool lineAddressMatches(folly::StringPiece line, uintptr_t addr) {
   // split the first token using the '-' separator
   if (!folly::split('-', tokens[0], startAddr, endAddr)) {
     throw std::invalid_argument(
-        folly::sformat("Invalid address field {}", tokens[0]));
+        fmt::format("Invalid address field {}", tokens[0]));
   }
 
   // parse the address values.

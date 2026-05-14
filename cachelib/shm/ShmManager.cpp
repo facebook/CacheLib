@@ -16,6 +16,7 @@
 
 #include "cachelib/shm/ShmManager.h"
 
+#include <fmt/core.h>
 #include <folly/ScopeGuard.h>
 #include <sys/stat.h>
 
@@ -126,13 +127,13 @@ bool ShmManager::initFromFile() {
     apache::thrift::BinarySerializer::deserialize(buf, object);
   } catch (const std::exception& ex) {
     throw std::invalid_argument(
-        folly::sformat("Dersialization has failed. Reason: {}", ex.what()));
+        fmt::format("Dersialization has failed. Reason: {}", ex.what()));
   }
 
   if (static_cast<bool>(usePosix_) ^
       (*object.shmVal() == static_cast<int8_t>(ShmVal::SHM_POSIX))) {
-    throw std::invalid_argument(folly::sformat(
-        "Invalid value for attach. ShmVal: {}", *object.shmVal()));
+    throw std::invalid_argument(
+        fmt::format("Invalid value for attach. ShmVal: {}", *object.shmVal()));
   }
 
   for (const auto& kv : *object.nameToKeyMap()) {
@@ -245,7 +246,7 @@ std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
                                        posix, opts);
   }
   if (!shm->mapAddress(addr)) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Error mapping shm {} under {}, addr: {}", name, dir, addr));
   }
   return shm;
@@ -305,17 +306,17 @@ ShmAddr ShmManager::createShm(const std::string& shmName,
       throw;
     }
     throw std::invalid_argument(
-        folly::sformat("Unable to create shared memory segment: name: {}, "
-                       "size: {}, addr: {}. msg: {}",
-                       shmName, size, addr, e.what()));
+        fmt::format("Unable to create shared memory segment: name: {}, "
+                    "size: {}, addr: {}. msg: {}",
+                    shmName, size, addr, e.what()));
   }
 
   DCHECK(newSeg);
   if (!newSeg->mapAddress(addr, opts.alignment)) {
     throw std::invalid_argument(
-        folly::sformat("Unable to map shared memory segment after create: "
-                       "name: {}, size: {}, addr: {}",
-                       shmName, size, addr));
+        fmt::format("Unable to map shared memory segment after create: "
+                    "name: {}, size: {}, addr: {}",
+                    shmName, size, addr));
   }
 
   auto ret = newSeg->getCurrentMapping();
@@ -331,7 +332,7 @@ ShmManager::attachNewShm(const std::string& shmName,
   // if key is not known already, there is not much we can do to attach.
   if (keyIt == nameToKey_.end()) {
     throw std::invalid_argument(
-        folly::sformat("Unable to find any segment with name {}", shmName));
+        fmt::format("Unable to find any segment with name {}", shmName));
   }
 
   // This means the segment exists and we can try to attach it.
@@ -351,7 +352,7 @@ ShmManager::attachNewShm(const std::string& shmName,
     auto [it, _] = segments_.emplace(shmName, std::move(seg));
     return it;
   } catch (const std::system_error& e) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Unable to attach to shared memory segment: name: {}, error: {}",
         shmName, e.what()));
   }
@@ -370,9 +371,9 @@ ShmAddr ShmManager::attachShm(const std::string& shmName,
   auto& shm = *shmIt->second;
   if (shm.isMapped() || !shm.mapAddress(addr, opts.alignment)) {
     throw std::invalid_argument(
-        folly::sformat("Unable to map shared memory segment after attach:"
-                       " name: {}, addr: {}, mapped: {}",
-                       shmName, addr, shm.isMapped()));
+        fmt::format("Unable to map shared memory segment after attach:"
+                    " name: {}, addr: {}, mapped: {}",
+                    shmName, addr, shm.isMapped()));
   }
 
   return shm.getCurrentMapping();
@@ -413,8 +414,8 @@ ShmSegment& ShmManager::getShmByName(const std::string& shmName) {
     DCHECK(it->second != nullptr);
     return *it->second.get();
   } else {
-    throw std::invalid_argument(folly::sformat(
-        "shared memory segment does not exist: name: {}", shmName));
+    throw std::invalid_argument(
+        fmt::format("shared memory segment does not exist: name: {}", shmName));
   }
 }
 
