@@ -6655,7 +6655,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           if (name == "stat1") {
             EXPECT_EQ(11, value);
             seen++;
-          } else if (name == fmt::format("stat2.60")) {
+          } else if (name == "stat2.60") {
             EXPECT_EQ(22, value);
             seen++;
           }
@@ -6669,7 +6669,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           if (name == "stat1") {
             EXPECT_EQ(11, value);
             seen++;
-          } else if (name == fmt::format("stat2.60")) {
+          } else if (name == "stat2.60") {
             EXPECT_EQ(44, value);
             seen++;
           }

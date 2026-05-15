@@ -60,7 +60,7 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
     void decRef() noexcept { refcount_--; }
 
     std::string toString() const {
-      return fmt::format(" key = {}, ref = {}, accessible = ", key_,
+      return fmt::format(" key = {}, ref = {}, accessible = {}", key_,
                          refcount_.load(), accessible_);
     }
 

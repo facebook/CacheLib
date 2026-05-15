@@ -106,7 +106,7 @@ class Device {
         encryptor_{std::move(encryptor)} {
     if (ioAlignSize == 0) {
       throw std::invalid_argument(
-          fmt::format("Invalid ioAlignSize {}", ioAlignSize, size));
+          fmt::format("Invalid ioAlignSize {}", ioAlignSize));
     }
     if (encryptor_ && encryptor_->encryptionBlockSize() != ioAlignSize) {
       throw std::invalid_argument(
@@ -114,8 +114,9 @@ class Device {
                       ioAlignSize, encryptor_->encryptionBlockSize()));
     }
     if (maxWriteSize_ % ioAlignmentSize_ != 0) {
-      throw std::invalid_argument(fmt::format(
-          "Invalid max write size {} ioAlignSize {}", maxWriteSize_, size));
+      throw std::invalid_argument(
+          fmt::format("Invalid max write size {} ioAlignSize {}", maxWriteSize_,
+                      ioAlignmentSize_));
     }
     if (maxIOSize_ % ioAlignmentSize_ != 0) {
       throw std::invalid_argument(
