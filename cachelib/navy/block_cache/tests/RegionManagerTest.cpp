@@ -608,7 +608,7 @@ TEST(RegionManager, EvictionPolicyRecoverPreservesFifoOrder) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     // Populate regions 1 and 2 with items so they're non-empty
     rm->getRegion(RegionId{1})
@@ -645,7 +645,7 @@ TEST(RegionManager, EvictionPolicyRecoverPreservesFifoOrder) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -683,7 +683,7 @@ TEST(RegionManager, EvictionPolicyRecoverDisabledFallsBack) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     // Populate region 2 so it's non-empty
     rm->getRegion(RegionId{2})
@@ -708,7 +708,7 @@ TEST(RegionManager, EvictionPolicyRecoverDisabledFallsBack) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, false /* recoverEvictionPolicy */);
+        false /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -766,7 +766,7 @@ TEST(RegionManager, EvictionPolicyRecoverForwardCompat) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -800,7 +800,7 @@ TEST(RegionManager, EvictionPolicyRecoverUnsupportedPolicyFallsBack) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     // Populate region 0
     rm->getRegion(RegionId{0})
@@ -826,7 +826,7 @@ TEST(RegionManager, EvictionPolicyRecoverUnsupportedPolicyFallsBack) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     // Should not throw — falls back to resetEvictionPolicy()
@@ -864,8 +864,7 @@ TEST(RegionManager,
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 2 /* numPriorities */,
         kFlushRetryLimit, true /* workerFlushAsync */,
-        false /* allowReadDuringReclaim */, false /* cleanRegionFastPath */,
-        true /* recoverEvictionPolicy */);
+        false /* allowReadDuringReclaim */, true /* recoverEvictionPolicy */);
 
     // Populate region 0 (mirror the LRU fallback test)
     rm->getRegion(RegionId{0})
@@ -893,8 +892,7 @@ TEST(RegionManager,
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 2 /* numPriorities */,
         kFlushRetryLimit, true /* workerFlushAsync */,
-        false /* allowReadDuringReclaim */, false /* cleanRegionFastPath */,
-        true /* recoverEvictionPolicy */);
+        false /* allowReadDuringReclaim */, true /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     // Should not throw — falls back to resetEvictionPolicy()
@@ -936,7 +934,7 @@ TEST(RegionManager, EvictionPolicyRecoverRestoresCleanRegions) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     ENABLE_INJECT_PAUSE_IN_SCOPE();
     injectPauseSet("pause_reclaim_done");
@@ -974,7 +972,7 @@ TEST(RegionManager, EvictionPolicyRecoverRestoresCleanRegions) {
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
         true /* workerFlushAsync */, false /* allowReadDuringReclaim */,
-        false /* cleanRegionFastPath */, true /* recoverEvictionPolicy */);
+        true /* recoverEvictionPolicy */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);

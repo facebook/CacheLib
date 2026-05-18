@@ -88,9 +88,6 @@ class RegionManager {
   //                                  TODO: This should be the default behavior
   //                                  and this flag should be removed once we're
   //                                  convinced there's no missing corner cases.
-  // @param cleanRegionFastPath       whether to enable the fast path in
-  //                                  getCleanRegion() that skips the mutex
-  //                                  when clean regions are empty
   // @param recoverEvictionPolicy     whether to persist and recover eviction
   //                                  policy ordering across restarts
   RegionManager(uint32_t numRegions,
@@ -108,7 +105,6 @@ class RegionManager {
                 uint16_t inMemBufFlushRetryLimit,
                 bool workerFlushAsync,
                 bool allowReadDuringReclaim = false,
-                bool cleanRegionFastPath = false,
                 bool recoverEvictionPolicy = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
@@ -373,9 +369,6 @@ class RegionManager {
 
   // Whether to allow read for the being reclaimed region
   const bool allowReadDuringReclaim_{false};
-
-  // Whether the clean region fast path is enabled
-  const bool cleanRegionFastPath_{false};
 
   // Whether to persist and recover eviction policy ordering across restarts
   const bool recoverEvictionPolicy_{false};

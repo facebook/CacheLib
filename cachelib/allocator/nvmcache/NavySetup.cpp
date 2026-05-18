@@ -179,7 +179,6 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setRegionManagerFlushAsync(
       blockCacheConfig.isRegionManagerFlushAsync());
 
-  blockCache->setCleanRegionFastPath(blockCacheConfig.isCleanRegionFastPath());
   blockCache->setRecoverEvictionPolicy(
       blockCacheConfig.isRecoverEvictionPolicy());
   blockCache->setUseCombinedEntryBlock(

@@ -131,10 +131,6 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.regionManagerFlushAsync = asyn;
   }
 
-  void setCleanRegionFastPath(bool enable) override {
-    config_.cleanRegionFastPath = enable;
-  }
-
   void setRecoverEvictionPolicy(bool enable) override {
     config_.recoverEvictionPolicy = enable;
   }

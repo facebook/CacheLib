@@ -94,8 +94,6 @@ class BlockCache final : public Engine {
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
 
-    // Whether to enable the clean region fast path in getCleanRegion().
-    bool cleanRegionFastPath{false};
     // Whether to use Combined entry block (For index entries and small sized
     // items)
     bool useCombinedEntryBlock{false};

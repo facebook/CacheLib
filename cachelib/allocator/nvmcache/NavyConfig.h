@@ -550,11 +550,6 @@ class BlockCacheConfig {
     return *this;
   }
 
-  BlockCacheConfig& setCleanRegionFastPath(bool enable) noexcept {
-    cleanRegionFastPath_ = enable;
-    return *this;
-  }
-
   BlockCacheConfig& setRecoverEvictionPolicy(bool enable) noexcept {
     recoverEvictionPolicy_ = enable;
     return *this;
@@ -620,8 +615,6 @@ class BlockCacheConfig {
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
 
-  bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
-
   bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
 
   bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
@@ -669,11 +662,6 @@ class BlockCacheConfig {
 
   // Whether the region manager workers flushes asynchronously.
   bool regionManagerFlushAsync_{false};
-
-  // Whether to enable the clean region fast path in getCleanRegion().
-  // When enabled, getCleanRegion() can skip acquiring the mutex and return
-  // Retry immediately if clean regions are empty and reclaims are in-flight.
-  bool cleanRegionFastPath_{false};
 
   // Whether to persist and recover eviction policy ordering across restarts.
   bool recoverEvictionPolicy_{false};

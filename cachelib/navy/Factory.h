@@ -92,9 +92,6 @@ class BlockCacheProto {
   // (Optional) Set if the region manager worker flush should be async.
   virtual void setRegionManagerFlushAsync(bool flushAsync) = 0;
 
-  // (Optional) Enable the clean region fast path in getCleanRegion().
-  virtual void setCleanRegionFastPath(bool enable) = 0;
-
   // (Optional) Persist and recover eviction policy ordering across restarts.
   virtual void setRecoverEvictionPolicy(bool enable) = 0;
 

@@ -36,7 +36,6 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint16_t inMemBufFlushRetryLimit,
                              bool workerFlushAsync,
                              bool allowReadDuringReclaim,
-                             bool cleanRegionFastPath,
                              bool recoverEvictionPolicy)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
@@ -49,7 +48,6 @@ RegionManager::RegionManager(uint32_t numRegions,
       numCleanRegions_{numCleanRegions},
       workerFlushAsync_{workerFlushAsync},
       allowReadDuringReclaim_(allowReadDuringReclaim),
-      cleanRegionFastPath_{cleanRegionFastPath},
       recoverEvictionPolicy_{recoverEvictionPolicy},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
@@ -225,8 +223,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
   // Fast-path: if we know clean regions are empty and reclaims are in-flight,
   // skip acquiring the mutex entirely. This prevents allocator threads from
   // starving reclaim workers that need the same mutex to push clean regions.
-  if (cleanRegionFastPath_ && !addWaiter &&
-      cleanRegionsEmpty_.load(std::memory_order_relaxed)) {
+  if (!addWaiter && cleanRegionsEmpty_.load(std::memory_order_relaxed)) {
     cleanRegionRetries_.inc();
     return {OpenStatus::Retry, nullptr};
   }
