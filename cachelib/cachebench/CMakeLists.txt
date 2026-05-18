@@ -124,4 +124,14 @@ if (BUILD_TESTS)
   add_source_test (consistency/tests/ValueTrackerTest.cpp)
   add_source_test (util/tests/NandWritesTest.cpp)
   add_source_test (cache/tests/TimeStampTickerTest.cpp)
+
+  # Verify that cachebench can run a sample workload
+  add_test (
+    NAME cachebench-simple
+    COMMAND
+      $<TARGET_FILE:cachebench>
+      --json_test_config
+      ${CMAKE_CURRENT_SOURCE_DIR}/test_configs/simple_test.json
+  )
+  set_tests_properties(cachebench-simple PROPERTIES TIMEOUT 300)
 endif()
