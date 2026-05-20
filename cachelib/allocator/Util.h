@@ -24,6 +24,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
+#include <fmt/core.h>
 #include <folly/futures/Future.h>
 #pragma GCC diagnostic pop
 #include <cachelib/allocator/KAllocation.h>
@@ -205,17 +206,17 @@ inline std::set<uint32_t> generateAllocSizesPowerOf2(uint32_t minPowerOf2,
     throw std::invalid_argument("minPowerOf2 must be <= maxPowerOf2");
   }
   if (minPowerOf2 < Slab::kMinAllocPower) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "minPowerOf2 must be >= {} because allocation size must be >= {}",
         Slab::kMinAllocPower,
         Slab::kMinAllocSize));
   }
   if (maxPowerOf2 > Slab::kNumSlabBits) {
     throw std::invalid_argument(
-        folly::sformat("maxPowerOf2 must be <= {} because allocation size "
-                       "must be <= {} (Slab::kSize)",
-                       Slab::kNumSlabBits,
-                       Slab::kSize));
+        fmt::format("maxPowerOf2 must be <= {} because allocation size "
+                    "must be <= {} (Slab::kSize)",
+                    Slab::kNumSlabBits,
+                    Slab::kSize));
   }
 
   std::set<uint32_t> allocSizes;

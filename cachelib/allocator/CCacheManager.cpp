@@ -41,7 +41,7 @@ CCacheAllocator& CCacheManager::addAllocator(const std::string& name,
                           std::forward_as_tuple(memoryAllocator_, poolId));
   if (!result.second) {
     throw std::invalid_argument(
-        folly::sformat("Duplicate allocator named {}", name));
+        fmt::format("Duplicate allocator named {}", name));
   }
   return result.first->second;
 }

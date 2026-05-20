@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/MemoryMonitor.h"
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include "cachelib/allocator/PoolResizeStrategy.h"
@@ -86,8 +87,8 @@ void MemoryMonitor::updateNumSlabsToAdvise(int32_t numSlabs) {
     if (numSlabs < 0 &&
         static_cast<uint64_t>(-numSlabs) > curNumSlabsToAdvise) {
       throw std::invalid_argument(
-          folly::sformat("Invalid numSlabs {} to update numSlabsToAdvise {}",
-                         numSlabs, curNumSlabsToAdvise));
+          fmt::format("Invalid numSlabs {} to update numSlabsToAdvise {}",
+                      numSlabs, curNumSlabsToAdvise));
     }
   } while (!numSlabsToAdvise_.compare_exchange_weak(
       curNumSlabsToAdvise, newNumSlabsToAdvise, std::memory_order_acq_rel));

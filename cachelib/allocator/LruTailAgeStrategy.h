@@ -88,18 +88,17 @@ class LruTailAgeStrategy : public RebalanceStrategy {
   explicit LruTailAgeStrategy(Config config = {});
 
   std::map<std::string, std::string> exportConfig() const override {
-    return {
-        {"rebalancer_type", folly::sformat("{}", getTypeString())},
-        {"tail_age_difference_ratio",
-         folly::sformat("{}", config_.tailAgeDifferenceRatio)},
-        {"min_tail_age_difference",
-         folly::sformat("{}", config_.minTailAgeDifference)},
-        {"min_slabs", folly::sformat("{}", config_.minSlabs)},
-        {"num_slabs_free_mem", folly::sformat("{}", config_.numSlabsFreeMem)},
-        {"slab_projection_length",
-         folly::sformat("{}", config_.slabProjectionLength)},
-        {"queue_selector",
-         folly::sformat("{}", static_cast<int>(config_.queueSelector))}};
+    return {{"rebalancer_type", fmt::format("{}", getTypeString())},
+            {"tail_age_difference_ratio",
+             fmt::format("{}", config_.tailAgeDifferenceRatio)},
+            {"min_tail_age_difference",
+             fmt::format("{}", config_.minTailAgeDifference)},
+            {"min_slabs", fmt::format("{}", config_.minSlabs)},
+            {"num_slabs_free_mem", fmt::format("{}", config_.numSlabsFreeMem)},
+            {"slab_projection_length",
+             fmt::format("{}", config_.slabProjectionLength)},
+            {"queue_selector",
+             fmt::format("{}", static_cast<int>(config_.queueSelector))}};
   }
 
  protected:

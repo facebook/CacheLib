@@ -97,7 +97,7 @@ class RebalanceStrategy {
   virtual ~RebalanceStrategy() = default;
 
   virtual std::map<std::string, std::string> exportConfig() const {
-    return {{"rebalancer_type", folly::sformat("{}", getTypeString())}};
+    return {{"rebalancer_type", fmt::format("{}", getTypeString())}};
   }
 
   // Pick an victim and receiver from the same pool

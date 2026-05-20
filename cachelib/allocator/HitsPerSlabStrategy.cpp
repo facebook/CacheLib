@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include <algorithm>
@@ -87,8 +88,8 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
         [&](ClassId cid) {
           return stats.evictionAgeForClass(cid) < config.maxLruTailAge;
         },
-        folly::sformat(" candidates with less than {} seconds for tail age",
-                       config.maxLruTailAge));
+        fmt::format(" candidates with less than {} seconds for tail age",
+                    config.maxLruTailAge));
     if (!maxAgeVictims.empty()) {
       victims = std::move(maxAgeVictims);
     }
@@ -176,8 +177,8 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
         [&](ClassId cid) {
           return stats.evictionAgeForClass(cid) >= config.minLruTailAge;
         },
-        folly::sformat(" candidates with more than {} seconds for tail age",
-                       config.minLruTailAge));
+        fmt::format(" candidates with more than {} seconds for tail age",
+                    config.minLruTailAge));
     if (!minAgeReceivers.empty()) {
       receivers = std::move(minAgeReceivers);
     }

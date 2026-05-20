@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/io/RecordIO.h>
 #include <folly/logging/xlog.h>
 
 #include <fstream>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/CacheVersion.h"
@@ -42,7 +42,7 @@ bool fileExists(const std::string& file) {
 
 std::string constructFilePath(folly::StringPiece cacheDir,
                               folly::StringPiece name) {
-  return folly::sformat("{}/{}", cacheDir, name);
+  return fmt::format("{}/{}", cacheDir, name);
 }
 
 serialization::NvmCacheMetadata loadMetadata(folly::StringPiece fileName) {
@@ -50,8 +50,7 @@ serialization::NvmCacheMetadata loadMetadata(folly::StringPiece fileName) {
   folly::RecordIOReader rr{std::move(shutDownFile)};
   auto metadataIoBuf = folly::IOBuf::copyBuffer(rr.begin()->first);
   if (metadataIoBuf->length() == 0) {
-    throw std::runtime_error(
-        folly::sformat("no content in file: {}", fileName));
+    throw std::runtime_error(fmt::format("no content in file: {}", fileName));
   }
   Deserializer deserializer{metadataIoBuf->data(),
                             metadataIoBuf->data() + metadataIoBuf->length()};
@@ -88,7 +87,7 @@ NvmCacheState::NvmCacheState(uint32_t currentTimeSecs,
     util::makeDir(cacheDir_);
   } else if (!util::isDir(cacheDir_)) {
     throw std::invalid_argument(
-        folly::sformat("Expected {} to be directory", cacheDir_));
+        fmt::format("Expected {} to be directory", cacheDir_));
   }
 
   restoreState();
@@ -176,10 +175,10 @@ std::string NvmCacheState::getFileForNvmCacheDrop(folly::StringPiece cacheDir) {
 }
 
 std::string NvmCacheState::toString() const {
-  return folly::sformat("cleanShutDown={}, shouldDrop={}, creationTime={}",
-                        wasCleanShutDown(),
-                        shouldDropNvmCache(),
-                        getCreationTime());
+  return fmt::format("cleanShutDown={}, shouldDrop={}, creationTime={}",
+                     wasCleanShutDown(),
+                     shouldDropNvmCache(),
+                     getCreationTime());
 }
 
 void NvmCacheState::markTruncated() {

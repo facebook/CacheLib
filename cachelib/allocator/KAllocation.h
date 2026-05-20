@@ -21,7 +21,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
 #include <folly/String.h>
@@ -98,7 +98,7 @@ class CACHELIB_PACKED_ATTR KAllocation {
   // @throw std::invalid_argument if the key/size is invalid.
   KAllocation(const Key key, uint32_t valSize) {
     if (valSize > kMaxValSize) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "value size exceeded maximum allowed. total size: {}", valSize));
     }
 
@@ -234,14 +234,14 @@ class CACHELIB_PACKED_ATTR KAllocation {
       } else if (key.empty()) {
         reason = "key is empty";
       } else if (key.size() > kKeyMaxLen) {
-        reason = folly::sformat(
+        reason = fmt::format(
             "key size {} exceeds maximum allowed {}", key.size(), kKeyMaxLen);
       }
 
       throw std::invalid_argument{
-          folly::sformat("Invalid cache key: {} (reason: {})",
-                         folly::humanify(badKey),
-                         reason)};
+          fmt::format("Invalid cache key: {} (reason: {})",
+                      folly::humanify(badKey),
+                      reason)};
     }
   }
 
@@ -261,16 +261,16 @@ class CACHELIB_PACKED_ATTR KAllocation {
       } else if (key.empty()) {
         reason = "key is empty";
       } else if (key.size() > kKeyMaxLenSmall) {
-        reason = folly::sformat(
-            "key size {} exceeds maximum allowed for small keys {}",
-            key.size(),
-            kKeyMaxLenSmall);
+        reason =
+            fmt::format("key size {} exceeds maximum allowed for small keys {}",
+                        key.size(),
+                        kKeyMaxLenSmall);
       }
 
       throw std::invalid_argument{
-          folly::sformat("Invalid cache key: {} (reason: {})",
-                         folly::humanify(badKey),
-                         reason)};
+          fmt::format("Invalid cache key: {} (reason: {})",
+                      folly::humanify(badKey),
+                      reason)};
     }
   }
 

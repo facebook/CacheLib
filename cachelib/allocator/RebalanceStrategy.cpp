@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/RebalanceStrategy.h"
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 
@@ -177,8 +178,8 @@ std::set<ClassId> RebalanceStrategy::filterByMinTailAge(
   return filter(
       std::move(candidates),
       [&](ClassId cid) { return stats.evictionAgeForClass(cid) < minTailAge; },
-      folly::sformat(" candidates with less than {} seconds for tail age",
-                     minTailAge));
+      fmt::format(" candidates with less than {} seconds for tail age",
+                  minTailAge));
 }
 
 std::set<ClassId> RebalanceStrategy::filterByMaxTailAge(
@@ -188,8 +189,8 @@ std::set<ClassId> RebalanceStrategy::filterByMaxTailAge(
   return filter(
       std::move(candidates),
       [&](ClassId cid) { return stats.evictionAgeForClass(cid) > maxTailAge; },
-      folly::sformat(" candidates with more than {} seconds for tail age",
-                     maxTailAge));
+      fmt::format(" candidates with more than {} seconds for tail age",
+                  maxTailAge));
 }
 
 std::set<ClassId> RebalanceStrategy::filter(

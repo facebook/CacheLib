@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/container/F14Map.h>
 
 #include <memory>
@@ -118,16 +119,15 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
 
   // Exports configuration as a string map for monitoring.
   std::map<std::string, std::string> exportConfig() const override {
-    return {
-        {"rebalancer_type", folly::sformat("{}", getTypeString())},
-        {"min_slabs", folly::sformat("{}", config_.minSlabs)},
-        {"num_slabs_free_mem", folly::sformat("{}", config_.numSlabsFreeMem)},
-        {"min_lru_tail_age", folly::sformat("{}", config_.minLruTailAge)},
-        {"max_lru_tail_age", folly::sformat("{}", config_.maxLruTailAge)},
-        {"diff_ratio", folly::sformat("{}", config_.diffRatio)},
-        {"min_diff", folly::sformat("{}", config_.minDiff)},
-        {"eviction_age_map",
-         evictionAgeMapToStr(config_.classIdTargetEvictionAge.get())}};
+    return {{"rebalancer_type", fmt::format("{}", getTypeString())},
+            {"min_slabs", fmt::format("{}", config_.minSlabs)},
+            {"num_slabs_free_mem", fmt::format("{}", config_.numSlabsFreeMem)},
+            {"min_lru_tail_age", fmt::format("{}", config_.minLruTailAge)},
+            {"max_lru_tail_age", fmt::format("{}", config_.maxLruTailAge)},
+            {"diff_ratio", fmt::format("{}", config_.diffRatio)},
+            {"min_diff", fmt::format("{}", config_.minDiff)},
+            {"eviction_age_map",
+             evictionAgeMapToStr(config_.classIdTargetEvictionAge.get())}};
   }
 
  protected:

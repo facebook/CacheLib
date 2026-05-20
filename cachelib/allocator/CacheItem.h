@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/CPortability.h>
 #include <folly/String.h>
 
@@ -339,7 +340,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
       return ref_.incRef();
     } catch (exception::RefcountOverflow& e) {
       throw exception::RefcountOverflow(
-          folly::sformat("{} item: {}", e.what(), toString()));
+          fmt::format("{} item: {}", e.what(), toString()));
     }
   }
 
@@ -755,7 +756,7 @@ std::string CacheItem<CacheTrait>::toString() const {
   if (isChainedItem()) {
     return asChainedItem().toString();
   } else {
-    return folly::sformat(
+    return fmt::format(
         "item: "
         "memory={}:raw-ref={}:size={}:key={}:hex-key={}:"
         "isInMMContainer={}:isAccessible={}:isMarkedForEviction={}:"
@@ -764,7 +765,7 @@ std::string CacheItem<CacheTrait>::toString() const {
         "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:"
         "isNvmLargeItem={}:hasChainedItem="
         "{}",
-        this, getRefCountAndFlagsRaw(), getSize(),
+        fmt::ptr(this), getRefCountAndFlagsRaw(), getSize(),
         folly::humanify(getKey().str()), folly::hexlify(getKey()),
         isInMMContainer(), isAccessible(), isMarkedForEviction(), isMoving(),
         getRefCount(), getCreationTime(), getExpiryTime(), getLastAccessTime(),
@@ -1063,7 +1064,7 @@ CacheChainedItem<CacheTrait>::CacheChainedItem(CompressedPtrType ptr,
 template <typename CacheTrait>
 void CacheChainedItem<CacheTrait>::changeKey(CompressedPtrType newKey) {
   if (this->isAccessible()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "chained item {} is still in access container while modifying the key ",
         toString()));
   }
@@ -1094,15 +1095,15 @@ template <typename CacheTrait>
 std::string CacheChainedItem<CacheTrait>::toString() const {
   const auto cPtr =
       *reinterpret_cast<const CompressedPtrType*>(Item::getKey().data());
-  return folly::sformat(
+  return fmt::format(
       "chained item: "
       "memory={}:raw-ref={}:size={}:parent-compressed-ptr={}:"
       "isInMMContainer={}:isAccessible={}:isMarkedForEviction={}:"
       "isMoving={}:references={}:ctime={}"
       ":"
       "expTime={}:updateTime={}",
-      this, Item::getRefCountAndFlagsRaw(), Item::getSize(), cPtr.getRaw(),
-      Item::isInMMContainer(), Item::isAccessible(),
+      fmt::ptr(this), Item::getRefCountAndFlagsRaw(), Item::getSize(),
+      cPtr.getRaw(), Item::isInMMContainer(), Item::isAccessible(),
       Item::isMarkedForEviction(), Item::isMoving(), Item::getRefCount(),
       Item::getCreationTime(), Item::getExpiryTime(),
       Item::getLastAccessTime());
@@ -1113,8 +1114,8 @@ void CacheChainedItem<CacheTrait>::appendChain(
     ChainedItem& newChain, const PtrCompressor& compressor) {
   if (getNext(compressor)) {
     throw std::invalid_argument(
-        folly::sformat("Item: {} is not the last item in a chain. Next: {}",
-                       toString(), getNext(compressor)->toString()));
+        fmt::format("Item: {} is not the last item in a chain. Next: {}",
+                    toString(), getNext(compressor)->toString()));
   }
   setNext(&newChain, compressor);
 }

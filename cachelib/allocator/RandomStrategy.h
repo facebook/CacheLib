@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -38,8 +39,8 @@ class RandomStrategy : public RebalanceStrategy {
   explicit RandomStrategy(Config c) : RebalanceStrategy(Random), config_{c} {}
 
   std::map<std::string, std::string> exportConfig() const override {
-    return {{"rebalancer_type", folly::sformat("{}", getTypeString())},
-            {"min_slabs", folly::sformat("{}", config_.minSlabs)}};
+    return {{"rebalancer_type", fmt::format("{}", getTypeString())},
+            {"min_slabs", fmt::format("{}", config_.minSlabs)}};
   }
 
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase&,

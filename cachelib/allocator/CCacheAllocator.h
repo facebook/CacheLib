@@ -63,7 +63,7 @@ class CCacheAllocator : public CCacheAllocatorBase {
   // return the pointer to the chunk with index _chunkNum_
   void* getChunk(size_t chunkNum) {
     if (chunkNum >= getNumChunks()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Trying to get chunk #{} but only {} chunks are available", chunkNum,
           getNumChunks()));
     }

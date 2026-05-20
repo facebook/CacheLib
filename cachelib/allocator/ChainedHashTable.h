@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Optional.h>
 
 #include <cstdint>
@@ -32,7 +33,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
 
@@ -261,7 +261,7 @@ class ChainedHashTable {
           hasher_(std::move(hasher)) {
       if (bucketsPower_ > kMaxBucketPower || locksPower_ > kMaxLockPower ||
           locksPower_ > bucketsPower_) {
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "Invalid arguments to the config constructor bucketPower =  {}, "
             "lockPower = {}",
             bucketsPower_, locksPower_));
@@ -288,7 +288,7 @@ class ChainedHashTable {
           static_cast<size_t>(ceil(log2(cacheEntries * 1.6 /* load factor */)));
 
       if (bucketsPower_ > kMaxBucketPower) {
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "Invalid arguments to the config constructor cacheEntries =  {}",
             cacheEntries));
       }
@@ -1049,10 +1049,10 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
       numKeys_(*object.numKeys()) {
   if (config_.getBucketsPower() !=
       static_cast<uint32_t>(*object.bucketsPower())) {
-    throw std::invalid_argument(folly::sformat(
-        "Hashtable bucket power not compatible. old = {}, new = {}",
-        *object.bucketsPower(),
-        config.getBucketsPower()));
+    throw std::invalid_argument(
+        fmt::format("Hashtable bucket power not compatible. old = {}, new = {}",
+                    *object.bucketsPower(),
+                    config.getBucketsPower()));
   }
 
   // Take page alignment into consideration when comparing the size of the
@@ -1062,9 +1062,9 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
 
   if (nBytes != util::getAlignedSize(ht_.size(), pageSize)) {
     throw std::invalid_argument(
-        folly::sformat("Hashtable size not compatible. old = {}, new = {}",
-                       ht_.size(),
-                       nBytes));
+        fmt::format("Hashtable size not compatible. old = {}, new = {}",
+                    ht_.size(),
+                    nBytes));
   }
 
   // checking hasher magic id not equal to 0 is to ensure it'll be
@@ -1072,7 +1072,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
   // one with a magic id
   if (*object.hasherMagicId() != 0 &&
       *object.hasherMagicId() != config_.getHasher()->getMagicId()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Hash object's ID mismatch. expected = {}, actual = {}",
         *object.hasherMagicId(), config_.getHasher()->getMagicId()));
   }
@@ -1282,7 +1282,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::saveState() const {
 
   if (numIterators_ != 0) {
     throw std::logic_error(
-        folly::sformat("There are {} pending iterators", numIterators_.load()));
+        fmt::format("There are {} pending iterators", numIterators_.load()));
   }
 
   serialization::ChainedHashTableObject object;

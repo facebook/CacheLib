@@ -21,7 +21,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/CacheDetails.h"
@@ -76,7 +76,7 @@ class ReadOnlySharedCacheView {
     }
 
     if (offset >= mapping.size) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Invalid offset {} with mapping of size {}", offset, mapping.size));
     }
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mapping.addr) +

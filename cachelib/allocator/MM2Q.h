@@ -20,7 +20,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #pragma GCC diagnostic pop
 
 #include <folly/lang/Align.h>
@@ -288,7 +288,7 @@ class MM2Q {
 
       if (hotSizePercent == 100) {
         if (coldSizePercent != 0 && warmSizePercent != 0) {
-          throw std::invalid_argument(folly::sformat(
+          throw std::invalid_argument(fmt::format(
               "Invalid hot/cold/warm lru size {}/{}/{}. When Hot is 100%,"
               " Warm and Cold must be 0.",
               hotSizePercent, coldSizePercent, warmSizePercent));
@@ -297,10 +297,10 @@ class MM2Q {
                  coldSizePercent <= 0 || coldSizePercent >= 100 ||
                  warmSizePercent <= 0 || warmSizePercent >= 100) {
         throw std::invalid_argument(
-            folly::sformat("Invalid hot/cold/warm lru size {}/{}/{}. Hot, "
-                           "Warm and Cold lru's "
-                           "must all have non-zero sizes.",
-                           hotSizePercent, coldSizePercent, warmSizePercent));
+            fmt::format("Invalid hot/cold/warm lru size {}/{}/{}. Hot, "
+                        "Warm and Cold lru's "
+                        "must all have non-zero sizes.",
+                        hotSizePercent, coldSizePercent, warmSizePercent));
       }
     }
 

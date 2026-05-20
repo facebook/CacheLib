@@ -20,7 +20,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Math.h>
 #pragma GCC diagnostic pop
 
@@ -263,15 +263,15 @@ class MMTinyLFU {
     void checkConfig() {
       if (tinySizePercent < 1 || tinySizePercent > 50) {
         throw std::invalid_argument(
-            folly::sformat("Invalid tiny cache size {}. Tiny cache size "
-                           "must be between 1% and 50% of total cache size ",
-                           tinySizePercent));
+            fmt::format("Invalid tiny cache size {}. Tiny cache size "
+                        "must be between 1% and 50% of total cache size ",
+                        tinySizePercent));
       }
       if (windowToCacheSizeRatio < 2 || windowToCacheSizeRatio > 128) {
         throw std::invalid_argument(
-            folly::sformat("Invalid window to cache size ratio {}. The ratio "
-                           "must be between 2 and 128",
-                           windowToCacheSizeRatio));
+            fmt::format("Invalid window to cache size ratio {}. The ratio "
+                        "must be between 2 and 128",
+                        windowToCacheSizeRatio));
       }
     }
 
