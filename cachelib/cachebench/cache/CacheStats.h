@@ -16,6 +16,7 @@
 
 #pragma once
 #include <folly/Benchmark.h>
+#include <folly/Format.h>
 #include <gflags/gflags.h>
 
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <unordered_map>
@@ -198,7 +198,7 @@ class SysctlSetting {
     std::string value;
     if (!readSysctl(settingName, value)) {
       throw std::runtime_error(
-          folly::sformat("Failed to read sysctl setting {}", settingName));
+          fmt::format("Failed to read sysctl setting {}", settingName));
     }
     return value;
   }
@@ -207,7 +207,7 @@ class SysctlSetting {
                   const std::string& settingValue) {
     if (!writeSysctl(settingName, settingValue)) {
       throw std::runtime_error(
-          folly::sformat("Failed to write sysctl setting {}", settingName));
+          fmt::format("Failed to write sysctl setting {}", settingName));
     }
   }
 

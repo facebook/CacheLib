@@ -15,6 +15,8 @@
  */
 
 #include <dirent.h>
+#include <fmt/core.h>
+#include <folly/String.h>
 #include <folly/debugging/exception_tracer/ExceptionTracer.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
@@ -28,7 +30,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #pragma GCC diagnostic pop
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
@@ -127,7 +128,7 @@ void setShmIfNecessary(uint64_t bytes) {
     throw std::system_error(
         ENOMEM,
         std::system_category(),
-        folly::sformat("Cannot set shmmax to {} from {}", bytes, curShmMax));
+        fmt::format("Cannot set shmmax to {} from {}", bytes, curShmMax));
   }
 
   const auto curShmAll = getShmAll();
@@ -137,8 +138,8 @@ void setShmIfNecessary(uint64_t bytes) {
     if (!setShmAll(desiredNumPages)) {
       throw std::system_error(ENOMEM,
                               std::system_category(),
-                              folly::sformat("Cannot set shmall to {} from {}",
-                                             desiredNumPages, curShmAll));
+                              fmt::format("Cannot set shmall to {} from {}",
+                                          desiredNumPages, curShmAll));
     }
   }
 }
@@ -189,14 +190,14 @@ void setMaxLockMemory(uint64_t bytes) {
   }
   throw std::system_error(
       errno, std::system_category(),
-      folly::sformat("Error setting rlimit to {} bytes. Errno = {}", bytes,
-                     errno));
+      fmt::format("Error setting rlimit to {} bytes. Errno = {}", bytes,
+                  errno));
 }
 
 size_t getNumResidentPages(const void* memory, size_t len) {
   if (!isPageAlignedAddr(memory)) {
     throw std::invalid_argument(
-        folly::sformat("addr {} is not page aligned", memory));
+        fmt::format("addr {} is not page aligned", memory));
   }
   XDCHECK(isPageAlignedAddr(memory));
   const size_t numPages = getNumPages(len);
@@ -207,8 +208,8 @@ size_t getNumResidentPages(const void* memory, size_t len) {
   if (rv != 0) {
     throw std::system_error(
         errno, std::system_category(),
-        folly::sformat("Error in mincore addr = {}, len = {}. errno = {}",
-                       memory, len, errno));
+        fmt::format("Error in mincore addr = {}, len = {}. errno = {}", memory,
+                    len, errno));
   }
   return std::count_if(vec.begin(), vec.end(),
                        [](unsigned char c) { return c != 0; });
@@ -241,7 +242,7 @@ bool getStatIfExists(const std::string& name, mode_t* mode) {
     return true;
   } else if (errno != ENOENT && errno != ENOTDIR) {
     // some system error, but it might exist
-    throwSystemError(errno, folly::sformat("Path: {}", name));
+    throwSystemError(errno, fmt::format("Path: {}", name));
   }
 
   // does not exist;
@@ -256,7 +257,7 @@ bool isDir(const std::string& name) {
   struct stat buf = {};
   auto err = stat(name.c_str(), &buf);
   if (err) {
-    throwSystemError(errno, folly::sformat("Path: {}", name));
+    throwSystemError(errno, fmt::format("Path: {}", name));
   }
   return S_ISDIR(buf.st_mode) ? true : false;
 }
@@ -265,7 +266,7 @@ bool isBlk(const std::string& name) {
   struct stat buf = {};
   auto err = stat(name.c_str(), &buf);
   if (err) {
-    throwSystemError(errno, folly::sformat("Path: {}", name));
+    throwSystemError(errno, fmt::format("Path: {}", name));
   }
   return S_ISBLK(buf.st_mode) ? true : false;
 }
@@ -280,8 +281,7 @@ void makeDir(const std::string& name) {
     snprintf(tmp, sizeof(tmp), "%s", path.c_str());
     len = strlen(tmp);
     if (len == 0) {
-      throw std::invalid_argument(
-          folly::sformat("Error forming path {}", path));
+      throw std::invalid_argument(fmt::format("Error forming path {}", path));
     }
     if (tmp[len - 1] == '/') {
       tmp[len - 1] = 0;
@@ -291,7 +291,7 @@ void makeDir(const std::string& name) {
         *p = 0;
         SCOPE_EXIT { *p = '/'; };
         if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
-          throwSystemError(errno, folly::sformat("failed to create {}", tmp));
+          throwSystemError(errno, fmt::format("failed to create {}", tmp));
         }
         *p = '/';
       }
@@ -302,7 +302,7 @@ void makeDir(const std::string& name) {
 
   mkdirs(name.c_str(), 0777);
   if (!getStatIfExists(name, nullptr)) {
-    throwSystemError(errno, folly::sformat("{} expected to be existing", name));
+    throwSystemError(errno, fmt::format("{} expected to be existing", name));
   }
 }
 
@@ -315,7 +315,7 @@ void removePath(const std::string& name) {
   if (isDir(name)) {
     auto dir = opendir(name.c_str());
     if (!dir) {
-      throwSystemError(errno, folly::sformat("Err removing path={}", name));
+      throwSystemError(errno, fmt::format("Err removing path={}", name));
     }
     SCOPE_EXIT { closedir(dir); };
     struct dirent* entry;
@@ -328,12 +328,12 @@ void removePath(const std::string& name) {
     }
     auto err = rmdir(name.c_str());
     if (err) {
-      throwSystemError(errno, folly::sformat("Err removing path={}", name));
+      throwSystemError(errno, fmt::format("Err removing path={}", name));
     }
   } else {
     auto err = unlink(name.c_str());
     if (err) {
-      throwSystemError(errno, folly::sformat("Err removing path={}", name));
+      throwSystemError(errno, fmt::format("Err removing path={}", name));
     }
   }
 }
@@ -343,7 +343,7 @@ std::string getUniqueTempDir(folly::StringPiece prefix) {
   if (dir == nullptr) {
     dir = "/tmp";
   }
-  return folly::sformat("{}/{}_{}", dir, prefix, folly::Random::rand32());
+  return fmt::format("{}/{}_{}", dir, prefix, folly::Random::rand32());
 }
 
 std::string toString(std::chrono::nanoseconds d) {
@@ -358,13 +358,13 @@ std::string toString(std::chrono::nanoseconds d) {
 
   uint64_t count = d.count();
   if (count < micros) {
-    return folly::sformat("{}ns", count);
+    return fmt::format("{}ns", count);
   } else if (count < millis) {
-    return folly::sformat("{:.2f}us", static_cast<double>(count) / micros);
+    return fmt::format("{:.2f}us", static_cast<double>(count) / micros);
   } else if (count < secs) {
-    return folly::sformat("{:.2f}ms", static_cast<double>(count) / millis);
+    return fmt::format("{:.2f}ms", static_cast<double>(count) / millis);
   } else {
-    return folly::sformat("{:.2f}s", static_cast<double>(count) / secs);
+    return fmt::format("{:.2f}s", static_cast<double>(count) / secs);
   }
 }
 

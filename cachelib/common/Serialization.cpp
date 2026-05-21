@@ -16,7 +16,7 @@
 
 #include "cachelib/common/Serialization.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 namespace facebook {
 namespace cachelib {
@@ -39,9 +39,9 @@ size_t Serializer::writeToBuffer(std::unique_ptr<folly::IOBuf> ioBuf) {
   const auto length = ioBuf->length();
   if (bytesRemaining() < length) {
     throw std::length_error(
-        folly::sformat("Buffer insufficient for serialization."
-                       "Has {} bytes left. Need {} bytes.",
-                       bytesRemaining(), length));
+        fmt::format("Buffer insufficient for serialization."
+                    "Has {} bytes left. Need {} bytes.",
+                    bytesRemaining(), length));
   }
   memcpy(curr_, ioBuf->data(), length);
   curr_ += length;

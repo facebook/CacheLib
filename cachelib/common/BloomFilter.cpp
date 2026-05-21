@@ -16,6 +16,8 @@
 
 #include "cachelib/common/BloomFilter.h"
 
+#include <fmt/core.h>
+
 #include <cassert>
 #include <cstring>
 
@@ -151,7 +153,7 @@ void BloomFilter::deserializeBits(RecordReader& rr) {
     auto bitsBuf = rr.readRecord();
     if (!bitsBuf) {
       throw std::invalid_argument(
-          folly::sformat("Failed to recover bits_ off: {}", off));
+          fmt::format("Failed to recover bits_ off: {}", off));
     }
     memcpy(bits_.get() + off, bitsBuf->data(), bitsBuf->length());
     off += bitsBuf->length();
@@ -167,7 +169,7 @@ void BloomFilter::deserializeBits(RecordReader& rr) {
     auto initBuf = rr.readRecord();
     if (!initBuf) {
       throw std::invalid_argument(
-          folly::sformat("Failed to recover init_ off: {}", off));
+          fmt::format("Failed to recover init_ off: {}", off));
     }
     off += initBuf->length();
   }

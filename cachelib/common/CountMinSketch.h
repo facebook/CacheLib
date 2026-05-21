@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <cmath>
 #include <limits>
@@ -140,12 +140,12 @@ CountMinSketchBase<UINT>::CountMinSketchBase(uint32_t width, uint32_t depth)
     : width_{width}, depth_{depth} {
   if (width_ == 0) {
     throw std::invalid_argument{
-        folly::sformat("Width must be greater than 0. Width: {}", width)};
+        fmt::format("Width must be greater than 0. Width: {}", width)};
   }
 
   if (depth_ == 0) {
     throw std::invalid_argument{
-        folly::sformat("Depth must be greater than 0. Depth: {}", depth)};
+        fmt::format("Depth must be greater than 0. Depth: {}", depth)};
   }
 
   table_ = std::make_unique<UINT[]>(width_ * depth_);
@@ -156,7 +156,7 @@ template <typename UINT>
 uint32_t CountMinSketchBase<UINT>::calculateWidth(double error,
                                                   uint32_t maxWidth) {
   if (error <= 0 || error >= 1) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Error should be greater than 0 and less than 1. Error: {}", error)};
   }
 
@@ -173,7 +173,7 @@ template <typename UINT>
 uint32_t CountMinSketchBase<UINT>::calculateDepth(double probability,
                                                   uint32_t maxDepth) {
   if (probability <= 0 || probability >= 1) {
-    throw std::invalid_argument{folly::sformat(
+    throw std::invalid_argument{fmt::format(
         "Probability should be greater than 0 and less than 1. Probability: {}",
         probability)};
   }
