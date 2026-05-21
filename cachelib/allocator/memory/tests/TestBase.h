@@ -114,6 +114,12 @@ class AllocTestBase : public testing::Test {
     return SlabAllocator::kLockSleepMS;
   }
 
+  static void waitForMemoryLocker(SlabAllocator& s) {
+    if (s.memoryLocker_.joinable()) {
+      s.memoryLocker_.join();
+    }
+  }
+
   void pretendMadvise(SlabAllocator* alloc) { alloc->pretendMadvise_ = true; }
 
   size_t getCurrentSlabAllocSize(const MemoryPool& pool) const {

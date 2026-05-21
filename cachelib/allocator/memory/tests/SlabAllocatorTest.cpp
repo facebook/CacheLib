@@ -532,7 +532,7 @@ TEST_F(SlabAllocatorTest, LockMemory) {
     config.lockMemory = true;
     SlabAllocator s(memory, size, config);
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    waitForMemoryLocker(s);
     ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
   }
 }
@@ -597,8 +597,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   config.lockMemory = true;
   SlabAllocator s(memory, size, config);
 
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+  waitForMemoryLocker(s);
   ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
   auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
