@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <algorithm>
@@ -635,17 +636,17 @@ class MapTest : public ::testing::Test {
 
     // Verify we still have all the keys in the map
     for (auto key : keys) {
-      SCOPED_TRACE(folly::sformat("key expected: {}", key));
+      SCOPED_TRACE(fmt::format("key expected: {}", key));
       ASSERT_NE(nullptr, map.find(key));
     }
 
     std::for_each(map.begin(), map.end(), [&](auto& kv) {
       const auto keyToPrint = kv.first; // need this to compile with gcc
-      SCOPED_TRACE(folly::sformat("key expected: {}", keyToPrint));
+      SCOPED_TRACE(fmt::format("key expected: {}", keyToPrint));
       ASSERT_NE(keys.find(kv.first), keys.end());
       keys.erase(kv.first);
     });
-    SCOPED_TRACE(folly::sformat("actual number of keys: {}", keys.size()));
+    SCOPED_TRACE(fmt::format("actual number of keys: {}", keys.size()));
     ASSERT_TRUE(keys.empty());
   }
 

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 
 #include <algorithm>
@@ -593,7 +594,7 @@ TEST(RangeMap, LargeMap) {
   // Allocate everything from cache to we will fail to allocate range map
   std::vector<LruAllocator::WriteHandle> handles;
   for (int i = 0;; i++) {
-    auto handle = cache->allocate(0, folly::sformat("key_{}", i), 100'000);
+    auto handle = cache->allocate(0, fmt::format("key_{}", i), 100'000);
     if (!handle) {
       break;
     }

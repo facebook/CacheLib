@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <gmock/gmock.h>
 
@@ -371,9 +372,8 @@ class BufferManagerTest : public ::testing::Test {
       // Allocate all memory so buffer manager creation will fail
       std::vector<typename AllocatorT::WriteHandle> handles;
       for (int i = 0;; i++) {
-        auto handle = cache->allocate(pid,
-                                      folly::sformat("key_{}", i),
-                                      BufferManager::kMaxBufferCapacity);
+        auto handle = cache->allocate(
+            pid, fmt::format("key_{}", i), BufferManager::kMaxBufferCapacity);
         if (!handle) {
           break;
         }
