@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/TokenBucket.h>
 #include <folly/system/ThreadName.h>
@@ -104,13 +105,13 @@ class CacheStressor : public CacheStressorBase {
     }
 
     if (config_.opPoolDistribution.size() > cache_->numPools()) {
-      throw std::invalid_argument(folly::sformat(
-          "more pools specified in the test than in the cache. "
-          "test: {}, cache: {}",
-          config_.opPoolDistribution.size(), cache_->numPools()));
+      throw std::invalid_argument(
+          fmt::format("more pools specified in the test than in the cache. "
+                      "test: {}, cache: {}",
+                      config_.opPoolDistribution.size(), cache_->numPools()));
     }
     if (config_.keyPoolDistribution.size() != cache_->numPools()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "different number of pools in the test from in the cache. "
           "test: {}, cache: {}",
           config_.keyPoolDistribution.size(), cache_->numPools()));
@@ -132,8 +133,8 @@ class CacheStressor : public CacheStressorBase {
   // to finish the stress operations.
   void start() override {
     setStartTime();
-    std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                config_.numThreads * config_.numOps / 1e6)
+    std::cout << fmt::format("Total {:.2f}M ops to be run",
+                             config_.numThreads * config_.numOps / 1e6)
               << std::endl;
 
     stressWorker_ = std::thread([this] {
@@ -143,7 +144,7 @@ class CacheStressor : public CacheStressorBase {
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
         workers.push_back(
             std::thread([this, throughputStats = &throughputStats_.at(i),
-                         threadName = folly::sformat("cb_stressor_{}", i)]() {
+                         threadName = fmt::format("cb_stressor_{}", i)]() {
               folly::setThreadName(threadName);
               stressByDiscreteDistribution(*throughputStats);
             }));
@@ -256,7 +257,7 @@ class CacheStressor : public CacheStressorBase {
           // if useCombinedLockForIterators is set handle count can be modified
           // by a different thread
           if (!useCombinedLockForIterators && cnt != 0) {
-            throw std::runtime_error(folly::sformat("Refcount leak {}", cnt));
+            throw std::runtime_error(fmt::format("Refcount leak {}", cnt));
           }
         };
         checkCnt(cache_->getHandleCountForThread());
@@ -394,7 +395,7 @@ class CacheStressor : public CacheStressorBase {
         }
         default:
           throw std::runtime_error(
-              folly::sformat("invalid operation generated: {}", (int)op));
+              fmt::format("invalid operation generated: {}", (int)op));
           break;
         }
 

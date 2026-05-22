@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/HardwareConcurrency.h>
 
@@ -35,8 +36,8 @@ HighRefcountStressor::HighRefcountStressor(const CacheConfig& cacheConfig,
 void HighRefcountStressor::start() {
   startTime_ = std::chrono::system_clock::now();
   testThread_ = std::thread([this] {
-    std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                kNumThreads * numOpsPerThread_ / 1e6)
+    std::cout << fmt::format("Total {:.2f}M ops to be run",
+                             kNumThreads * numOpsPerThread_ / 1e6)
               << std::endl;
 
     std::vector<std::thread> workers;
@@ -170,7 +171,7 @@ void CachelibMapStressor::testLoop() {
     populate(map);
     cache_->insertOrReplace(map.viewWriteHandle());
   } catch (const std::bad_alloc& e) {
-    XLOG_EVERY_MS(INFO, 600'000) << folly::sformat(
+    XLOG_EVERY_MS(INFO, 600'000) << fmt::format(
         "Detected allocation failure in the last 10 minutes: {}", e.what());
   }
 }
@@ -199,7 +200,7 @@ void CachelibMapStressor::pokeHoles(TestMap& map) {
   for (auto k : keys) {
     if (!map.erase(k)) {
       throw std::runtime_error(
-          folly::sformat("Bug: Key '{}' couldn't be removed from map", k));
+          fmt::format("Bug: Key '{}' couldn't be removed from map", k));
     }
   }
   map.compact();
@@ -214,7 +215,7 @@ void CachelibMapStressor::readEntries(TestMap& map) {
   for (auto k : keys) {
     if (map.find(k) == nullptr) {
       throw std::runtime_error(
-          folly::sformat("Bug: Key '{}' disappeared from map", k));
+          fmt::format("Bug: Key '{}' disappeared from map", k));
     }
   }
 }
@@ -251,13 +252,13 @@ void CachelibRangeMapStressor::start() {
   startTime_ = std::chrono::system_clock::now();
 
   for (size_t i = 0; i < keys_.size(); i++) {
-    keys_[i] = folly::sformat("map_key_{}", i);
+    keys_[i] = fmt::format("map_key_{}", i);
   }
 
   testThread_ = std::thread([this] {
     const size_t numThreads = folly::available_concurrency();
-    std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                numThreads * numOpsPerThread_ / 1e6)
+    std::cout << fmt::format("Total {:.2f}M ops to be run",
+                             numThreads * numOpsPerThread_ / 1e6)
               << std::endl;
 
     std::vector<std::thread> workers;

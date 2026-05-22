@@ -52,11 +52,11 @@ void ProgressTracker::work() {
   auto mOpsPerSec = throughputStats.ops / 1e6;
 
   auto currCacheStats = stressor_.getCacheStats();
-  auto thStr = folly::sformat("Instance {:>3}: {} {:>10.2f}M ops completed. {}",
-                              instanceId_,
-                              buf,
-                              mOpsPerSec,
-                              currCacheStats->progress(*prevStats_));
+  auto thStr = fmt::format("Instance {:>3}: {} {:>10.2f}M ops completed. {}",
+                           instanceId_,
+                           buf,
+                           mOpsPerSec,
+                           currCacheStats->progress(*prevStats_));
 
   // additionally log into the stats file
   if (statsFile_.is_open()) {

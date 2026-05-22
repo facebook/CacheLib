@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/runner/CacheComponentStressor.h"
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/logging/xlog.h>
@@ -164,7 +165,7 @@ folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
   case OpType::kCouldExist:
   default:
     throw std::runtime_error(
-        folly::sformat("invalid operation generated: {}", (int)op));
+        fmt::format("invalid operation generated: {}", (int)op));
   }
 }
 

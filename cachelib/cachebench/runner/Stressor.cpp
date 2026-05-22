@@ -85,13 +85,13 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
           : 100.0 * (couldExistOp - couldExistOpFalse) / couldExistOp;
 
   out << std::fixed;
-  out << folly::sformat("{:10}: {:.2f} million", "Total Ops", ops / 1e6)
+  out << fmt::format("{:10}: {:.2f} million", "Total Ops", ops / 1e6)
       << std::endl;
-  out << folly::sformat("{:10}: {:,}", "Total sets", set) << std::endl;
+  out << fmt::format("{:10}: {}", "Total sets", set) << std::endl;
 
   auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
                       double v2) {
-    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%", k1, v1, k2, v2)
+    out << fmt::format("{:10}: {:9}/s, {:10}: {:6.2f}%", k1, v1, k2, v2)
         << std::endl;
   };
   outFn("get", getPerSec, "success", getSuccessRate);
@@ -184,7 +184,7 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     if (stressorConfig.generator != "workload" &&
         !stressorConfig.generator.empty()) {
       // async model has not been tested with other generators
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Async cache stressor only works with workload generator currently. "
           "generator: {}",
           stressorConfig.generator));

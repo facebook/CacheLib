@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/runner/FastShutdown.h"
 
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include <iostream>
@@ -27,7 +28,7 @@ namespace cachebench {
 FastShutdownStressor::FastShutdownStressor(const CacheConfig& cacheConfig,
                                            uint64_t numOps)
     : numOps_(numOps),
-      cacheDir_{folly::sformat("/tmp/cache_bench_fss_{}", getpid())},
+      cacheDir_{fmt::format("/tmp/cache_bench_fss_{}", getpid())},
       cache_(std::make_unique<Cache<LruAllocator>>(
           cacheConfig, nullptr, cacheDir_)) {}
 
@@ -47,9 +48,9 @@ void FastShutdownStressor::start() {
     std::cout << "allocating....\n";
     for (uint32_t i = 0; i < nslabs; i++) {
       for (uint32_t j = 0; j < numSmallAllocs; j++) {
-        auto it = cache_->allocate(
-            static_cast<uint8_t>(0),
-            folly::sformat("key_{}", i * numSmallAllocs + j), 5);
+        auto it =
+            cache_->allocate(static_cast<uint8_t>(0),
+                             fmt::format("key_{}", i * numSmallAllocs + j), 5);
         if (it) {
           cache_->insertOrReplace(it);
           v.push_back(std::move(it));
@@ -70,7 +71,7 @@ void FastShutdownStressor::start() {
         // Adding the check to make the linter happy
         if (!v.empty()) {
           v[i * numSmallAllocs + j].reset();
-          cache_->remove(folly::sformat("key_{}", i * numSmallAllocs + j));
+          cache_->remove(fmt::format("key_{}", i * numSmallAllocs + j));
         }
       }
     }
@@ -121,8 +122,8 @@ void FastShutdownStressor::start() {
     std::cout << "Shut down durtaion " << duration.count() << "\n";
     if (duration.count() > 10) {
       throw std::runtime_error(
-          folly::sformat("Failed. Took {} seconds for shutdown to complete",
-                         duration.count()));
+          fmt::format("Failed. Took {} seconds for shutdown to complete",
+                      duration.count()));
     }
     // reattach the cache, so that stats can be collected or the test can be
     // repeated.
@@ -133,8 +134,8 @@ void FastShutdownStressor::start() {
     auto& stats = statsPtr->as<Stats>();
     if (stats.numAbortedSlabReleases != expectedAbortCount) {
       throw std::runtime_error(
-          folly::sformat("Failed. Expected abort count did not match {} {}",
-                         stats.numAbortedSlabReleases, expectedAbortCount));
+          fmt::format("Failed. Expected abort count did not match {} {}",
+                      stats.numAbortedSlabReleases, expectedAbortCount));
     }
   }
 }
