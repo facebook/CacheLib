@@ -86,6 +86,7 @@
  * InsertThreadLocal(64)                           686.74%      5.38s   185.99m
  */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/container/EvictingCacheMap.h>
 #include <folly/init/Init.h>
@@ -141,17 +142,17 @@ void Find(size_t iters, size_t numThreads) {
     const auto ramCacheSize = cache->getCacheMemoryStats().ramCacheSize;
     const auto perPoolSize = ramCacheSize / numPools;
     for (size_t i = 0; i < numPools; ++i) {
-      cache->addPool(folly::sformat("pid_{}", i), perPoolSize);
+      cache->addPool(fmt::format("pid_{}", i), perPoolSize);
     }
 
     for (size_t i = 0; i < kNumItems; ++i) {
-      auto key = folly::sformat("key_{}", i);
+      auto key = fmt::format("key_{}", i);
       auto handle = cache->allocate(static_cast<PoolId>(i % numPools), key, 64);
       if (handle) {
         cache->insertOrReplace(handle);
       } else {
         throw std::runtime_error(
-            folly::sformat("allocation cannot fail! key: {}", key));
+            fmt::format("allocation cannot fail! key: {}", key));
       }
     }
 
@@ -169,7 +170,7 @@ void Find(size_t iters, size_t numThreads) {
     auto& lookupKeys = lookupKeyIndices[threadId];
     for (size_t loop = 0; loop < kNumLoops; ++loop) {
       for (size_t i = 0; i < lookupKeys.size(); ++i) {
-        auto key = folly::sformat("key_{}", lookupKeys[i]);
+        auto key = fmt::format("key_{}", lookupKeys[i]);
         auto it = cache->find(key);
         folly::doNotOptimizeAway(it);
       }
@@ -205,7 +206,7 @@ void FindThreadLocal(size_t iters, size_t numThreads) {
     }
 
     for (size_t i = 0; i < kNumItems; ++i) {
-      auto key = folly::sformat("key_{}", i);
+      auto key = fmt::format("key_{}", i);
       auto value = "dummy_value_123456789012345678901234567890";
       caches[i % numThreads]->insert(key, std::move(value));
     }
@@ -222,12 +223,12 @@ void FindThreadLocal(size_t iters, size_t numThreads) {
     auto& lookupKeys = lookupKeyIndices[threadId];
     for (size_t loop = 0; loop < kNumLoops; ++loop) {
       for (size_t i = 0; i < lookupKeys.size(); ++i) {
-        auto key = folly::sformat("key_{}", lookupKeys[i]);
+        auto key = fmt::format("key_{}", lookupKeys[i]);
         auto it = cache->find(key);
         if (it == cache->end()) {
-          throw std::runtime_error(folly::sformat(
-              "key not found in EvictingCacheMap: {}, threadId: {}", key,
-              threadId));
+          throw std::runtime_error(
+              fmt::format("key not found in EvictingCacheMap: {}, threadId: {}",
+                          key, threadId));
         }
         folly::doNotOptimizeAway(it);
       }
@@ -271,18 +272,18 @@ void Insert(size_t iters, size_t numThreads) {
     const auto ramCacheSize = cache->getCacheMemoryStats().ramCacheSize;
     const auto perPoolSize = ramCacheSize / numPools;
     for (size_t i = 0; i < numPools; ++i) {
-      cache->addPool(folly::sformat("pid_{}", i), perPoolSize);
+      cache->addPool(fmt::format("pid_{}", i), perPoolSize);
     }
 
     // Initially allocate a lot more items to ensure we fill up the cache
     for (size_t i = 0; i < kNumItems * 10; ++i) {
-      auto key = folly::sformat("key_{}", i);
+      auto key = fmt::format("key_{}", i);
       auto handle = cache->allocate(static_cast<PoolId>(i % numPools), key, 64);
       if (handle) {
         cache->insertOrReplace(handle);
       } else {
         throw std::runtime_error(
-            folly::sformat("allocation cannot fail! key: {}", key));
+            fmt::format("allocation cannot fail! key: {}", key));
       }
     }
   }
@@ -290,14 +291,14 @@ void Insert(size_t iters, size_t numThreads) {
   auto runInserts = [&](size_t /* threadId */) {
     for (size_t loop = 0; loop < kNumLoops; ++loop) {
       for (size_t i = 0; i < kInsertOps; ++i) {
-        auto key = folly::sformat("key_{}_{}", loop, i);
+        auto key = fmt::format("key_{}_{}", loop, i);
         auto handle =
             cache->allocate(static_cast<PoolId>(i % numPools), key, 64);
         if (handle) {
           cache->insertOrReplace(handle);
         } else {
           throw std::runtime_error(
-              folly::sformat("allocation cannot fail! key: {}", key));
+              fmt::format("allocation cannot fail! key: {}", key));
         }
       }
     }
@@ -329,7 +330,7 @@ void InsertThreadLocal(size_t iters, size_t numThreads) {
     }
 
     for (size_t i = 0; i < kNumItems; ++i) {
-      auto key = folly::sformat("key_{}", i);
+      auto key = fmt::format("key_{}", i);
       auto value = "dummy_value_123456789012345678901234567890";
       caches[i % numThreads]->insert(key, std::move(value));
     }
@@ -339,7 +340,7 @@ void InsertThreadLocal(size_t iters, size_t numThreads) {
     auto& cache = caches[threadId];
     for (size_t loop = 0; loop < kNumLoops; ++loop) {
       for (size_t i = 0; i < kInsertOps; ++i) {
-        auto key = folly::sformat("key_{}_{}", loop, i);
+        auto key = fmt::format("key_{}_{}", loop, i);
         auto value = "dummy_value_123456789012345678901234567890";
         cache->insert(key, std::move(value));
       }

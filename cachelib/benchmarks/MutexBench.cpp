@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
-#include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/SpinLock.h>
 #include <folly/init/Init.h>
@@ -100,36 +100,30 @@ struct Stats {
   }
 
   void render() const {
-    std::cout
-        << folly::sformat("{:30}: {:16.4f}", "Elapsed time", elapsedSecs())
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16.4f}", "Elapsed time", elapsedSecs())
+              << std::endl;
 
-    std::cout
-        << folly::sformat("{:30}: {:16,}", "Vol Context Switches", numVCsw)
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16}", "Vol Context Switches", numVCsw)
+              << std::endl;
 
-    std::cout
-        << folly::sformat("{:30}: {:16,}", "Inv Context Switches", numInvCsw)
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16}", "Inv Context Switches", numInvCsw)
+              << std::endl;
 
     auto rate = [&](uint64_t num) {
       return static_cast<uint64_t>(num / elapsedSecs());
     };
 
-    std::cout
-        << folly::sformat("{:30}: {:16,}/sec", "Updates", rate(numUpdates))
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16}/sec", "Updates", rate(numUpdates))
+              << std::endl;
 
-    std::cout
-        << folly::sformat("{:30}: {:16,}/sec", "Deletes", rate(numDeletes))
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16}/sec", "Deletes", rate(numDeletes))
+              << std::endl;
 
-    std::cout
-        << folly::sformat("{:30}: {:16,}/sec", "Evictions", rate(numEvicts))
-        << std::endl;
+    std::cout << fmt::format("{:30}: {:16}/sec", "Evictions", rate(numEvicts))
+              << std::endl;
 
     const auto total = numUpdates + numDeletes + numEvicts;
-    std::cout << folly::sformat("{:30}: {:16,}/sec", "Throughput", rate(total))
+    std::cout << fmt::format("{:30}: {:16}/sec", "Throughput", rate(total))
               << std::endl;
   }
 };
@@ -434,11 +428,11 @@ int main(int argc, char** argv) {
 
   if (FLAGS_print_stats) {
     auto printInt = [](folly::StringPiece key, size_t val) {
-      std::cout << folly::sformat("{:20}: {:16,} ", key, val) << std::endl;
+      std::cout << fmt::format("{:20}: {:16} ", key, val) << std::endl;
     };
 
     auto printDouble = [](folly::StringPiece key, double val) {
-      std::cout << folly::sformat("{:20}: {:16.2f} ", key, val) << std::endl;
+      std::cout << fmt::format("{:20}: {:16.2f} ", key, val) << std::endl;
     };
 
     printInt("num_threads", FLAGS_num_threads);
@@ -452,8 +446,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
 
     for (auto& stat : stats) {
-      std::cout << folly::sformat("==={:16}===", stat.second.second)
-                << std::endl;
+      std::cout << fmt::format("==={:16}===", stat.second.second) << std::endl;
       stat.second.first.render();
       std::cout << std::endl;
     }

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 
 #include <chrono>
 #include <string>
@@ -40,9 +40,9 @@ class Timer {
 
     std::chrono::nanoseconds durationTime = endTime_ - startTime_;
     uint64_t durationCycles = endCycles_ - startCycles_;
-    std::cout << folly::sformat("[{: <60}] Per-Op: {: <5} ns, {: <5} cycles",
-                                name_, durationTime.count() / ops_,
-                                durationCycles / ops_)
+    std::cout << fmt::format("[{: <60}] Per-Op: {: <5} ns, {: <5} cycles",
+                             name_, durationTime.count() / ops_,
+                             durationCycles / ops_)
               << std::endl;
   }
 
@@ -70,7 +70,7 @@ class Timer {
 };
 
 void printMsg(std::string msg) {
-  std::cout << folly::sformat("--------{:-<92}", folly::sformat(" {} ", msg))
+  std::cout << fmt::format("--------{:-<92}", fmt::format(" {} ", msg))
             << std::endl;
 }
 } // namespace cachelib

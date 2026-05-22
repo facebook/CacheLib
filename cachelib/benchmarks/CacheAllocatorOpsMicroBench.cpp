@@ -38,6 +38,7 @@ Send packet CA->Netherlands->CA    150,000,000   ns  150,000 us  150 ms
 clang-format on
 */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/BenchmarkUtil.h>
 #include <folly/init/Init.h>
@@ -80,7 +81,7 @@ void runDifferentHTSizes(int htPower, uint64_t numObjects) {
   std::vector<std::string> keys;
   for (uint64_t i = 0; i < numObjects; i++) {
     // Length of key should be 10 bytes
-    auto key = folly::sformat("k_{: <8}", i);
+    auto key = fmt::format("k_{: <8}", i);
     auto hdl = cache->allocate(0, key, 100);
     XCHECK(hdl);
     cache->insertOrReplace(hdl);
@@ -107,8 +108,8 @@ void runDifferentHTSizes(int htPower, uint64_t numObjects) {
   }
 
   {
-    Timer t{folly::sformat("Peek - {: <2} HT Power, {: <8} Objects", htPower,
-                           numObjects),
+    Timer t{fmt::format("Peek - {: <2} HT Power, {: <8} Objects", htPower,
+                        numObjects),
             kLoops};
     sp.reached(0); // Start the operations
     for (auto& r : rs) {
@@ -203,14 +204,14 @@ void runFindMissMultiThreads(int numThreads, bool isPeek) {
   // Populate a bunch of keys that don't exist in cache
   for (uint64_t i = kObjects; i < 2 * kObjects; i++) {
     // Length of key should be 10 bytes
-    auto key = folly::sformat("k_{: <8}", i);
+    auto key = fmt::format("k_{: <8}", i);
     keys.push_back(key);
   }
 
   // Fill up cache with some other keys
   for (uint64_t i = 0; i < kObjects; i++) {
     // Length of key should be 10 bytes
-    auto key = folly::sformat("k_{: <8}", i);
+    auto key = fmt::format("k_{: <8}", i);
     auto hdl = cache->allocate(0, key, 100);
     XCHECK(hdl);
     cache->insertOrReplace(hdl);
@@ -234,8 +235,8 @@ void runFindMissMultiThreads(int numThreads, bool isPeek) {
   }
 
   {
-    Timer t{folly::sformat("{} - All Misses - {: <2} Threads",
-                           isPeek ? "Peek" : "Find", numThreads),
+    Timer t{fmt::format("{} - All Misses - {: <2} Threads",
+                        isPeek ? "Peek" : "Find", numThreads),
             kLoops};
     sp.reached(0); // Start the operations
     for (auto& r : rs) {

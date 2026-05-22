@@ -38,6 +38,7 @@ Send packet CA->Netherlands->CA    150,000,000   ns  150,000 us  150 ms
 clang-format on
 */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/BenchmarkUtil.h>
 #include <folly/Format.h>
@@ -175,7 +176,7 @@ void createSmallString() {
     Timer t{"Create Small String", kOps};
     for (uint64_t i = 0; i < kOps; i++) {
       // Read from the vector of strings (first memory load)
-      auto key = folly::sformat("{: <10}", i);
+      auto key = fmt::format("{: <10}", i);
       folly::doNotOptimizeAway(key);
     }
   }

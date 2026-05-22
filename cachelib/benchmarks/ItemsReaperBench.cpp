@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
 #include <folly/init/Init.h>
@@ -90,7 +91,7 @@ int main(int argc, char** argv) {
   }
 
   auto reaperStatStr = [](const facebook::cachelib::ReaperStats& stats) {
-    auto str = folly::sformat(
+    auto str = fmt::format(
         "numTraversals: {:8d}, numVisits: {:12d}, lastTraversalMs: {:6d}ms, "
         "avgTraversalMs: {:6d}ms, maxTraversalMs: {:6d}",
         stats.numTraversals, stats.numVisitedItems, stats.lastTraversalTimeMs,
@@ -133,8 +134,8 @@ int main(int argc, char** argv) {
       std::chrono::steady_clock::now() - start);
 
   XLOG(INFO) << reaperStatStr(finalStats);
-  XLOG(INFO) << folly::sformat("bytes scanned  : {:12.2f}gb/sec",
-                               memoryScanned / timeTaken.count());
+  XLOG(INFO) << fmt::format("bytes scanned  : {:12.2f}gb/sec",
+                            memoryScanned / timeTaken.count());
 
   auto getTimeRUsage = [](const struct rusage& r) {
     double userSeconds = r.ru_utime.tv_sec + r.ru_utime.tv_usec / 1e6;
@@ -147,7 +148,7 @@ int main(int argc, char** argv) {
 
   // compute core cpu util by divinding the time spent on a core with overall
   // time spent to complete the operation.
-  XLOG(INFO) << folly::sformat(
+  XLOG(INFO) << fmt::format(
       "cpu util: user: {:3.6}s sys: {:3.6f}s total: {:3.6f}s  util-pct: "
       "{:2.2f}%",
       afterUser - beforeUser, afterSys - beforeSys, afterTot - beforeTot,

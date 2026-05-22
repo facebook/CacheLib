@@ -38,6 +38,7 @@ Send packet CA->Netherlands->CA    150,000,000   ns  150,000 us  150 ms
 clang-format on
 */
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/BenchmarkUtil.h>
 #include <folly/init/Init.h>
@@ -240,7 +241,7 @@ void testSequential(int numThreads,
   BENCHMARK_SUSPEND {
     ht = std::make_unique<HashTable>(htBucketPower, htLockPower);
     for (uint64_t i = 0; i < numObjects; i++) {
-      auto key = folly::sformat("k_{:<8}", i);
+      auto key = fmt::format("k_{:<8}", i);
       keys.push_back(key);
       objects.push_back(std::make_unique<Object>(key));
       ht->insert(objects.back().get());
@@ -267,7 +268,7 @@ void testSequential(int numThreads,
 
   {
     Timer t{
-        folly::sformat(
+        fmt::format(
             "Sequential_{} - {: <2} T, {: <2} HB, {: <2} HL, {: <8} Objects",
             msg, numThreads, htBucketPower, htLockPower, numObjects),
         kLoops};
@@ -296,7 +297,7 @@ void testBatch(int numThreads,
   BENCHMARK_SUSPEND {
     ht = std::make_unique<HashTable>(htBucketPower, htLockPower);
     for (uint64_t i = 0; i < numObjects; i++) {
-      auto key = folly::sformat("k_{:<8}", i);
+      auto key = fmt::format("k_{:<8}", i);
       keys.push_back(key);
       objects.push_back(std::make_unique<Object>(key));
       ht->insert(objects.back().get());
@@ -329,10 +330,10 @@ void testBatch(int numThreads,
   }
 
   {
-    Timer t{folly::sformat("Prefetch{} - {: <4} B, {: <2} T, {: <2} HB, {: <2} "
-                           "HL, {: <8} Objects",
-                           msg, BATCH_SIZE, numThreads, htBucketPower,
-                           htLockPower, numObjects),
+    Timer t{fmt::format("Prefetch{} - {: <4} B, {: <2} T, {: <2} HB, {: <2} "
+                        "HL, {: <8} Objects",
+                        msg, BATCH_SIZE, numThreads, htBucketPower, htLockPower,
+                        numObjects),
             kLoops};
     sp.reached(0); // Start the operations
     for (auto& r : rs) {
