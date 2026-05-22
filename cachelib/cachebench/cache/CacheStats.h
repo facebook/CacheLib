@@ -15,6 +15,7 @@
  */
 
 #pragma once
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/Format.h>
 #include <gflags/gflags.h>
@@ -251,7 +252,7 @@ class Stats : public StatsBase {
   std::string progress(const StatsBase& prevStatsBase) const override {
     const auto& prevStats = prevStatsBase.as<Stats>();
     auto hitRates = getHitRatios(prevStats);
-    return folly::sformat(
+    return fmt::format(
         "{} items in cache. {} items in nvm cache. {} items evicted from nvm "
         "cache. Hit Ratio {:6.2f}% (RAM {:6.2f}%, NVM {:6.2f}%).",
         numItems,
@@ -265,18 +266,18 @@ class Stats : public StatsBase {
   void render(std::ostream& out) const override {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
-    out << folly::sformat("Items in RAM  : {:,}", numItems) << std::endl;
-    out << folly::sformat("Items in NVM  : {:,}", numNvmItems) << std::endl;
+    out << fmt::format("Items in RAM  : {}", numItems) << std::endl;
+    out << fmt::format("Items in NVM  : {}", numNvmItems) << std::endl;
 
-    out << folly::sformat("Alloc Attempts: {:,} Success: {:.2f}%",
-                          allocAttempts,
-                          invertPctFn(allocFailures, allocAttempts))
+    out << fmt::format("Alloc Attempts: {} Success: {:.2f}%",
+                       allocAttempts,
+                       invertPctFn(allocFailures, allocAttempts))
         << std::endl;
-    out << folly::sformat("Evict Attempts: {:,} Success: {:.2f}%",
-                          evictAttempts,
-                          pctFn(numEvictions, evictAttempts))
+    out << fmt::format("Evict Attempts: {} Success: {:.2f}%",
+                       evictAttempts,
+                       pctFn(numEvictions, evictAttempts))
         << std::endl;
-    out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
+    out << fmt::format("RAM Evictions : {}", numEvictions) << std::endl;
 
     auto foreachAC = [](const auto& map, auto cb) {
       for (auto& pidStat : map) {
@@ -288,8 +289,8 @@ class Stats : public StatsBase {
 
     if (!aggregated_) {
       for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
-        out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
-                              poolUsageFraction[pid])
+        out << fmt::format("Fraction of pool {} used : {:.2f}", pid,
+                           poolUsageFraction[pid])
             << std::endl;
       }
 
@@ -319,10 +320,9 @@ class Stats : public StatsBase {
           auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
           auto [memorySizeSuffix, memorySize] =
               formatMemory(stats.activeAllocs * stats.allocSize);
-          out << folly::sformat(
-                     "pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}", pid,
-                     cid, allocSize, allocSizeSuffix, memorySize,
-                     memorySizeSuffix)
+          out << fmt::format("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
+                             pid, cid, allocSize, allocSizeSuffix, memorySize,
+                             memorySizeSuffix)
               << std::endl;
         });
 
@@ -342,17 +342,17 @@ class Stats : public StatsBase {
                 stats.activeAllocs / (stats.usedSlabs * stats.allocsPerSlab);
           }
 
-          out << folly::sformat(
-                     "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid,
-                     cid, allocSize, allocSizeSuffix, acUsageFraction)
+          out << fmt::format("pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}",
+                             pid, cid, allocSize, allocSizeSuffix,
+                             acUsageFraction)
               << std::endl;
         });
       }
     }
 
     if (numCacheGets > 0) {
-      out << folly::sformat("Cache Gets    : {:,}", numCacheGets) << std::endl;
-      out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
+      out << fmt::format("Cache Gets    : {}", numCacheGets) << std::endl;
+      out << fmt::format("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
 
       if (FLAGS_report_api_latency && !aggregated_) {
@@ -361,8 +361,8 @@ class Stats : public StatsBase {
                    const util::PercentileStats::Estimates& latency) {
               auto fmtLatency = [&out, &cat](folly::StringPiece pct,
                                              double val) {
-                out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
-                                      val);
+                out << fmt::format("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
+                                   val);
               };
 
               fmtLatency("p50", latency.p50);
@@ -386,17 +386,17 @@ class Stats : public StatsBase {
       if (!aggregated_) {
         foreachAC(backgroundEvictionClasses,
                   [&](auto pid, auto cid, auto evicted) {
-                    out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
-                                          cid, evicted)
+                    out << fmt::format("pid{:2} cid{:4} evicted: {:4}", pid,
+                                       cid, evicted)
                         << std::endl;
                   });
       }
 
-      out << folly::sformat("Background Evicted Items : {:,}",
-                            backgndEvicStats.nEvictedItems)
+      out << fmt::format("Background Evicted Items : {}",
+                         backgndEvicStats.nEvictedItems)
           << std::endl;
-      out << folly::sformat("Background Evictor Traversals : {:,}",
-                            backgndEvicStats.nTraversals)
+      out << fmt::format("Background Evictor Traversals : {}",
+                         backgndEvicStats.nTraversals)
           << std::endl;
     }
 
@@ -406,17 +406,17 @@ class Stats : public StatsBase {
       if (!aggregated_) {
         foreachAC(backgroundPromotionClasses,
                   [&](auto pid, auto cid, auto promoted) {
-                    out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
-                                          cid, promoted)
+                    out << fmt::format("pid{:2} cid{:4} promoted: {:4}", pid,
+                                       cid, promoted)
                         << std::endl;
                   });
       }
 
-      out << folly::sformat("Background Promoted Items : {:,}",
-                            backgndPromoStats.nPromotedItems)
+      out << fmt::format("Background Promoted Items : {}",
+                         backgndPromoStats.nPromotedItems)
           << std::endl;
-      out << folly::sformat("Background Promoter Traversals : {:,}",
-                            backgndPromoStats.nTraversals)
+      out << fmt::format("Background Promoter Traversals : {}",
+                         backgndPromoStats.nTraversals)
           << std::endl;
     }
 
@@ -424,14 +424,14 @@ class Stats : public StatsBase {
       const double ramHitRatio = invertPctFn(numCacheGetMiss, numCacheGets);
       const double nvmHitRatio = invertPctFn(numNvmGetMiss, numNvmGets);
 
-      out << folly::sformat(
+      out << fmt::format(
           "RAM Hit Ratio : {:6.2f}%\n"
           "NVM Hit Ratio : {:6.2f}%\n",
           ramHitRatio, nvmHitRatio);
 
-      out << folly::sformat(
-          "RAM eviction rejects expiry : {:,}\nRAM eviction rejects clean : "
-          "{:,}\n",
+      out << fmt::format(
+          "RAM eviction rejects expiry : {}\nRAM eviction rejects clean : "
+          "{}\n",
           numNvmRejectsByExpiry, numNvmRejectsByClean);
 
       if (!aggregated_) {
@@ -439,7 +439,7 @@ class Stats : public StatsBase {
         folly::StringPiece writeCat = "NVM Write Latency";
         auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
                               double val) {
-          out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
+          out << fmt::format("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
         };
 
         fmtLatency(readCat, "p50", nvmReadLatencyMicrosP50);
@@ -497,16 +497,16 @@ class Stats : public StatsBase {
 
       double devWriteAmp =
           pctFn(numNvmNandBytesWritten, numNvmBytesWritten) / 100.0;
-      out << folly::sformat("NVM bytes written (physical)  : {:6.2f} GB\n",
-                            numNvmBytesWritten / GB);
-      out << folly::sformat("NVM bytes written (logical)   : {:6.2f} GB\n",
-                            numNvmLogicalBytesWritten / GB);
-      out << folly::sformat("NVM bytes written (nand)      : {:6.2f} GB\n",
-                            numNvmNandBytesWritten / GB);
-      out << folly::sformat("NVM app write amplification   : {:6.2f}\n",
-                            appWriteAmp);
-      out << folly::sformat("NVM dev write amplification   : {:6.2f}\n",
-                            devWriteAmp);
+      out << fmt::format("NVM bytes written (physical)  : {:6.2f} GB\n",
+                         numNvmBytesWritten / GB);
+      out << fmt::format("NVM bytes written (logical)   : {:6.2f} GB\n",
+                         numNvmLogicalBytesWritten / GB);
+      out << fmt::format("NVM bytes written (nand)      : {:6.2f} GB\n",
+                         numNvmNandBytesWritten / GB);
+      out << fmt::format("NVM app write amplification   : {:6.2f}\n",
+                         appWriteAmp);
+      out << fmt::format("NVM dev write amplification   : {:6.2f}\n",
+                         devWriteAmp);
     }
     const double putSuccessPct =
         invertPctFn(numNvmPutErrs + numNvmAbortedPutOnInflightGet +
@@ -514,15 +514,15 @@ class Stats : public StatsBase {
                     numNvmPuts);
     const double cleanEvictPct = pctFn(numNvmCleanEvict, numNvmEvictions);
     const double getCoalescedPct = pctFn(numNvmGetCoalesced, numNvmGets);
-    out << folly::sformat("{:14}: {:15,}, {:10}: {:6.2f}%",
-                          "NVM Gets",
-                          numNvmGets,
-                          "Coalesced",
-                          getCoalescedPct)
+    out << fmt::format("{:14}: {:15}, {:10}: {:6.2f}%",
+                       "NVM Gets",
+                       numNvmGets,
+                       "Coalesced",
+                       getCoalescedPct)
         << std::endl;
-    out << folly::sformat(
-               "{:14}: {:15,}, {:10}: {:6.2f}%, {:8}: {:6.2f}%, {:16}: "
-               "{:8,}, {:16}: {:8,}",
+    out << fmt::format(
+               "{:14}: {:15}, {:10}: {:6.2f}%, {:8}: {:6.2f}%, {:16}: "
+               "{:8}, {:16}: {:8}",
                "NVM Puts",
                numNvmPuts,
                "Success",
@@ -534,9 +534,9 @@ class Stats : public StatsBase {
                "AbortsFromGet",
                numNvmAbortedPutOnInflightGet)
         << std::endl;
-    out << folly::sformat(
-               "{:14}: {:15,}, {:10}: {:6.2f}%, {:8}: {:7,},"
-               " {:16}: {:8,}",
+    out << fmt::format(
+               "{:14}: {:15}, {:10}: {:6.2f}%, {:8}: {:7},"
+               " {:16}: {:8}",
                "NVM Evicts",
                numNvmEvictions,
                "Clean",
@@ -547,23 +547,23 @@ class Stats : public StatsBase {
                numNvmCleanDoubleEvict)
         << std::endl;
     const double skippedDeletesPct = pctFn(numNvmSkippedDeletes, numNvmDeletes);
-    out << folly::sformat("{:14}: {:15,} {:14}: {:6.2f}%",
-                          "NVM Deletes",
-                          numNvmDeletes,
-                          "Skipped Deletes",
-                          skippedDeletesPct)
+    out << fmt::format("{:14}: {:15} {:14}: {:6.2f}%",
+                       "NVM Deletes",
+                       numNvmDeletes,
+                       "Skipped Deletes",
+                       skippedDeletesPct)
         << std::endl;
     if (numNvmExceededMaxRetry > 0) {
-      out << folly::sformat("{}: {}", "NVM max read retry reached",
-                            numNvmExceededMaxRetry)
+      out << fmt::format("{}: {}", "NVM max read retry reached",
+                         numNvmExceededMaxRetry)
           << std::endl;
     }
 
     if (slabsReleased > 0) {
-      out << folly::sformat(
-                 "Released {:,} slabs\n"
-                 "  Moves     : attempts: {:10,}, success: {:6.2f}%\n"
-                 "  Evictions : attempts: {:10,}, success: {:6.2f}%",
+      out << fmt::format(
+                 "Released {} slabs\n"
+                 "  Moves     : attempts: {:10}, success: {:6.2f}%\n"
+                 "  Evictions : attempts: {:10}, success: {:6.2f}%",
                  slabsReleased,
                  moveAttemptsForSlabRelease,
                  pctFn(moveSuccessesForSlabRelease, moveAttemptsForSlabRelease),
@@ -581,13 +581,13 @@ class Stats : public StatsBase {
     }
 
     if (numRamDestructorCalls > 0 || numNvmDestructorCalls > 0) {
-      out << folly::sformat("Destructor executed from RAM {}, from NVM {}",
-                            numRamDestructorCalls, numNvmDestructorCalls)
+      out << fmt::format("Destructor executed from RAM {}, from NVM {}",
+                         numRamDestructorCalls, numNvmDestructorCalls)
           << std::endl;
     }
 
     if (numCacheEvictions > 0) {
-      out << folly::sformat("Total eviction executed {}", numCacheEvictions)
+      out << fmt::format("Total eviction executed {}", numCacheEvictions)
           << std::endl;
     }
   }
@@ -631,13 +631,13 @@ class Stats : public StatsBase {
 
     if (numCacheGets > prevStats.numCacheGets) {
       auto rates = getHitRatios(prevStatsBase);
-      out << folly::sformat("Cache Gets    : {:,}",
-                            numCacheGets - prevStats.numCacheGets)
+      out << fmt::format("Cache Gets    : {}",
+                         numCacheGets - prevStats.numCacheGets)
           << std::endl;
-      out << folly::sformat("Hit Ratio     : {:6.2f}%", rates["overall"])
+      out << fmt::format("Hit Ratio     : {:6.2f}%", rates["overall"])
           << std::endl;
 
-      out << folly::sformat(
+      out << fmt::format(
           "RAM Hit Ratio : {:6.2f}%\n"
           "NVM Hit Ratio : {:6.2f}%\n",
           rates["ram"], rates["nvm"]);
@@ -778,7 +778,7 @@ class ComponentStats : public StatsBase {
     auto& prevStats = prevStatsBase.as<ComponentStats>();
     auto hitRates = getHitRatios(prevStats);
     uint64_t totalOps = getTotalCalls();
-    return folly::sformat(
+    return fmt::format(
         "{} items in cache. "
         "{:>5} total cache operations (including support ops, e.g., "
         "writeBack()). Hit Ratio {:6.2f}%.",
@@ -803,8 +803,8 @@ class ComponentStats : public StatsBase {
       }
       auto dSucc = curr.throughput_.successes_ - prev.throughput_.successes_;
       auto dErr = curr.throughput_.errors_ - prev.throughput_.errors_;
-      out << folly::sformat("{:15}: calls={:<8} succ={:<8} err={}\n", name,
-                            dCalls, dSucc, dErr);
+      out << fmt::format("{:15}: calls={:<8} succ={:<8} err={}\n", name, dCalls,
+                         dSucc, dErr);
     };
 
     auto printFindOpDelta = [&out](const char* name, const auto& curr,
@@ -817,13 +817,13 @@ class ComponentStats : public StatsBase {
       auto dErr = curr.throughput_.errors_ - prev.throughput_.errors_;
       auto dHits = curr.throughput_.hits_ - prev.throughput_.hits_;
       auto dMiss = curr.throughput_.misses_ - prev.throughput_.misses_;
-      out << folly::sformat(
+      out << fmt::format(
           "{:15}: calls={:<8} succ={:<8} err={:<6} hits={:<8} miss={}\n", name,
           dCalls, dSucc, dErr, dHits, dMiss);
     };
 
     auto rates = getHitRatios(prevStatsBase);
-    out << folly::sformat("Hit Ratio: {:6.2f}%\n", rates["overall"]);
+    out << fmt::format("Hit Ratio: {:6.2f}%\n", rates["overall"]);
     printOpDelta("allocate", stats_.allocate_, prevStats.stats_.allocate_);
     printOpDelta("insert", stats_.insert_, prevStats.stats_.insert_);
     printOpDelta("insertOrReplace", stats_.insertOrReplace_,

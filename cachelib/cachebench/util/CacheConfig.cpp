@@ -121,7 +121,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   checkCorrectSize<CacheConfig, 824>();
 
   if (numPools != poolSizes.size()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "number of pools must be the same as the pool size distribution. "
         "numPools: {}, poolSizes.size(): {}",
         numPools, poolSizes.size()));

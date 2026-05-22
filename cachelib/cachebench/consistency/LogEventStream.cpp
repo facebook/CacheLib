@@ -16,8 +16,8 @@
 
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 
+#include <fmt/core.h>
 #include <folly/Conv.h>
-#include <folly/Format.h>
 #include <folly/Range.h>
 
 namespace facebook {
@@ -48,17 +48,17 @@ std::string LogEventStream::format() const {
   std::string rv;
   rv.append("Inconsistency detected:\n");
   constexpr folly::StringPiece kFormat = "{:<8}{:<8}{:<18}{:<12}{:<12}{}\n";
-  rv.append(folly::sformat(kFormat, "Index", "Other", "Time", "Thread ID",
-                           "Operation", "Value"));
+  rv.append(fmt::format(fmt::runtime(kFormat), "Index", "Other", "Time",
+                        "Thread ID", "Operation", "Value"));
   for (uint32_t i = 0; i < count_; i++) {
     const auto& e = events_[i];
     std::string en{e.eventName};
     if (e.end) {
       en.append(" end");
     }
-    rv.append(
-        folly::sformat(kFormat, i, e.other, e.info.formatTime(), e.info.tid, en,
-                       e.hasValue ? folly::to<std::string>(e.value) : ""));
+    rv.append(fmt::format(fmt::runtime(kFormat), i, e.other,
+                          e.info.formatTime(), e.info.tid, en,
+                          e.hasValue ? folly::to<std::string>(e.value) : ""));
   }
   if (overflow_) {
     rv.append("... more\n");

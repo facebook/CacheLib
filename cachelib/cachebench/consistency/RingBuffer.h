@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
 #include <cstdint>
@@ -62,9 +62,9 @@ class RingBuffer {
   Value getAt(size_t index) const {
     if (!(first_ <= index && index < last_)) {
       throw std::out_of_range(
-          folly::sformat("ring buffer index out of bounds for a get. first={}, "
-                         "last = {}, index = {}",
-                         first_, last_, index));
+          fmt::format("ring buffer index out of bounds for a get. first={}, "
+                      "last = {}, index = {}",
+                      first_, last_, index));
     }
     return data_[index % kCapacity];
   }
@@ -72,9 +72,9 @@ class RingBuffer {
   void setAt(size_t index, const Value& val) const {
     if (!(first_ <= index && index < last_)) {
       throw std::out_of_range(
-          folly::sformat("ring buffer index out of bounds for a get. first={}, "
-                         "last = {}, index = {}",
-                         first_, last_, index));
+          fmt::format("ring buffer index out of bounds for a get. first={}, "
+                      "last = {}, index = {}",
+                      first_, last_, index));
     }
     data_[index % kCapacity] = val;
   }

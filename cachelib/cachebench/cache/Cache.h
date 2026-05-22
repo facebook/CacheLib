@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/container/F14Map.h>
 #include <folly/hash/Hash.h>
 #include <folly/json/DynamicConverter.h>
@@ -614,8 +614,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       }
 
       if (isDir) {
-        const auto uniqueSuffix = folly::sformat("nvmcache_{}_{}", ::getpid(),
-                                                 folly::Random::rand32());
+        const auto uniqueSuffix =
+            fmt::format("nvmcache_{}_{}", ::getpid(), folly::Random::rand32());
         path = path + "/" + uniqueSuffix;
         util::makeDir(path);
         nvmCacheFilePath_ = path;
@@ -761,12 +761,12 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     try {
       cache_ = std::make_unique<Allocator>(Allocator::SharedMemAttach,
                                            allocatorConfig_);
-      XLOG(INFO, folly::sformat(
-                     "Successfully attached to existing cache. Cache dir: {}",
-                     cacheDir));
+      XLOG(INFO,
+           fmt::format("Successfully attached to existing cache. Cache dir: {}",
+                       cacheDir));
       isRecovered = true;
     } catch (const std::exception& ex) {
-      XLOG(INFO, folly::sformat("Failed to attach for reason: {}", ex.what()));
+      XLOG(INFO, fmt::format("Failed to attach for reason: {}", ex.what()));
       cache_ = std::make_unique<Allocator>(Allocator::SharedMemNew,
                                            allocatorConfig_);
     }
@@ -787,7 +787,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       typename Allocator::MMConfig mmConfig =
           makeMMConfig<typename Allocator::MMConfig>(config_);
       const PoolId pid = cache_->addPool(
-          folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
+          fmt::format("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
           nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
           true /* ensureSufficientMem */);
       pools_.push_back(pid);
@@ -808,12 +808,12 @@ Cache<Allocator>::~Cache() {
 
     auto res = cache_->shutDown();
     if (res == Allocator::ShutDownStatus::kSuccess) {
-      XLOG(INFO, folly::sformat("Shut down succeeded. Metadata is at: {}",
-                                allocatorConfig_.cacheDir));
+      XLOG(INFO, fmt::format("Shut down succeeded. Metadata is at: {}",
+                             allocatorConfig_.cacheDir));
     } else {
-      XLOG(INFO, folly::sformat(
-                     "Shut down failed. Metadata is at: {}. Return code: {}",
-                     allocatorConfig_.cacheDir, static_cast<int>(res)));
+      XLOG(INFO,
+           fmt::format("Shut down failed. Metadata is at: {}. Return code: {}",
+                       allocatorConfig_.cacheDir, static_cast<int>(res)));
     }
 
     // Reset cache first which will drain all nvm operations if present

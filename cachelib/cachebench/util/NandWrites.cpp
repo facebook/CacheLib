@@ -16,7 +16,7 @@
 
 #include "cachelib/cachebench/util/NandWrites.h"
 
-#include <folly/Format.h>
+#include <fmt/core.h>
 #include <folly/String.h>
 #include <folly/Subprocess.h>
 #include <folly/json/json.h>
@@ -467,11 +467,11 @@ std::optional<std::string> getDeviceModelNumber(
 uint64_t nandWriteBytes(const folly::StringPiece deviceName,
                         const folly::StringPiece nvmePath,
                         std::shared_ptr<ProcessFactory> processFactory) {
-  const auto& devicePath = folly::sformat("/dev/{}", deviceName);
+  const auto& devicePath = fmt::format("/dev/{}", deviceName);
   auto modelNumber = getDeviceModelNumber(processFactory, nvmePath, devicePath);
   if (!modelNumber) {
     throw std::invalid_argument(
-        folly::sformat("Failed to get device info for device {}", deviceName));
+        fmt::format("Failed to get device info for device {}", deviceName));
   }
   folly::toLowerAscii(modelNumber.value());
 
@@ -547,7 +547,7 @@ uint64_t nandWriteBytes(const folly::StringPiece deviceName,
         // of this code.
         //
         // TODO: update the method to return an optional instead?
-        throw std::invalid_argument(folly::sformat(
+        throw std::invalid_argument(fmt::format(
             "Failed to get bytes written for device {}", deviceName));
       }
       // Add it to resolvedMap[] so that it doesn't need to be resolved again
@@ -563,7 +563,7 @@ uint64_t nandWriteBytes(const folly::StringPiece deviceName,
       ocpWriteBytes(processFactory, nvmePath, devicePath);
   if (!bytesWritten) {
     // It doesn't support OCP SMART log either, give it up
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Vendor not recogized in device model number {}", modelNumber.value()));
   }
   // Add it to resolvedMap[] so that it could be retrieved next time

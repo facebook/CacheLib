@@ -51,8 +51,7 @@ std::ostream& operator<<(
 
   os << std::endl << "== Throughput ==" << std::endl;
   const double elapsedSecs = stats.durationNs_ / static_cast<double>(1e9);
-  os << folly::sformat("Total Duration: {:.2f} seconds", elapsedSecs)
-     << std::endl;
+  os << fmt::format("Total Duration: {:.2f} seconds", elapsedSecs) << std::endl;
   stats.opsStats_.render(stats.durationNs_, os);
   os << std::endl
      << "NOTE: we can't combine latency counters across multiple instances, "

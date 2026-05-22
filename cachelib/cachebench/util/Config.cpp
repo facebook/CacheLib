@@ -16,6 +16,7 @@
 
 #include "cachelib/cachebench/util/Config.h"
 
+#include <fmt/core.h>
 #include <folly/FileUtil.h>
 #include <folly/json/json.h>
 
@@ -89,7 +90,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
 
   if (!traceFileName.empty() && !traceFileNames.empty()) {
     throw std::invalid_argument(
-        folly::sformat("set only one of traceFileName or traceFileNames"));
+        fmt::format("set only one of traceFileName or traceFileNames"));
   }
 
   // If you added new fields to the configuration, update the JSONSetVal
@@ -113,8 +114,7 @@ CacheBenchConfig::CacheBenchConfig(
     const StressorConfigCustomizer& stressorConfigCustomizer) {
   std::string configString;
   if (!folly::readFile(path.c_str(), configString)) {
-    throw std::invalid_argument(
-        folly::sformat("could not read file: {}", path));
+    throw std::invalid_argument(fmt::format("could not read file: {}", path));
   }
 
   std::cout << "===JSON Config===" << std::endl;
@@ -193,11 +193,10 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
 
   auto readFile = [&](const std::string& f) {
     std::string str;
-    const std::string path = folly::sformat("{}/{}", configPath, f);
+    const std::string path = fmt::format("{}/{}", configPath, f);
     std::cout << "reading distribution params from " << path << std::endl;
     if (!folly::readFile(path.c_str(), str)) {
-      throw std::invalid_argument(
-          folly::sformat("could not read file: {}", path));
+      throw std::invalid_argument(fmt::format("could not read file: {}", path));
     }
     return str;
   };
@@ -239,7 +238,7 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
   if (replaySerializationMode != "strict" &&
       replaySerializationMode != "relaxed" &&
       replaySerializationMode != "none") {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Unsupported request serialization mode: {}", replaySerializationMode));
   }
 

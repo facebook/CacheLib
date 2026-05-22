@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
@@ -43,7 +44,7 @@ struct TraceEntry {
         cacheHits_(cacheHits),
         ttl_(ttl),
         valid_(valid) {
-    key_ = folly::sformat("{}", folly::Random::rand32());
+    key_ = fmt::format("{}", folly::Random::rand32());
   }
 
   void validate(const ReqWrapper& req) {
@@ -52,7 +53,7 @@ struct TraceEntry {
     }
     const std::string& reqKey = std::string{req.req_.key};
     ASSERT_EQ(0, reqKey.compare(0, key_.size(), key_))
-        << folly::sformat("key mismatch: {} vs {}", reqKey, key_);
+        << fmt::format("key mismatch: {} vs {}", reqKey, key_);
     size_t expKeySize = std::max<size_t>(keySize_, reqKey.size());
     expKeySize = std::min<size_t>(expKeySize, 256);
     ASSERT_EQ(reqKey.size(), expKeySize);
@@ -74,23 +75,22 @@ struct TraceEntry {
     std::string line;
     if (format == HeaderFormat::v1) {
       // v1: <key>,<op>,<size>,<op_count>,<key_size>[,[<ttl>[,.*]]]
-      line =
-          folly::sformat("{},{},{},{},{}", key_, op_, size_, opCnt_, keySize_);
+      line = fmt::format("{},{},{},{},{}", key_, op_, size_, opCnt_, keySize_);
       if (ttl_) {
-        line += folly::sformat(",{}", *ttl_);
+        line += fmt::format(",{}", *ttl_);
       }
     } else if (format == HeaderFormat::v2) {
       // v2: op_time,key,key_size,op,op_count,size,cache_hits,ttl
-      line = folly::sformat("{},{},{},{},{},{},{}",
-                            opTime_,
-                            key_,
-                            keySize_,
-                            op_,
-                            opCnt_,
-                            size_,
-                            cacheHits_);
+      line = fmt::format("{},{},{},{},{},{},{}",
+                         opTime_,
+                         key_,
+                         keySize_,
+                         op_,
+                         opCnt_,
+                         size_,
+                         cacheHits_);
       if (ttl_) {
-        line += folly::sformat(",{}", *ttl_);
+        line += fmt::format(",{}", *ttl_);
       }
     }
 

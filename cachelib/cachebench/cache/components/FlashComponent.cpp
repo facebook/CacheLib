@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <folly/system/HardwareConcurrency.h>
 
 #include "cachelib/cachebench/cache/components/Components.h"
@@ -89,8 +90,8 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
       }
 
       if (isDir) {
-        const auto uniqueSuffix = folly::sformat("nvmcache_{}_{}", ::getpid(),
-                                                 folly::Random::rand32());
+        const auto uniqueSuffix =
+            fmt::format("nvmcache_{}_{}", ::getpid(), folly::Random::rand32());
         path = path + "/" + uniqueSuffix;
         util::makeDir(path);
         devicePaths[0] = path + "/navy_cache";
