@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Conv.h>
 #include <folly/ProducerConsumerQueue.h>
 #include <folly/ThreadLocal.h>
@@ -115,7 +116,7 @@ class KVReplayGenerator : public ReplayGeneratorBase {
       if (binaryFileName_[0] == '/') {
         filePath = binaryFileName_;
       } else {
-        filePath = folly::sformat("{}/{}", config.configPath, binaryFileName_);
+        filePath = fmt::format("{}/{}", config.configPath, binaryFileName_);
       }
       int fd =
           open(filePath.c_str(), O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
@@ -194,9 +195,9 @@ class KVReplayGenerator : public ReplayGeneratorBase {
   void renderStats(uint64_t, std::ostream& out) const override {
     out << std::endl << "== KVReplayGenerator Stats ==" << std::endl;
 
-    out << folly::sformat("{}: {:.2f} million (parse error: {})",
-                          "Total Processed Samples",
-                          (double)parseSuccess.load() / 1e6, parseError.load())
+    out << fmt::format("{}: {:.2f} million (parse error: {})",
+                       "Total Processed Samples",
+                       (double)parseSuccess.load() / 1e6, parseError.load())
         << std::endl;
   }
 
@@ -373,7 +374,7 @@ inline std::unique_ptr<ReqWrapper> KVReplayGenerator::getReqInternal() {
 
     if (!parseRequest(line, reqWrapper)) {
       parseError++;
-      XLOG_N_PER_MS(ERR, 10, 1000) << folly::sformat(
+      XLOG_N_PER_MS(ERR, 10, 1000) << fmt::format(
           "Parsing error (total {}): {}", parseError.load(), line);
     } else {
       parseSuccess++;
@@ -420,7 +421,7 @@ inline void KVReplayGenerator::genRequests(folly::Latch& latch) {
           size_t newSize = std::max<size_t>(req->key_.size() - 4, kMinKeySize);
           req->key_.resize(newSize, '0');
         }
-        req->key_.append(folly::sformat("{:04d}", keySuffix));
+        req->key_.append(fmt::format("{:04d}", keySuffix));
       }
 
       if (makeBinaryFile_) {

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/Conv.h>
 #include <folly/ProducerConsumerQueue.h>
 #include <folly/ThreadLocal.h>
@@ -65,9 +66,9 @@ class BinaryKVReplayGenerator : public ReplayGeneratorBase {
   void renderStats(uint64_t, std::ostream& out) const override {
     out << std::endl << "== BinaryKVReplayGenerator Stats ==" << std::endl;
 
-    out << folly::sformat("{}: {:.2f} million (parse error: {})",
-                          "Total Processed Samples",
-                          (double)parseSuccess.load() / 1e6, parseError.load())
+    out << fmt::format("{}: {:.2f} million (parse error: {})",
+                       "Total Processed Samples",
+                       (double)parseSuccess.load() / 1e6, parseError.load())
         << std::endl;
   }
 

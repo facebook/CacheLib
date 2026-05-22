@@ -149,7 +149,7 @@ void BlockChunkReplayGenerator::getReqFromTrace() {
       std::string key = blockId;
       if (ampFactor_ > 1) {
         // Extend the key with the stream id of 4 decimal chars
-        key.append(folly::sformat("_{:04d}", keySuffix));
+        key.append(fmt::format("_{:04d}", keySuffix));
       }
 
       // Push the request to the queue of the worker identified by the shard

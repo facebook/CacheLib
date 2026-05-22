@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <fmt/core.h>
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
@@ -67,7 +68,7 @@ class TraceFileStream {
                   const ColumnTable& columnTable)
       : configPath_(config.configPath),
         repeatTraceReplay_(config.repeatTraceReplay) {
-    idStr_ = folly::sformat("[{}]", id);
+    idStr_ = fmt::format("[{}]", id);
     if (!config.traceFileName.empty()) {
       infileNames_.push_back(config.traceFileName);
     } else {
@@ -109,7 +110,7 @@ class TraceFileStream {
     if (traceFileName[0] == '/') {
       filePath = traceFileName;
     } else {
-      filePath = folly::sformat("{}/{}", configPath_, traceFileName);
+      filePath = fmt::format("{}/{}", configPath_, traceFileName);
     }
 
     std::ifstream file;
@@ -132,14 +133,14 @@ class TraceFileStream {
         folly::split(',', line, nextLineFields_);
 
         if (nextLineFields_.size() < minNumFields_) {
-          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+          XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
               "Error parsing next line \"{}\": shorter than min required "
               "fields {}",
               line, minNumFields_);
         }
         auto keySizeField = getField<size_t>(2);
         if (!keySizeField.hasValue()) {
-          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+          XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
               "Error parsing next line \"{}\": key size not found", line);
         } else {
           // The key is encoded as <encoded key, key size>.
@@ -173,7 +174,7 @@ class TraceFileStream {
     nextLineFields_.clear();
     folly::split(',', line, nextLineFields_);
     if (nextLineFields_.size() < minNumFields_) {
-      XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+      XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
           "Error parsing next line \"{}\": shorter than min required fields {}",
           line, minNumFields_);
       return false;
@@ -233,7 +234,7 @@ class TraceFileStream {
     }
 
     if (!valid) {
-      XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+      XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
           "Error parsing header \"{}\": no field recognized", header);
       return false;
     }
@@ -243,7 +244,7 @@ class TraceFileStream {
     for (size_t i = 0; i < fieldMap_.size(); i++) {
       if (fieldMap_[i] == -1) {
         if (requiredFields_[i]) {
-          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+          XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
               "Error parsing header \"{}\": required field {} is missing",
               header, i);
           return false;
@@ -255,12 +256,11 @@ class TraceFileStream {
         minNumFields_ = std::max<size_t>(minNumFields_, fieldMap_[i] + 1);
       }
 
-      fieldMapStr +=
-          folly::sformat("{}{} -> {}", fieldMapStr.size() ? ", " : "",
-                         keys_[fieldMap_[i]], fieldMap_[i]);
+      fieldMapStr += fmt::format("{}{} -> {}", fieldMapStr.size() ? ", " : "",
+                                 keys_[fieldMap_[i]], fieldMap_[i]);
     }
 
-    XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+    XLOG_N_PER_MS(INFO, 10, 1000) << fmt::format(
         "New header detected: header \"{}\" field map {}", header, fieldMapStr);
     return true;
   }

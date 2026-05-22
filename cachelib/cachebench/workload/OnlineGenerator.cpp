@@ -16,6 +16,8 @@
 
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 
+#include <fmt/core.h>
+
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -41,8 +43,8 @@ OnlineGenerator::OnlineGenerator(const StressorConfig& config)
 
   if (config_.numKeys > std::numeric_limits<uint64_t>::max()) {
     throw std::invalid_argument(
-        folly::sformat("Too many keys specified: {}. Maximum allowed is 2**64.",
-                       config_.numKeys));
+        fmt::format("Too many keys specified: {}. Maximum allowed is 2**64.",
+                    config_.numKeys));
   }
   generateFirstKeyIndexForPool();
   generateKeyLengths();

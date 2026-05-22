@@ -214,7 +214,7 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
   auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
                         uint64_t diffNanos) {
     double diffUs = static_cast<double>(diffNanos) / 1000.0;
-    out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, diffUs);
+    out << fmt::format("{:20} {:8} : {:>10.2f} us\n", cat, pct, diffUs);
   };
 
   auto ret = reqLatencyStats_.estimate();
@@ -268,8 +268,8 @@ void PieceWiseCacheStats::renderWindowStats(double elapsedSecs,
 void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
                                               double elapsedSecs,
                                               std::ostream& out) {
-  out << folly::sformat("{:10}: {:.2f} million", "Total Processed Samples",
-                        stats.objGets.get() / 1e6)
+  out << fmt::format("{:10}: {:.2f} million", "Total Processed Samples",
+                     stats.objGets.get() / 1e6)
       << std::endl;
 
   auto safeDiv = [](auto nr, auto dr) {
@@ -312,7 +312,7 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
   auto outFn = [&out](folly::StringPiece k0, double v0, folly::StringPiece k1,
                       double v1, folly::StringPiece k2, double v2,
                       folly::StringPiece k3, double v3) {
-    out << folly::sformat(
+    out << fmt::format(
                "{:12}: {:6.2f} GB, {:18}: {:6.2f} GB/s, {:8}: {:6.2f}%, {:10}: "
                "{:6.2f}%",
                k0, v0, k1, v1, k2, v2, k3, v3)
@@ -323,15 +323,15 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
   outFn("getBodyBytes", getBodyBytesGB, "getBodyBytesPerSec",
         getBodyBytesGBPerSec, "success", getBodyBytesSuccessRate,
         "full success", getBodyBytesFullSuccessRate);
-  out << folly::sformat(
+  out << fmt::format(
              "{:12}: {:6.2f} GB, {:12}: {:6.2f} GB, {:18}: {:6.2f} GB/s, "
              "{:18}: {:6.2f} GB/s, {:8}: {:6.2f}%",
              "egressBytes", egressBytesGB, "ingressBytes", ingressBytesGB,
              "egressBytesPerSec", egressBytesGBPerSec, "ingressBytesPerSec",
              ingressBytesGBPerSec, "ingressEgressratio", ingressEgressRatio)
       << std::endl;
-  out << folly::sformat(
-             "{:12}: {:10,}, {:18}: {:8,} /s, {:8}: {:6.2f}%, {:10}: {:6.2f}%",
+  out << fmt::format(
+             "{:12}: {:10}, {:18}: {:8} /s, {:8}: {:6.2f}%, {:10}: {:6.2f}%",
              "objectGet", get, "objectGetPerSec", getPerSec, "success",
              getSuccessRate, "full success", getFullSuccessRate)
       << std::endl;

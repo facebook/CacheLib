@@ -242,9 +242,9 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         for (; keySize > newSize; keySize--) {
           if (keyPrefix.back() != '0') {
             XLOG_EVERY_MS(INFO, 10'000,
-                          folly::sformat("Size of key {} will be increased "
-                                         "for ampFactor {}",
-                                         keyPrefix, ampFactor_));
+                          fmt::format("Size of key {} will be increased "
+                                      "for ampFactor {}",
+                                      keyPrefix, ampFactor_));
             break;
           }
         }
@@ -255,7 +255,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       for (size_t keySuffix = 0; keySuffix < ampFactor_; keySuffix++) {
         std::string key = keyPrefix;
         if (ampFactor_ > 1) {
-          key.append(folly::sformat("{:04d}", keySuffix));
+          key.append(fmt::format("{:04d}", keySuffix));
         }
 
         auto shard = getShard(key);
