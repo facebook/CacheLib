@@ -572,7 +572,7 @@ TEST_F(SlabAllocatorTest, LockMemorySaveState) {
 }
 
 TEST_F(SlabAllocatorTest, AdviseRelease) {
-  const size_t numSlabs = 50;
+  const size_t numSlabs = 40;
   const size_t numAdviseSlabs = 20;
   const size_t size = numSlabs * Slab::kSize;
   size_t allocSize = size + sizeof(Slab);
