@@ -123,8 +123,8 @@ class Index {
 
   struct Entry {
     // Implementation-defined opaque token identifying this snapshotted entry.
-    // Callers should not interpret it; pass the Entry back to the owning index
-    // (e.g. isValid()) or BlockCache APIs to act on it.
+    // Callers should not interpret it; pass the Entry back to BlockCache APIs
+    // to act on it.
     uint64_t token{0};
     ItemRecord record{};
   };

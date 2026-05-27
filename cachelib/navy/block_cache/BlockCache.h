@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <folly/Expected.h>
+#include <folly/Range.h>
+
 #include <memory>
 #include <vector>
 
@@ -229,6 +232,33 @@ class BlockCache final : public Engine {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  using IndexEntry = Index::Entry;
+
+  struct ReadResult {
+    ReadResult(Buffer buffer,
+               uint32_t keySize,
+               uint32_t valueSize,
+               uint32_t lastAccessTimeSecs);
+
+    folly::StringPiece key() const;
+    BufferView value() const;
+    uint32_t lastAccessTimeSecs() const { return lastAccessTimeSecs_; }
+
+   private:
+    Buffer buffer_{};
+    uint32_t keySize_{0};
+    uint32_t valueSize_{0};
+    uint32_t lastAccessTimeSecs_{0};
+  };
+
+  // Returns a reference to the BlockCache index.
+  const Index& index() const { return *index_; }
+
+  // Same as lookup(HashedKey, ...), but for an index entry from an index
+  // iterator. Returns NotFound if the entry cannot be revalidated before
+  // reading.
+  folly::Expected<ReadResult, Status> lookup(const IndexEntry& entry);
+
   // Update any stats needed to be updated when eviction is done
   void updateEvictionStats(uint32_t lifetime) override {
     bcLifetimeSecs_.trackValue(lifetime);
@@ -332,6 +362,7 @@ class BlockCache final : public Engine {
   struct LookupData {
     Buffer buffer_;
     RegionDescriptor desc_;
+    uint32_t keySize_{0};
     uint32_t valueSize_{0};
     uint32_t lastAccessTimeSecs_{0};
     Status status_{Status::Ok};
@@ -340,6 +371,16 @@ class BlockCache final : public Engine {
   // Lookup the item, returning everything unmodified to the caller.
   // @param hk          key to be looked up
   LookupData lookupInternal(HashedKey hk);
+  template <typename KeyT, typename IndexLookupT>
+  LookupData lookupInternal(const KeyT& key, IndexLookupT&& indexLookup);
+
+  // Reads an entry using the result of a preceding openForRead() attempt.
+  // On Ready, the returned LookupData retains the opened descriptor so callers
+  // can decide whether to retry or close it.
+  LookupData readOpenResult(RegionDescriptor desc,
+                            RelAddress addrEnd,
+                            uint32_t approxSize,
+                            std::optional<HashedKey> expected);
 
   // Read and write are time consuming. It isn't worth inlining them from a
   // performance point of view, but makes sense to track them for performance,
@@ -358,11 +399,12 @@ class BlockCache final : public Engine {
   // @param ld          LookupData containing the entry metadata for reading
   // @param addrEnd     End of the entry since the item layout is backward
   // @param approxSize  Approximate size since we got this size from index
-  // @param expected    We expect the entry's key to match with our key
+  // @param expected    We expect the entry's key to match with our key when
+  //                    provided
   Status readEntry(LookupData& ld,
                    RelAddress addrEnd,
                    uint32_t approxSize,
-                   HashedKey expected);
+                   std::optional<HashedKey> expected);
 
   // Update the index with the new entry
   // @param keyHash      Hash of the key

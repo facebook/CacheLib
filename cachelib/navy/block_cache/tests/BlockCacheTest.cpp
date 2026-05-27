@@ -18,6 +18,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <map>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
@@ -2728,6 +2729,146 @@ TEST(BlockCache, ExpiredItemDestructorCallback) {
       }});
   EXPECT_TRUE(foundEvictionExpiredCounter)
       << "navy_bc_evictions_expired counter should be visited";
+}
+
+TEST(BlockCache, LookupIndexEntryAccessors) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto* blockCache = dynamic_cast<BlockCache*>(engine.get());
+  ASSERT_NE(nullptr, blockCache);
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  CacheEntry e{strzBuffer("key"), strzBuffer("value")};
+  EXPECT_EQ(Status::Ok,
+            driver->insert(e.key(),
+                           e.value(),
+                           0 /* poolId */,
+                           0 /* expiryTime */,
+                           1234 /* lastAccessTimeSecs */));
+  driver->flush();
+
+  const auto& entries = blockCache->index();
+  auto it = entries.begin();
+  ASSERT_NE(it, entries.end());
+
+  auto result = blockCache->lookup(*it);
+  ASSERT_TRUE(result.hasValue());
+  EXPECT_EQ(folly::StringPiece{"key"}, result->key());
+  EXPECT_EQ(makeView("value"), result->value());
+  EXPECT_EQ(1234, result->lastAccessTimeSecs());
+}
+
+TEST(BlockCache, IndexVisitsAllItems) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  config.checksum = true;
+  auto engine = makeEngine(std::move(config));
+  auto* blockCache = dynamic_cast<BlockCache*>(engine.get());
+  ASSERT_NE(nullptr, blockCache);
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  std::map<std::string, std::string> expected;
+  for (int i = 0; i < 5; i++) {
+    auto key = folly::sformat("key_{}", i);
+    auto val = folly::sformat("value_{}", i);
+    CacheEntry e{strzBuffer(key.c_str()), strzBuffer(val.c_str())};
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    expected.emplace(std::move(key), std::move(val));
+  }
+  driver->flush();
+
+  std::map<std::string, std::string> visited;
+  for (const auto& entry : blockCache->index()) {
+    auto result = blockCache->lookup(entry);
+    ASSERT_TRUE(result.hasValue());
+    visited.emplace(
+        std::string{result->key().data(), result->key().size()},
+        std::string{reinterpret_cast<const char*>(result->value().data()),
+                    result->value().size()});
+  }
+
+  EXPECT_EQ(expected, visited);
+}
+
+TEST(BlockCache, IndexEarlyTermination) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto* blockCache = dynamic_cast<BlockCache*>(engine.get());
+  ASSERT_NE(nullptr, blockCache);
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  for (int i = 0; i < 5; i++) {
+    auto key = folly::sformat("key_{}", i);
+    auto val = folly::sformat("value_{}", i);
+    CacheEntry e{strzBuffer(key.c_str()), strzBuffer(val.c_str())};
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+  }
+  driver->flush();
+
+  int count = 0;
+  for (const auto& entry : blockCache->index()) {
+    ++count;
+    if (count == 2) {
+      break;
+    }
+    EXPECT_TRUE(blockCache->lookup(entry).hasValue());
+  }
+
+  EXPECT_EQ(2, count);
+}
+
+TEST(BlockCache, IndexEmptyCache) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto config = makeConfig(std::move(policy), *device);
+  auto blockCache = std::make_unique<BlockCache>(std::move(config));
+
+  int count = 0;
+  for (const auto& entry : blockCache->index()) {
+    static_cast<void>(entry);
+    count++;
+  }
+
+  EXPECT_EQ(0, count);
+}
+
+TEST(BlockCache, LookupIndexEntryReturnsNotFoundAfterRemove) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto* blockCache = dynamic_cast<BlockCache*>(engine.get());
+  ASSERT_NE(nullptr, blockCache);
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  CacheEntry e{strzBuffer("key"), strzBuffer("value")};
+  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+  driver->flush();
+
+  const auto& entries = blockCache->index();
+  auto it = entries.begin();
+  ASSERT_NE(it, entries.end());
+  auto entry = *it;
+
+  EXPECT_EQ(Status::Ok, driver->remove(e.key()));
+
+  auto result = blockCache->lookup(entry);
+  ASSERT_TRUE(result.hasError());
+  EXPECT_EQ(Status::NotFound, result.error());
 }
 
 } // namespace facebook::cachelib::navy::tests
