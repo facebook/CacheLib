@@ -1,0 +1,44 @@
+name: release-stable
+
+on:
+  schedule:
+    # Mondays 09:00 UTC. Picks up anything that crossed the 1-day bake window
+    # (temporary — will be restored to 2 weeks in a follow-up once `stable` exists).
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print candidate / promotion plan without mutating refs'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # force-move the `stable` tag and edit the GitHub Release
+  actions: read     # query `linux` workflow runs by commit SHA
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: find
+        name: Find new stable candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./.github/scripts/release/find-stable-candidate.sh >> "$GITHUB_OUTPUT"
+
+      - name: Promote candidate
+        if: steps.find.outputs.candidate != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: ./.github/scripts/release/promote-stable.sh "${{ steps.find.outputs.candidate }}"
