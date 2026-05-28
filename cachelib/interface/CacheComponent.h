@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/coro/AsyncGenerator.h>
 #include <folly/coro/Task.h>
 
 #include "cachelib/interface/CacheItem.h"
@@ -114,6 +115,24 @@ class CacheComponent {
       Key key) = 0;
   virtual folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
       Key key) = 0;
+
+  /**
+   * Iterate over all items in the cache component. Co-await the returned
+   * generator to get an item; the generator will return an empty value when
+   * there are no more items:
+   *
+   * auto iterator = cache->iterator();
+   * while (auto item = co_await iterator.next()) {
+   *   auto&& handle = *item;
+   *   // do something with handle
+   * }
+   *
+   * Expired items are NOT returned by the iterator. Also there are no
+   * consistency guarantees with concurrent inserts/updates/removals.
+   *
+   * @return an async generator that yields ReadHandles to cache items
+   */
+  virtual folly::coro::AsyncGenerator<ReadHandle> iterator() = 0;
 
   /**
    * Remove an item from cache if it is present.

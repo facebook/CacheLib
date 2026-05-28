@@ -437,6 +437,136 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExpiredItem) {
 }
 
 // ============================================================================
+// iterator() Tests
+// ============================================================================
+
+CO_TYPED_TEST(CacheComponentTest, IteratorEmptyCache) {
+  auto iterator = this->cache_->iterator();
+  while (auto item = co_await iterator.next()) {
+    CO_FAIL() << "shouldn't return any items with empty cache";
+  }
+}
+
+CO_TYPED_TEST(CacheComponentTest, IteratorBasic) {
+  const std::vector<std::pair<std::string, std::string>> items = {
+      {"iter_key1", "data_for_key1"},
+      {"iter_key2", "data_for_key2"},
+      {"iter_key3", "data_for_key3"},
+  };
+
+  for (const auto& item : items) {
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+        item.first, item.second.size(), util::getCurrentTimeSec(), 3600));
+    std::memcpy(handle->getMemory(), item.second.c_str(), item.second.size());
+    EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  }
+
+  std::unordered_map<std::string, std::string> foundItems;
+  auto iterator = this->cache_->iterator();
+  while (auto item = co_await iterator.next()) {
+    CO_ASSERT_TRUE(item.has_value());
+    auto& handle = item.value();
+    auto key = handle->getKey();
+    std::string keyStr(key.data(), key.size());
+    std::string data(handle->template getMemoryAs<const char>(),
+                     handle->getMemorySize());
+    foundItems[keyStr] = data;
+  }
+
+  EXPECT_EQ(foundItems.size(), items.size());
+  for (const auto& item : items) {
+    auto it = foundItems.find(item.first);
+    CO_ASSERT_NE(it, foundItems.end())
+        << "Key not found during iteration: " << item.first;
+    // Data may be in a larger buffer, so check prefix matches
+    auto substr = it->second.substr(0, item.second.size());
+    EXPECT_EQ(substr, item.second)
+        << "Data mismatch for key: " << item.first << ", found " << substr
+        << " but expected " << item.second;
+  }
+}
+
+CO_TYPED_TEST(CacheComponentTest, IteratorEarlyTermination) {
+  const int numItems = 10;
+  for (int i = 0; i < numItems; ++i) {
+    auto key = "early_term_" + std::to_string(i);
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+        key, 100, util::getCurrentTimeSec(), 3600));
+    EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  }
+
+  auto iterator = this->cache_->iterator();
+  int count = 0;
+  while (auto item = co_await iterator.next()) {
+    if (++count >= 3) {
+      break;
+    }
+  }
+
+  for (int i = 0; i < numItems; ++i) {
+    auto key = "early_term_" + std::to_string(i);
+    auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
+    EXPECT_TRUE(findResult.has_value())
+        << "Iterated item should still be reachable: " << key;
+  }
+}
+
+CO_TYPED_TEST(CacheComponentTest, IteratorAfterRemovals) {
+  const std::vector<std::string> allKeys = {"remain1", "remove1", "remain2",
+                                            "remove2", "remain3"};
+  for (const auto& key : allKeys) {
+    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+        key, 100, util::getCurrentTimeSec(), 3600));
+    EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  }
+
+  EXPECT_TRUE(CO_ASSERT_OK(co_await this->cache_->remove("remove1")));
+  EXPECT_TRUE(CO_ASSERT_OK(co_await this->cache_->remove("remove2")));
+
+  auto iterator = this->cache_->iterator();
+  std::unordered_set<std::string> foundKeys;
+  while (auto item = co_await iterator.next()) {
+    auto key = item.value()->getKey();
+    foundKeys.insert(std::string(key.data(), key.size()));
+  }
+
+  EXPECT_EQ(foundKeys.size(), 3);
+  EXPECT_TRUE(foundKeys.count("remain1"));
+  EXPECT_TRUE(foundKeys.count("remain2"));
+  EXPECT_TRUE(foundKeys.count("remain3"));
+  EXPECT_FALSE(foundKeys.count("remove1"));
+  EXPECT_FALSE(foundKeys.count("remove2"));
+}
+
+CO_TYPED_TEST(CacheComponentTest, IteratorWithExpiredItems) {
+  const uint32_t now = util::getCurrentTimeSec();
+
+  auto handle1 = CO_ASSERT_OK(
+      co_await this->cache_->allocate("valid_key", 100, now, 3600));
+  EXPECT_OK(co_await this->cache_->insert(std::move(handle1)));
+
+  // Created 2 hours ago with 1 hour TTL
+  auto handle2 = CO_ASSERT_OK(
+      co_await this->cache_->allocate("expired_key", 100, now - 7200, 3600));
+  EXPECT_OK(co_await this->cache_->insert(std::move(handle2)));
+
+  auto handle3 = CO_ASSERT_OK(
+      co_await this->cache_->allocate("valid_key2", 100, now, 3600));
+  EXPECT_OK(co_await this->cache_->insert(std::move(handle3)));
+
+  auto iterator = this->cache_->iterator();
+  std::unordered_set<std::string> foundKeys;
+  while (auto item = co_await iterator.next()) {
+    auto key = item.value()->getKey();
+    foundKeys.insert(std::string(key.data(), key.size()));
+  }
+
+  EXPECT_TRUE(foundKeys.count("valid_key"));
+  EXPECT_TRUE(foundKeys.count("valid_key2"));
+  EXPECT_FALSE(foundKeys.count("expired_key"));
+}
+
+// ============================================================================
 // remove(Key) Tests
 // ============================================================================
 

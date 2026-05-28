@@ -97,6 +97,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override;
   folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
       Key key) override;
+  folly::coro::AsyncGenerator<ReadHandle> iterator() override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
   UnitResult shutdown() override;

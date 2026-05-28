@@ -147,6 +147,8 @@ class TestCacheComponent : public CacheComponent {
     co_return findImpl<WriteHandle>(key);
   }
 
+  folly::coro::AsyncGenerator<ReadHandle> iterator() override { co_return; }
+
   folly::coro::Task<Result<bool>> remove(Key key) override {
     auto itemIt = cachedItems_.find(key);
     if (itemIt == cachedItems_.end()) {

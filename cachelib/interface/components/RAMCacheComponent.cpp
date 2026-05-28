@@ -383,6 +383,21 @@ RAMCacheComponent::findToWrite(Key key) {
   co_return std::nullopt;
 }
 
+folly::coro::AsyncGenerator<ReadHandle> RAMCacheComponent::iterator() {
+  for (auto it = cache_->begin(); it != cache_->end(); ++it) {
+    auto result = toGenericHandle<ReadHandle>(*this, it.asHandle());
+    if (result.hasValue()) {
+      auto& handle = result.value();
+      if (!util::isExpired(handle->getExpiryTime())) {
+        co_yield std::move(handle);
+      }
+    } else {
+      XLOG_EVERY_MS(WARN, 250) << "Failed to get handle for RAM cache item "
+                               << it->getKey() << ": " << result.error();
+    }
+  }
+}
+
 folly::coro::Task<Result<bool>> RAMCacheComponent::remove(Key key) {
   // calls_, hits_, and misses_ are not tracked here; CacheAllocator already
   // tracks them via stats_.numCacheRemoves and stats_.numCacheRemoveRamHits.

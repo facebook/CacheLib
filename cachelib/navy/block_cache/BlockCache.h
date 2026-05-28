@@ -243,6 +243,7 @@ class BlockCache final : public Engine {
     folly::StringPiece key() const;
     BufferView value() const;
     uint32_t lastAccessTimeSecs() const { return lastAccessTimeSecs_; }
+    Buffer releaseBuffer() { return std::move(buffer_); }
 
    private:
     Buffer buffer_{};
