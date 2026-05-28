@@ -1011,17 +1011,21 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
   // (for backward-compatibility during migration).
   {
     ShmManager s(migrationDir, posix);
+    auto baseline = ShmManager::getNumOldHashAttaches();
 
     // Attach to old-hash segments - should succeed via fallback.
     auto m1 = s.attachShm(seg1);
     checkMemory(m1.addr, m1.size, magicVal1);
+    ASSERT_EQ(baseline + 1, ShmManager::getNumOldHashAttaches());
 
     auto m2 = s.attachShm(seg2);
     checkMemory(m2.addr, m2.size, magicVal2);
+    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     // Create a brand-new segment (e.g. shm_info on first warm roll after
     // migration). This should still use the old hash for backward compat.
     s.createShm(segNew, size);
+    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     // Verify: old segments still exist under old hash names.
     ASSERT_NO_THROW(ShmSegment(ShmAttach, oldId1, posix));
@@ -1050,14 +1054,18 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
   // be reachable.
   {
     ShmManager s(migrationDir, posix);
+    auto baseline = ShmManager::getNumOldHashAttaches();
 
     auto m1 = s.attachShm(seg1);
     checkMemory(m1.addr, m1.size, magicVal1);
+    ASSERT_EQ(baseline + 1, ShmManager::getNumOldHashAttaches());
 
     auto m2 = s.attachShm(seg2);
     checkMemory(m2.addr, m2.size, magicVal2);
+    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     ASSERT_NO_THROW(s.attachShm(segNew));
+    ASSERT_EQ(baseline + 3, ShmManager::getNumOldHashAttaches());
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
@@ -1103,12 +1111,15 @@ void ShmManagerTest::testHashMigrationColdStart(bool posix) {
   // shared memory was wiped).
   {
     ShmManager s(migrationDir, posix);
+    auto baseline = ShmManager::getNumOldHashAttaches();
 
     auto m1 = s.createShm(seg1, size);
     writeToMemory(m1.addr, m1.size, magicVal);
 
     auto m2 = s.createShm(seg2, size);
     writeToMemory(m2.addr, m2.size, magicVal + 1);
+
+    ASSERT_EQ(baseline, ShmManager::getNumOldHashAttaches());
 
     // Verify: segments exist under old hash names only (write path uses
     // fnv64_BROKEN during migration).
@@ -1125,12 +1136,15 @@ void ShmManagerTest::testHashMigrationColdStart(bool posix) {
   // Re-attach after shutdown - should work using old hash fallback.
   {
     ShmManager s(migrationDir, posix);
+    auto baseline = ShmManager::getNumOldHashAttaches();
 
     auto m1 = s.attachShm(seg1);
     checkMemory(m1.addr, m1.size, magicVal);
+    ASSERT_EQ(baseline + 1, ShmManager::getNumOldHashAttaches());
 
     auto m2 = s.attachShm(seg2);
     checkMemory(m2.addr, m2.size, magicVal + 1);
+    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }

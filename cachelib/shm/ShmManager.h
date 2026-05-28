@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 
+#include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/Shm.h"
 
@@ -156,6 +157,10 @@ class ShmManager {
       bool posix,
       void* addr = nullptr);
 
+  // Returns the number of segments attached using the old (fnv64_BROKEN) hash.
+  // This is used to track migration progress from fnv64_BROKEN to xxhash3.
+  static uint64_t getNumOldHashAttaches() { return numOldHashAttaches_.get(); }
+
  private:
   friend class ::ShmManagerTest;
   enum class ShmVal : int8_t { SHM_SYS_V = 1, SHM_POSIX, SHM_INVALID };
@@ -236,6 +241,11 @@ class ShmManager {
   // Hash computed with fnv64_BROKEN for backward compatibility. Can be removed
   // once all segments have been recreated with xxhash3.
   std::string oldDirHash_{};
+
+  // Counter for the number of segments attached using the old hash.
+  // Used to track migration progress. Static so it can be incremented from
+  // static methods like attachShmReadOnly().
+  static AtomicCounter numOldHashAttaches_;
 
   // current segment being managed by this instance
   folly::F14FastMap<std::string, std::unique_ptr<ShmSegment>> segments_{};

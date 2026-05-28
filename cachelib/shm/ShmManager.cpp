@@ -31,6 +31,8 @@
 namespace facebook {
 namespace cachelib {
 
+AtomicCounter ShmManager::numOldHashAttaches_{0};
+
 namespace {
 inline std::string pathName(const std::string& dir, const std::string& file) {
   return dir + '/' + file;
@@ -244,6 +246,7 @@ std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
   } catch (const std::exception&) {
     shm = std::make_unique<ShmSegment>(ShmAttach, oldUniqueIdForName(name, dir),
                                        posix, opts);
+    numOldHashAttaches_.inc();
   }
   if (!shm->mapAddress(addr)) {
     throw std::invalid_argument(fmt::format(
@@ -350,6 +353,7 @@ ShmManager::attachNewShm(const std::string& shmName,
     auto seg = std::make_unique<ShmSegment>(
         ShmAttach, oldUniqueIdForName(shmName), usePosix_, opts);
     auto [it, _] = segments_.emplace(shmName, std::move(seg));
+    numOldHashAttaches_.inc();
     return it;
   } catch (const std::system_error& e) {
     throw std::invalid_argument(fmt::format(

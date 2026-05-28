@@ -6107,6 +6107,8 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
       (nvmCacheState_.getCreationTime() == cacheInstanceCreationTime_) ||
       nvmCacheState_.shouldStartFresh();
 
+  ret.numShmOldHashAttaches = ShmManager::getNumOldHashAttaches();
+
   return ret;
 }
 
