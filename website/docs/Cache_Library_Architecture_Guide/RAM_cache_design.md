@@ -64,6 +64,22 @@ Other than these, the `MemoryAllocator` also has support to compress the pointer
 
 The main reason for doing Slab based memory allocation is to avoid fragmentation and enable us to rebalance or resize the cache in chunks of Slabs. By ensuring that a Slab can only contain allocations of one size, we can support a real simple implementation of compressing those pointers by just indexing the slab and the offset of allocation within the slab.
 
+### Compressed Pointers
+
+CacheLib stores pointers to allocations in a compressed form inside intrusive containers (`AccessContainer`, `MMContainer`) and `CacheItem` hooks. Compressing pointers reduces the per-item overhead and lets the cache be re-attached at a different virtual address across process restarts, since the compressed representation only encodes the slab index and the allocation offset within the slab rather than absolute addresses. The implementations live in `cachelib/allocator/memory/CompressedPtr.h`.
+
+Two formats are supported and selected via the `CompressedPtrType` field on the `CacheTrait` (see `cachelib/allocator/CacheTraits.h`):
+
+- **`CompressedPtr4B`** (4 bytes): The original format. With a 4 MB slab (22 slab bits) and a 64 byte minimum allocation (6 bits), 16 bits encode the allocation index within a slab and the remaining 16 bits encode the slab index. This addresses up to **256 GiB** of cache memory in a single tier. In a multi-tier configuration the most significant bit is repurposed as a tier id, leaving 15 bits for the slab index and capping each tier at **128 GiB**.
+
+- **`CompressedPtr5B`** (5 bytes): A wider format that significantly raises the addressable cache size. The lower 32 bits store the same slab index and allocation index as `CompressedPtr4B` (each slab still 4 MB, allocations at least 64 bytes, addressing 256 GiB per region). An additional 8-bit "region" byte extends the slab index space:
+  - In single-tier mode, 7 region bits address up to **32 TiB** of cache memory.
+  - In multi-tier (e.g. CXL) mode, 6 region bits address up to **16 TiB** per tier; one bit is reserved as a DRAM/NVM flag.
+
+  `CompressedPtr5B` is the format to choose when a single CacheLib instance needs to manage more than 256 GiB of DRAM. The 1-byte overhead per stored compressed pointer is the trade-off for the larger address space.
+
+Pre-defined cache traits using each format ship in `cachelib/allocator/CacheTraits.h` — for example, `LruCacheTrait` uses `CompressedPtr4B` while `Lru5BCacheTrait` uses `CompressedPtr5B` (analogous traits exist for `2Q`, `TinyLFU`, and `WTinyLFU`). Decompression is the hot path and is implemented without division or modulo, so both formats keep `find()` cheap.
+
 ## CacheAllocator
 
 `CacheAllocator` builds a cache using the `MemoryAllocator`.  It is a template class on `MMType` and `AccessType` and provides a malloc like API for allocating memory, that can be accessed through a key. The `MMType` and `AccessType` are template arguments to let `CacheAllocator` mix and match different implementations  of these based on application requirements. For instance, replace LRU with TimerWheels or replace ChainedHashTable with SomeFancyHashTable without having to re-implement the rest of the cache logic.
