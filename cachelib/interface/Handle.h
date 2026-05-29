@@ -148,6 +148,9 @@ class WriteHandle : public Handle {
   template <typename HandleT>
     requires std::derived_from<HandleT, Handle>
   friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend HandleT adoptHandle(CacheComponent&, CacheItem&);
 };
 
 /**
@@ -164,6 +167,9 @@ class AllocatedHandle : public WriteHandle {
   template <typename HandleT>
     requires std::derived_from<HandleT, Handle>
   friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend HandleT adoptHandle(CacheComponent&, CacheItem&);
 };
 
 /**
@@ -187,6 +193,9 @@ class ReadHandle : public Handle {
   template <typename HandleT>
     requires std::derived_from<HandleT, Handle>
   friend Result<HandleT> tryCreateHandle(CacheComponent&, CacheItem&);
+  template <typename HandleT>
+    requires std::derived_from<HandleT, Handle>
+  friend HandleT adoptHandle(CacheComponent&, CacheItem&);
 };
 
 /**
@@ -196,10 +205,22 @@ class ReadHandle : public Handle {
 template <typename HandleT>
   requires std::derived_from<HandleT, Handle>
 Result<HandleT> tryCreateHandle(CacheComponent& cache, CacheItem& item) {
-  auto result = item.incrementRefCount();
+  auto result = item.incrementRefCount(cache);
   if (result.hasError()) {
     return folly::makeUnexpected(std::move(result).error());
   }
+  return HandleT(cache, item);
+}
+
+/**
+ * Create a handle that adopts an existing refcount -- does NOT increment the
+ * item's refcount. The caller must have already incremented it (e.g., via an
+ * implementation-specific handle) and is transferring ownership to the returned
+ * handle.
+ */
+template <typename HandleT>
+  requires std::derived_from<HandleT, Handle>
+HandleT adoptHandle(CacheComponent& cache, CacheItem& item) {
   return HandleT(cache, item);
 }
 

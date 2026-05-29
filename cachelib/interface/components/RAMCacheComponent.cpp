@@ -42,7 +42,7 @@ using LruCacheItem = cachelib::CacheItem<LruCacheTrait>;
  * accounts for itself in everything exposed to the user.
  *
  * TODO(rlyerly) remove this shim and have LruCacheItem directly implement
- * interface::CacheItem
+ * interface::CacheItem. This also lets us remove the adoptHandle() boilerplate.
  */
 class RAMCacheItem : public interface::CacheItem {
  public:
@@ -74,10 +74,11 @@ class RAMCacheItem : public interface::CacheItem {
   uint32_t getExpiryTime() const noexcept override {
     return item()->getExpiryTime();
   }
-  UnitResult incrementRefCount() noexcept override {
+  UnitResult incrementRefCount(CacheComponent& cache) noexcept override {
     try {
       switch (item()->incRef()) {
       case RefcountWithFlags::IncResult::kIncOk:
+        ++static_cast<RAMCacheComponent&>(cache).get().handleCount_.tlStats();
         return folly::unit;
       case RefcountWithFlags::IncResult::kIncFailedMoving:
         return makeError(Error::Code::INC_REF_FAILED, "item is being moved");
@@ -92,7 +93,10 @@ class RAMCacheItem : public interface::CacheItem {
       return makeError(Error::Code::INC_REF_FAILED, e.what());
     }
   }
-  bool decrementRefCount() noexcept override { return item()->decRef() == 0; }
+  bool decrementRefCount(CacheComponent& cache) noexcept override {
+    --static_cast<RAMCacheComponent&>(cache).get().handleCount_.tlStats();
+    return item()->decRef() == 0;
+  }
   Key getKey() const noexcept override { return item()->getKey(); }
   void* getMemory() const noexcept override {
     return const_cast<RAMCacheItem*>(this) + 1;
@@ -150,12 +154,14 @@ LruCacheItem* getImplItemFromHandle(HandleT& handle) {
   return reinterpret_cast<const RAMCacheItem*>(handle.get())->item();
 }
 
+RAMCacheItem& getRAMCacheItem(LruCacheItem* implItem) {
+  return *implItem->getMemoryAs<RAMCacheItem>();
+}
+
+// Adopt an existing refcount from the impl handle without inc/dec
 template <typename HandleT, typename ImplHandleT>
-Result<HandleT> toGenericHandle(RAMCacheComponent& cache,
-                                const ImplHandleT& implHandle) {
-  auto* implItem = const_cast<LruCacheItem*>(implHandle.get());
-  return tryCreateHandle<HandleT>(cache,
-                                  *implItem->getMemoryAs<RAMCacheItem>());
+HandleT toGenericHandle(RAMCacheComponent& cache, ImplHandleT implHandle) {
+  return adoptHandle<HandleT>(cache, getRAMCacheItem(implHandle.release()));
 }
 
 } // namespace
@@ -329,16 +335,11 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
   }
 
   auto _ = std::move(handle);
+  stats_->insertOrReplace_.throughput_.successes_.inc();
   if (replacedHandle) {
-    auto result = toGenericHandle<AllocatedHandle>(*this, replacedHandle);
-    if (result.hasError()) {
-      stats_->insertOrReplace_.throughput_.errors_.inc();
-      co_return folly::makeUnexpected(std::move(result).error());
-    }
-    stats_->insertOrReplace_.throughput_.successes_.inc();
-    co_return std::move(result).value();
+    co_return toGenericHandle<AllocatedHandle>(*this,
+                                               std::move(replacedHandle));
   } else {
-    stats_->insertOrReplace_.throughput_.successes_.inc();
     co_return std::nullopt;
   }
 }
@@ -349,14 +350,9 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> RAMCacheComponent::find(
   auto latencyGuard = stats_->find_.latency_.start();
 
   if (auto handle = cache_->find(key)) {
-    auto result = toGenericHandle<ReadHandle>(*this, handle);
-    if (result.hasError()) {
-      stats_->find_.throughput_.errors_.inc();
-      co_return folly::makeUnexpected(std::move(result).error());
-    }
     stats_->find_.throughput_.hits_.inc();
     stats_->find_.throughput_.successes_.inc();
-    co_return std::move(result).value();
+    co_return toGenericHandle<ReadHandle>(*this, std::move(handle));
   }
   stats_->find_.throughput_.misses_.inc();
   stats_->find_.throughput_.successes_.inc();
@@ -369,14 +365,9 @@ RAMCacheComponent::findToWrite(Key key) {
   auto latencyGuard = stats_->findToWrite_.latency_.start();
 
   if (auto handle = cache_->findToWrite(key)) {
-    auto result = toGenericHandle<WriteHandle>(*this, handle);
-    if (result.hasError()) {
-      stats_->findToWrite_.throughput_.errors_.inc();
-      co_return folly::makeUnexpected(std::move(result).error());
-    }
     stats_->findToWrite_.throughput_.hits_.inc();
     stats_->findToWrite_.throughput_.successes_.inc();
-    co_return std::move(result).value();
+    co_return toGenericHandle<WriteHandle>(*this, std::move(handle));
   }
   stats_->findToWrite_.throughput_.misses_.inc();
   stats_->findToWrite_.throughput_.successes_.inc();
@@ -385,7 +376,10 @@ RAMCacheComponent::findToWrite(Key key) {
 
 folly::coro::AsyncGenerator<ReadHandle> RAMCacheComponent::iterator() {
   for (auto it = cache_->begin(); it != cache_->end(); ++it) {
-    auto result = toGenericHandle<ReadHandle>(*this, it.asHandle());
+    // Create a new handle (bump the refcount) rather than adopting the handle &
+    // pulling it out from underneath the iterator
+    auto result = tryCreateHandle<ReadHandle>(
+        *this, getRAMCacheItem(const_cast<LruCacheItem*>(&*it)));
     if (result.hasValue()) {
       auto& handle = result.value();
       if (!util::isExpired(handle->getExpiryTime())) {

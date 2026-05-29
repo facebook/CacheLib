@@ -37,7 +37,7 @@ class TestCacheItem : public CacheItem {
 
   uint32_t getCreationTime() const noexcept override { return creationTime_; }
   uint32_t getExpiryTime() const noexcept override { return expiryTime_; }
-  UnitResult incrementRefCount() noexcept override {
+  UnitResult incrementRefCount(CacheComponent&) noexcept override {
     if (failIncRef_) {
       return makeError(Error::Code::INC_REF_FAILED, "test: incRef forced fail");
     }
@@ -46,7 +46,9 @@ class TestCacheItem : public CacheItem {
   }
 
   void setFailIncRef(bool fail) noexcept { failIncRef_ = fail; }
-  bool decrementRefCount() noexcept override { return --refCount_ == 0; }
+  bool decrementRefCount(CacheComponent&) noexcept override {
+    return --refCount_ == 0;
+  }
   Key getKey() const noexcept override { return Key(key_); }
   void* getMemory() const noexcept override {
     return const_cast<uint8_t*>(memory_.data());
@@ -117,7 +119,7 @@ class TestCacheComponent : public CacheComponent {
     if (!inserted) {
       // Replaced item is moved back to the allocated list
       std::swap(it->second, *itemIt);
-      (*itemIt)->decrementRefCount();
+      (*itemIt)->decrementRefCount(*this);
       co_return ASSERT_OK(tryCreateHandle<AllocatedHandle>(*this, **itemIt));
     }
 
@@ -154,7 +156,7 @@ class TestCacheComponent : public CacheComponent {
     if (itemIt == cachedItems_.end()) {
       co_return false;
     }
-    if (itemIt->second->decrementRefCount()) {
+    if (itemIt->second->decrementRefCount(*this)) {
       delete itemIt->second;
     }
     removedItems_.emplace(itemIt->first);
@@ -172,8 +174,8 @@ class TestCacheComponent : public CacheComponent {
     // ownership. Decrement the refcount twice - once for the handle, once for
     // the component.
     releaseHandle(std::move(handle));
-    itemIt->second->decrementRefCount();
-    if (itemIt->second->decrementRefCount()) {
+    itemIt->second->decrementRefCount(*this);
+    if (itemIt->second->decrementRefCount(*this)) {
       delete itemIt->second;
     }
     removedItems_.emplace(itemIt->first);

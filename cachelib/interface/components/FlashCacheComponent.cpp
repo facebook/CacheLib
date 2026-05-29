@@ -117,8 +117,10 @@ class FlashCacheItem : public CacheItem {
   // The only thing we care about is Region refcounting via RegionDescriptor. We
   // don't need to increment on create (creating the RegionDescriptor does that)
   // and we should always release the cache item to release the descriptor.
-  UnitResult incrementRefCount() noexcept override { return folly::unit; }
-  bool decrementRefCount() noexcept override {
+  UnitResult incrementRefCount(CacheComponent&) noexcept override {
+    return folly::unit;
+  }
+  bool decrementRefCount(CacheComponent&) noexcept override {
     // get cache to release the descriptor (need access to RegionManager)
     return true;
   }

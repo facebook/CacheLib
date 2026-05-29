@@ -21,6 +21,8 @@
 
 namespace facebook::cachelib::interface {
 
+class CacheComponent;
+
 using Key = KAllocation::Key;
 
 /**
@@ -51,17 +53,19 @@ class CacheItem {
   /**
    * Increment the refcount on the item.
    *
+   * @param cache cache component for the item, can be used for bookkeeping
    * @return success or an error if the refcount could not be incremented
    */
-  virtual UnitResult incrementRefCount() noexcept = 0;
+  virtual UnitResult incrementRefCount(CacheComponent& cache) noexcept = 0;
 
   /**
    * Decrement the refcount on the item. Return whether the item is ready to be
    * released, usually because refcount == 0.
    *
+   * @param cache cache component for the item, can be used for bookkeeping
    * @return true if the item is ready to be released or false otherwise
    */
-  virtual bool decrementRefCount() noexcept = 0;
+  virtual bool decrementRefCount(CacheComponent& cache) noexcept = 0;
 
   /**
    * Get the cache item key.

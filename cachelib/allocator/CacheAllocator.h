@@ -2678,6 +2678,7 @@ class CacheAllocator : public CacheBase {
 
   // interface
   friend class interface::RAMCacheComponent;
+  friend class interface::RAMCacheItem;
 };
 
 template <typename CacheTrait>

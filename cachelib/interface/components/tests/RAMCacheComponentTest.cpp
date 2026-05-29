@@ -112,6 +112,36 @@ CO_TEST_F(RAMCacheComponentTest, IteratorReleasesRefcounts) {
   checkNoOutstandingRefs(keys);
 }
 
+CO_TEST_F(RAMCacheComponentTest, ActiveHandleAccounting) {
+  const uint32_t now = facebook::cachelib::util::getCurrentTimeSec();
+  auto& allocator = ramCache().get();
+
+  constexpr int kNumItems = 3;
+  for (int i = 0; i < kNumItems; ++i) {
+    auto key = "handle_count_" + std::to_string(i);
+    auto handle = CO_ASSERT_OK(co_await cache_->allocate(key, 100, now, 3600));
+    EXPECT_OK(co_await cache_->insert(std::move(handle)));
+  }
+
+  CO_ASSERT_EQ(allocator.getHandleCountForThread(), 0);
+
+  {
+    std::vector<ReadHandle> handles;
+    for (int i = 0; i < kNumItems; ++i) {
+      auto key = "handle_count_" + std::to_string(i);
+      auto result = CO_ASSERT_OK(co_await cache_->find(key));
+      CO_ASSERT_TRUE(result.has_value());
+      handles.push_back(std::move(result).value());
+    }
+    EXPECT_EQ(allocator.getHandleCountForThread(), kNumItems);
+
+    for (int i = kNumItems; i > 0; --i) {
+      handles.pop_back();
+      EXPECT_EQ(allocator.getHandleCountForThread(), i - 1);
+    }
+  }
+}
+
 CO_TEST_F(RAMCacheComponentTest, IteratorEarlyTerminationReleasesRefcounts) {
   constexpr int kNumItems = 10;
   std::vector<std::string> keys;

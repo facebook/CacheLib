@@ -44,7 +44,7 @@ Handle::Handle(Handle&& other) noexcept
 
 Handle::~Handle() noexcept {
   if (item_ != nullptr) {
-    if (item_->decrementRefCount()) {
+    if (item_->decrementRefCount(*cache_)) {
       cache_->release(*item_, inserted_);
     }
   }
