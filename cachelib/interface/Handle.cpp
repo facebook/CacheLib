@@ -23,16 +23,15 @@
 namespace facebook::cachelib::interface {
 
 Handle::Handle(CacheComponent& cache, CacheItem& item, bool inserted) noexcept
-    : cache_(&cache), item_(&item), inserted_(inserted) {}
+    : cache_(cache), item_(&item), inserted_(inserted) {}
 
 Handle::Handle(CacheComponent& cache, bool inserted, InlineItemTag) noexcept
-    : cache_(&cache),
+    : cache_(cache),
       item_(reinterpret_cast<CacheItem*>(buf_)),
       inserted_(inserted) {}
 
 Handle::Handle(Handle&& other) noexcept
     : cache_(other.cache_), inserted_(other.inserted_) {
-  XDCHECK_NE(cache_, nullptr) << "Invalid handle";
   if (other.item_ == reinterpret_cast<CacheItem*>(other.buf_)) {
     other.item_->move(buf_);
     item_ = reinterpret_cast<CacheItem*>(buf_);
@@ -44,8 +43,8 @@ Handle::Handle(Handle&& other) noexcept
 
 Handle::~Handle() noexcept {
   if (item_ != nullptr) {
-    if (item_->decrementRefCount(*cache_)) {
-      cache_->release(*item_, inserted_);
+    if (item_->decrementRefCount(cache_)) {
+      cache_.release(*item_, inserted_);
     }
   }
 }
@@ -63,7 +62,7 @@ WriteHandle::WriteHandle(WriteHandle&& other) noexcept
 
 WriteHandle::~WriteHandle() noexcept {
   if (item_ != nullptr && dirty_) {
-    cache_->writeBack(*item_);
+    cache_.writeBack(*item_);
   }
 }
 

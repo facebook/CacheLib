@@ -92,7 +92,7 @@ class Handle {
   Handle(Handle&& other) noexcept;
   Handle& operator=(Handle&& other) noexcept = delete;
 
-  CacheComponent* cache_;
+  CacheComponent& cache_;
   CacheItem* item_;
   // Note: not explicitly initializing so implementations that don't use it
   // don't pay the cost to zero it out
