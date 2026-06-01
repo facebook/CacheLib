@@ -16,9 +16,15 @@
 
 #pragma once
 
+#include <folly/Portability.h>
+
 #include <algorithm>
 #include <chrono>
 #include <string_view>
+
+#if FOLLY_HAS_COROUTINES
+#include <folly/coro/Task.h>
+#endif
 
 namespace facebook::cachelib::trace {
 namespace detail {
@@ -91,6 +97,12 @@ class Profiled {
   }
   void lock() { mutexOrBaton_.lock(); }
   void unlock() { mutexOrBaton_.unlock(); }
+
+#if FOLLY_HAS_COROUTINES
+  [[nodiscard]] folly::coro::Task<void> co_lock() {
+    co_await mutexOrBaton_.co_lock();
+  }
+#endif
 
   /**
    * Passthrough API to the underlying baton
