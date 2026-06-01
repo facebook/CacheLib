@@ -1,12 +1,12 @@
 # Building CacheLib
 
+CacheLib uses `getdeps.py` for building, which is used by many of Meta's OSS tools. This script will download and build all of the necessary dependencies first, and will then invoke cmake to build CacheLib. This ensures that you build with relevant versions of all dependent libraries, taking into account what versions are installed locally on your system.
+
 ## Dependencies
 
-CacheLib depends on multiple libraries and programs.
-Some are available as system packages, and others need
-to be build from source.
+CacheLib depends on multiple libraries and programs. Some are available as system packages, and others need to be built from source.
 
-The primary dependecies are:
+The primary dependencies are:
 
 * a C++20 compiler (tested with GCC, CLANG)
 * [https://cmake.org/](CMake)
@@ -26,260 +26,174 @@ These dependencies further require multiple libraries:
 * And many more libraries, commonly available as installable packages, e.g:
   `boost`, `libevent`, `lz4`, `snappy`, `zlib`, `ssl`, `libunwind`, `libsodium`
 
-Currently, some dependencies can be easily installed using the system's
-package manager (e.g. `dnf`/`yum`/`apt`), while others need to be rebuild
-from source code.
+## Building with getdeps.py
 
-
-## Build Script
-
-CacheLib provides a build script which prepares and installs all
-dependencies and prerequisites, then builds CacheLib.
-The build script has been tested to work on CentOS 8,
-Ubuntu 18.04, and Debian 10.
+### Step 1 - Clone the repository
 
 ```sh
-git clone https://github.com/facebookincubator/CacheLib
+git clone https://github.com/facebook/CacheLib
 cd CacheLib
-./contrib/build.sh -d -j -v
-
-# The resulting library and executables:
-./build-cachelib/cachebench/cachebench --help
 ```
 
-Re-running `./contrib/build.sh` will update CacheLib and its dependencies
-to their latest versions and rebuild them.
+### Step 2 - Install system dependencies
 
-The build script supports the following options:
+You can install system dependencies to save building them:
 
 ```sh
-$ ./contrib/build.sh -h
-CacheLib dependencies builder
-
-usage: build.sh [-BdhijOStv]
-
-options:
-  -d    build with DEBUG configuration
-        (default is RELEASE with debug information)
-  -h    This help screen
-  -j    build using all available CPUs ('make -j')
-        (default is to use single CPU)
-  -O    skip OS package installation (apt/yum/dnf)
-  -S    skip git-clone/git-pull step
-  -t    build tests
-        (default is to skip tests if supported by the package)
-  -v    verbose build
+sudo python3 ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
 ```
 
-
-## Build Process Details
-
-The build process involves the following steps.
-These steps can be run manually for troubleshooting and/or
-adapting the build to a new system. The wrapper script `./contrib/build.sh`
-performs them one by one:
-
-#### Step 1 - System packages
-
-Installs the suitable tools and packages for the operating
-system flavor and version (e.g. Debian 10).
-This step requires `sudo`, and uses one of the following scripts:
-`contrib/prerequisites-centos8.sh`,
-`contrib/prerequisites-debian10.sh`,
-`contrib/prerequisites-ubuntu18.sh`.
-
-For Debian/Ubuntu it is a simple matter of running `apt-get` with
-a known list of packages. For CentOS, the script first adds
-the `Power Tools` repository (required for some of the packages).
-
-It is safe to re-run these scripts - if the required packages are
-already installed, the script will terminate quickly.
-
-
-#### Step 2 - Update Git-Submodules
-
-The CacheLib project includes several library as git-submodules
-(folly,fbthrift,wangle,fizz).
-Due to the way internal facebook projects are
-converted to git and exported to github, the updating process
-is slightly more complicated than a simple `git submodule update`.
-
-The script `./contrib/update-submodules.sh` performs the required steps
-to synchronize the required git revisions.
-
-It is safe to re-run the `update-submodules.sh` script - it will simply
-pull the latest changes (if any).
-
-
-#### Step 3 - Build libraries from source code
-
-Downloads the latest source code version of the following libraries,
-builds and installs them (using `sudo`):
-`googleflags`, `googlelog`, `sparsemap`, `fmt`, `xxhash`, `folly`, `fizz`,
-`wangle`, `fbthrift`.
-
-In some cases the operating system has a pre-packaged version of some
-of these libraries, but they are too old. In these cases the library
-is rebuilt from source code.
-
-Building each library is performed using the following script:
+If you'd like to see the packages before installing them:
 
 ```sh
-$ ./contrib/build-package.sh -h
-CacheLib dependencies builder
-
-usage: build-package.sh [-BdhijStv] NAME
-
-options:
-  -B    skip build step
-        (default is to build with cmake & make)
-  -d    build with DEBUG configuration
-        (default is RELEASE with debug information)
-  -h    This help screen
-  -i    install after build using 'sudo make install'
-        (default is to build but not install)
-  -j    build using all available CPUs ('make -j')
-        (default is to use single CPU)
-  -S    skip git-clone/git-pull step
-        (default is to get the latest source)
-  -t    build tests
-        (default is to skip tests if supported by the package)
-  -v    verbose build
-
-NAME: the dependency to build supported values are:
-  zstd, xxhash,
-  googlelog, googleflags, googletest,
-  fmt, sparsemap,
-  folly, fizz, wangle, fbthrift,
-  cachelib
+python3 ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
 ```
 
-All the required packages use `cmake`, and will be built in a new subdirectory
-named `build-[PACKAGE]` (e.g. running `./contrib/build-package.sh fmt` will
-create the `build-fmt` subdirectory).
+On platforms without system dependencies, `getdeps.py` will download and build them for you during the build step.
 
-Example:
-Running the command `./contrib/build-package.sh -i -j -d -t fmt`
-is equivalent to the following commands:
+### Step 3 - Build CacheLib
+
+`getdeps.py` currently requires python 3.6+ to be on your path.
 
 ```sh
-cd cachelib/external
-git clone https://github.com/fmtlib/fmt.git
-cd ../..
-mkdir build-fmt
-cmake ../cachelib/external/fmt -DCMAKE_BUILD_TYPE=Debug
-make -j
-sudo make install
+# Build, using system dependencies if available
+python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
 ```
 
-#### Step 4 - Build CacheLib
+This command will:
+1. Download and build all necessary dependencies (folly, fbthrift, wangle, fizz, etc.)
+2. Build CacheLib with the appropriate configuration
+3. Install the built artifacts to a scratch directory
 
-Building CacheLib is identical to installing packages (above),
-with the exception of system-wide installation - cachelib is *not* installed
-by the `build.sh` wrapper script.
+The build may take several minutes on the first run as it compiles all dependencies. Subsequent builds will be much faster as only changed components are rebuilt.
 
-To build cachelib, run:
+## Build Configurations
 
-`./contrib/build-package.sh -j -d -v cachelib`.
+By default, `getdeps.py` builds in Release mode with debug information. To change the configuration, pass `--build-type` (e.g., `--build-type Debug`) to the `build` command. Run `python3 ./build/fbcode_builder/getdeps.py build --help` for the full list of build options.
 
-To install the cachelib files, either add `-i` to the `build-package.sh` script,
-or manually install with:
+## Running Tests
+
+By default `getdeps.py` will build the tests for CacheLib. To run them:
 
 ```sh
-$ cd build-cachelib
-$ sudo make install
+python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
 ```
 
-The installed files will be:
-* Header files in `/usr/local/include/cachelib/`
-* Library files in `/usr/local/lib/libcachelib_*.so`
-* `cachebench` and `cachebench-util` executables in `/usr/local/bin`.
+This will run the full test suite for CacheLib. Individual tests can be run from the build directory if needed.
 
+## Locating Build Output
 
-
-## Development Cycle
-
-When working on CacheLib itself (e.g. tweaking caching algorithms or adding
-features to `cachebench`), the following is recommended:
-
-* Run `./contrib/build.sh -j -d -v` to install dependencies and
-  build `cachelib`.
-* The resulting cachelib files will be stored in the `build-cachelib`
-  subdirectory.
-* Modify source code files in `./cachelib/`
-* Rebuild the modified files in `build-cachelib` using `make`.
-
-Example:
+`getdeps.py` installs build artifacts to a scratch directory. To find where CacheLib was installed:
 
 ```sh
-$ ./contrib/build.sh -d -j -v
-[... after build is complete ...]
-
-$ cd build-cachelib
-$ make
-[... cachelib and cachebench are rebuild ...]
-
-$ touch touch ../cachelib/cachebench/main.cpp
-$ make
-[... cachelib and cachebench are rebuild ...]
+python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib
 ```
 
+The install directory contains:
 
-## Updating to latest source code version
+* `bin/` -- executables (e.g., `cachebench`, `cachebench-util`)
+* `lib/` and `lib64/` -- library files (e.g., `libcachelib_allocator.so`)
+* `include/` -- header files for CacheLib
+* `test_configs/` -- sample CacheBench configurations
 
-Facebook internal development cycle tightly couples
-cachelib with its dependencies (e.g. folly, fbthrifth, wangle, fizz),
-and all are frequently updated.
-Particularly, the folly library does not provide stable API,
-and using mismatched version can cause compilation errors.
-
-Therefore, it is recommended to *always* update (and rebuild)
-all dependencies before updating cachelib. That is,
-a simple `git pull` for cachelib alone can often lead to failed builds.
-
-Running the `contrib/build.sh` script takes care of first updating
-and rebuilding all dependencies, and then updating and rebuilding cachelib.
-Use the `-O` option to skip the installation of system packages, e.g.
-`./contrib/build.sh -d -v -j -O`.
-
-As all dependencies use `git/cmake/make`, rebuilding the same code (if there
-were no updates) will be very fast.
-
-
-## Downloading the source code without building
-
-The default `build.sh` wrapper script requires internet connection
-(for package installation and github updates).
-
-For special build circumstances where internet connection is not available,
-it is possible to download the source code on one machine, then copy it
-and build it on another.
-
-Use `build-package.sh -B` option to only download the latest source code
-(using `git clone/git pull`) without building.
-
-Example:
-```sh
-./contrib/build-package.sh -B googlelog
-./contrib/build-package.sh -B googleflags
-./contrib/build-package.sh -B googletest
-./contrib/build-package.sh -B fmt
-./contrib/build-package.sh -B sparsemap
-./contrib/build-package.sh -B folly
-./contrib/build-package.sh -B fizz
-./contrib/build-package.sh -B wangle
-./contrib/build-package.sh -B fbthrift
-./contrib/build-package.sh -B cachelib
-```
-
-Will download the latest source code of all libraries under
-the `./cachelib/external` subdirectory.
-
-Then the entire build tree can be copied to another machine
-(one that does not have internet connectivity).
-CacheLib can then be build be adding the `-S` option to `build.sh`
-(meaning: skip the `git clone/git pull` step):
+For example, to run `cachebench`:
 
 ```sh
-$ ./contrib/build.sh -d -j -v -S
+INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
+$INST_DIR/bin/cachebench --help
+$INST_DIR/bin/cachebench --json_test_config $INST_DIR/test_configs/simple_test.json
 ```
+
+## Development Workflow
+
+When working on CacheLib itself (e.g., tweaking caching algorithms or adding features to `cachebench`), the following is recommended:
+
+1. Make your changes to the source code in the `cachelib/` directory
+2. Rebuild CacheLib:
+
+   ```sh
+   python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
+   ```
+
+3. Run relevant tests to verify your changes:
+
+   ```sh
+   python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
+   ```
+
+4. Locate the updated binaries:
+
+   ```sh
+   INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
+   $INST_DIR/bin/cachebench --help
+   ```
+
+Since `getdeps.py` uses an incremental build system, rebuilding after small changes is typically very fast as only the modified components and their dependents are recompiled.
+
+## Updating to Latest Version
+
+Facebook's internal development cycle tightly couples CacheLib with its dependencies (e.g., folly, fbthrift, wangle, fizz), and all are frequently updated. In particular, the folly library does not provide a stable API, and using mismatched versions can cause compilation errors.
+
+To update to the latest version:
+
+1. Pull the latest changes:
+
+   ```sh
+   git pull origin main
+   ```
+
+2. Rebuild with getdeps.py:
+
+   ```sh
+   python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
+   ```
+
+The `getdeps.py` script automatically handles updating and rebuilding all dependencies to compatible versions. This ensures that you always have a consistent set of libraries that work together.
+
+If you encounter build issues after pulling, try cleaning the build artifacts and rebuilding:
+
+```sh
+# getdeps.py will automatically rebuild dependencies as needed
+python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
+```
+
+## Troubleshooting
+
+### Build Failures
+
+If you encounter build failures:
+
+1. Ensure you have a C++20 compatible compiler (GCC 10+ or Clang 10+)
+2. Make sure CMake 3.14 or newer is installed
+
+### Missing System Dependencies
+
+If system dependency installation fails:
+
+1. Try the dry-run option to see what packages would be installed:
+   ```sh
+   python3 ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
+   ```
+
+2. Install the packages manually using your system's package manager
+
+3. Re-run the build with `--allow-system-packages` to use the manually installed dependencies
+
+### Platform Support
+
+`getdeps.py` has been tested on:
+- Ubuntu 18.04, 20.04, 22.04
+- CentOS 8
+- Debian 10, 11
+
+For other platforms, you may need to install dependencies manually and use `--allow-system-packages`.
+
+## Legacy Build Scripts
+
+**Note**: The legacy build scripts (`./contrib/build.sh`, `./contrib/build-package.sh`, and related scripts) are deprecated and no longer maintained. Please use `getdeps.py` as documented above for all builds.
+
+## Additional Resources
+
+- [Installation Guide](https://cachelib.org/docs/installation/) - Detailed installation instructions
+- [CacheBench Documentation](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) - Guide to using CacheBench
+- [GitHub Repository](https://github.com/facebook/CacheLib) - Source code and issue tracker

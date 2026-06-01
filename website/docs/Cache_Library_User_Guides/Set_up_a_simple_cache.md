@@ -85,24 +85,35 @@ For a complete program to set up a simple cache, see `examples/simple_cache/main
 
 To test the simple cache setup program `examples/simple_cache/main.cpp`:
 
-1. Build `cachelib` with all the dependecies:
+1. Build `cachelib` with all the dependencies:
 
     ```sh
     git clone https://github.com/facebook/CacheLib
     cd CacheLib
-    ./contrib/build.sh -d -j -v -T
+    sudo python3 ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
+    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
     ```
 
-2. Build the simple cache setup program:
+2. Locate the install directory and find the built libraries:
+
+    ```sh
+    INST_DIR=$(python3 ./build/fbcode_builder/getdeps.py show-inst-dir cachelib)
+    echo "CacheLib installed at: $INST_DIR"
+    ```
+
+3. Build the simple cache setup program using the installed CacheLib:
 
    ```sh
    cd examples/simple_cache
-   ./build.sh
+   # Use CMake to build against the installed CacheLib
+   mkdir -p build && cd build
+   cmake -DCMAKE_PREFIX_PATH=$INST_DIR ..
+   make
    ```
-3. Run the program:
+4. Run the program:
 
    ```sh
-   ./build/simple-cache-example
+   ./simple-cache-example
    ```
 
    When you run `simple-cache-example`, it doesn't produce any output.
