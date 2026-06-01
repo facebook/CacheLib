@@ -100,7 +100,8 @@ class HighRefcountStressor : public Stressor {
 // verify they do exist by looking them up via the map's hash table.
 class CachelibMapStressor : public Stressor {
  public:
-  CachelibMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
+  CachelibMapStressor(const CacheConfig& cacheConfig,
+                      const StressorConfig& stressorConfig);
 
   std::unique_ptr<StatsBase> getCacheStats() const override {
     return cache_->getStats();
@@ -153,6 +154,7 @@ class CachelibMapStressor : public Stressor {
   static const uint32_t kMapInsertionBatchMin = 1000;
   static const uint32_t kMapInsertionBatchMax = 2000;
 
+  const uint64_t numThreads_{};
   const uint64_t numOpsPerThread_{};
 
   std::chrono::time_point<std::chrono::system_clock> startTime_;
@@ -173,7 +175,8 @@ class CachelibMapStressor : public Stressor {
 // verify they do exist by looking them up via the map's index.
 class CachelibRangeMapStressor : public Stressor {
  public:
-  CachelibRangeMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
+  CachelibRangeMapStressor(const CacheConfig& cacheConfig,
+                           const StressorConfig& stressorConfig);
 
   std::unique_ptr<StatsBase> getCacheStats() const override {
     return cache_->getStats();
@@ -226,6 +229,7 @@ class CachelibRangeMapStressor : public Stressor {
   static const uint32_t kMapInsertionBatchMin = 1000;
   static const uint32_t kMapInsertionBatchMax = 2000;
 
+  const uint64_t numThreads_{};
   const uint64_t numOpsPerThread_{};
 
   std::chrono::time_point<std::chrono::system_clock> startTime_;

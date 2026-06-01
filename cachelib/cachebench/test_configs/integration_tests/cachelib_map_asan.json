@@ -7,10 +7,11 @@
     "rebalanceMinSlabs": 1,
     "allocFactor": 2.0
   },
-  "test_config": 
+  "test_config":
     {
       "name": "cachelib_map",
-      "numOps" : 30000
+      "numOps" : 30000,
+      "numThreads" : 32
     }
- 
+
 }

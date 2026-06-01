@@ -172,11 +172,10 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     return std::make_unique<HighRefcountStressor>(cacheConfig,
                                                   stressorConfig.numOps);
   } else if (stressorConfig.name == "cachelib_map") {
-    return std::make_unique<CachelibMapStressor>(cacheConfig,
-                                                 stressorConfig.numOps);
+    return std::make_unique<CachelibMapStressor>(cacheConfig, stressorConfig);
   } else if (stressorConfig.name == "cachelib_range_map") {
     return std::make_unique<CachelibRangeMapStressor>(cacheConfig,
-                                                      stressorConfig.numOps);
+                                                      stressorConfig);
   } else if (stressorConfig.name == "fast_shutdown") {
     return std::make_unique<FastShutdownStressor>(cacheConfig,
                                                   stressorConfig.numOps);
