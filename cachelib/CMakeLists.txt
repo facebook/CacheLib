@@ -318,6 +318,8 @@ add_subdirectory (interface)
 add_subdirectory (datatype)
 add_subdirectory (compact_cache)
 add_subdirectory (benchmarks)
+add_thrift_file(PERSISTENCE object_cache/persistence/persistent_data.thrift json)
+
 add_subdirectory (cachebench)
 
 # Install the source header files
