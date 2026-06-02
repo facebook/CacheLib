@@ -251,7 +251,7 @@ class AsyncCacheStressor : public Stressor {
           l.unlock();
           auto xlock = chainedItemAcquireUniqueLock(key);
           setKey(pid, stats, key, *(req->sizeBegin), req->ttlSecs,
-                 req->admFeatureMap);
+                 req->getAdmFeatureMap());
         }
       } else {
         result = OpResultType::kGetHit;
@@ -473,7 +473,7 @@ class AsyncCacheStressor : public Stressor {
         case OpType::kSet: {
           auto lock = chainedItemAcquireUniqueLock(key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                          req.admFeatureMap);
+                          req.getAdmFeatureMap());
 
           break;
         }

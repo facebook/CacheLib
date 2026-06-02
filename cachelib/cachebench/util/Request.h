@@ -18,9 +18,14 @@
 #include <folly/Format.h>
 #include <folly/Random.h>
 
+#include <atomic>
 #include <chrono>
 #include <ctime>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace facebook {
@@ -152,7 +157,9 @@ struct Request {
   }
 
   Request(Request&& r) noexcept
-      : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd) {}
+      : Request(r,
+                r.key.data() == r.onlineKeyString.data() &&
+                    r.key.size() == r.onlineKeyString.size()) {}
   Request& operator=(Request&&) = delete;
   ~Request() = default;
   Request(const Request&) = delete;
@@ -172,6 +179,10 @@ struct Request {
   }
   OpType getOp() const noexcept { return op.load(); }
   void setOp(OpType o) noexcept { op = o; }
+  const std::unordered_map<std::string, std::string>& getAdmFeatureMap()
+      const noexcept {
+    return admFeatureMap;
+  }
 
   std::string_view key;
 
@@ -191,10 +202,12 @@ struct Request {
 
   std::optional<uint64_t> requestId;
 
+ private:
   // Feature map for this request sample, which is used for for admission
   // policy: feature name --> feature value
-  const std::unordered_map<std::string, std::string> admFeatureMap;
+  std::unordered_map<std::string, std::string> admFeatureMap;
 
+ public:
   // Custom timestamp in second associated with the request
   // May not have to be the same as wall clock
   uint64_t timestamp{0};
@@ -204,6 +217,22 @@ struct Request {
   std::string itemValue;
 
  private:
+  Request(Request& r, bool keyUsesOnlineKey) noexcept
+      : key(r.key),
+        onlineKeyString(std::move(r.onlineKeyString)),
+        sizeBegin(r.sizeBegin),
+        sizeEnd(r.sizeEnd),
+        ttlSecs(r.ttlSecs),
+        requestId(std::move(r.requestId)),
+        admFeatureMap(std::move(r.admFeatureMap)),
+        timestamp(r.timestamp),
+        itemValue(std::move(r.itemValue)),
+        op(r.getOp()) {
+    if (keyUsesOnlineKey) {
+      key = onlineKeyString;
+    }
+  }
+
   std::atomic<OpType> op{OpType::kGet};
 };
 } // namespace cachebench

@@ -287,7 +287,7 @@ class CacheStressor : public CacheStressorBase {
           }
           auto lock = chainedItemAcquireUniqueLock(key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                          req.admFeatureMap, req.itemValue);
+                          req.getAdmFeatureMap(), req.itemValue);
 
           break;
         }
@@ -317,7 +317,7 @@ class CacheStressor : public CacheStressorBase {
               slock = {};
               xlock = chainedItemAcquireUniqueLock(key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                     req.admFeatureMap, req.itemValue);
+                     req.getAdmFeatureMap(), req.itemValue);
             }
           } else {
             result = OpResultType::kGetHit;

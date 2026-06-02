@@ -403,7 +403,7 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(const PieceWiseReqWrapper& other)
           other.req.getOp(),
           other.req.ttlSecs,
           other.req.requestId.value(),
-          other.req.admFeatureMap,
+          other.req.getAdmFeatureMap(),
           other.req.itemValue),
       requestRange(other.requestRange),
       pieceType(other.pieceType),

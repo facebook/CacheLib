@@ -134,7 +134,7 @@ folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
 
   size_t size = *(req.sizeBegin);
   uint32_t ttlSecs = req.ttlSecs;
-  auto admFeatureMap = req.admFeatureMap;
+  auto admFeatureMap = req.getAdmFeatureMap();
   auto itemValue = req.itemValue;
 
   switch (op) {
