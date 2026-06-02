@@ -113,6 +113,9 @@ void WorkloadGenerator::generateKeys() {
 void WorkloadGenerator::generateReqs() {
   generateFirstKeyIndexForPool();
   generateKeys();
+  const size_t totalKeys = firstKeyIndexForPool_.back();
+  reqs_.reserve(totalKeys);
+  sizes_.reserve(totalKeys);
   std::mt19937_64 gen(folly::Random::rand64());
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
     size_t idx = workloadIdx(i);
