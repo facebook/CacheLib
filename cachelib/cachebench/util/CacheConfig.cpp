@@ -108,6 +108,9 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, enableItemDestructorCheck);
   JSONSetVal(configJson, enableItemDestructor);
   JSONSetVal(configJson, nvmAdmissionRetentionTimeThreshold);
+  JSONSetVal(configJson, eventTrackerFilePath);
+  JSONSetVal(configJson, eventTrackerSamplingRate);
+  JSONSetVal(configJson, eventTrackerQueueSize);
 
   JSONSetVal(configJson, fccCoroFiberAdapterNumThreads);
   JSONSetVal(configJson, fccCoroFiberAdapterFibersPerThread);
@@ -118,7 +121,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 824>();
+  checkCorrectSize<CacheConfig, 864>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(

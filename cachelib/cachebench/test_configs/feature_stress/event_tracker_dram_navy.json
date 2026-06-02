@@ -1,0 +1,37 @@
+// @nolint
+// Simple EventTracker coverage with DRAM plus Navy BigHash and BlockCache.
+{
+  "cache_config" : {
+    "cacheSizeMB" : 64,
+    "allocator" : "LRU",
+    "numPools" : 1,
+    "poolSizes" : [1.0],
+    "allocFactor" : 2.0,
+
+    "nvmCacheSizeMB" : 128,
+    "navyBigHashSizePct" : 50,
+    "navySmallItemMaxSize" : 2048,
+    "navyBigHashBucketSize" : 4096,
+    "navyBlockSize" : 4096,
+
+    "eventTrackerFilePath" : "/tmp/cachebench_event_tracker_dram_navy.csv",
+    "eventTrackerSamplingRate" : 1000,
+    "eventTrackerQueueSize" : 100000
+  },
+  "test_config" : {
+    "numOps" : 50000,
+    "numThreads" : 4,
+    "numKeys" : 20000,
+
+    "keySizeRange" : [8, 9],
+    "keySizeRangeProbability" : [1.0],
+
+    "valSizeRange" : [512, 4096],
+    "valSizeRangeProbability" : [0.5, 0.5],
+
+    "getRatio" : 0.5,
+    "setRatio" : 0.5,
+    "keyPoolDistribution" : [1.0],
+    "opPoolDistribution" : [1.0]
+  }
+}

@@ -43,6 +43,7 @@
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 DECLARE_bool(report_api_latency);
@@ -559,6 +560,28 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
   if (!cacheDir.empty()) {
     allocatorConfig_.cacheDir = cacheDir;
+  }
+
+  if (!config_.eventTrackerFilePath.empty()) {
+    if (config_.eventTrackerQueueSize == 0) {
+      throw std::invalid_argument(
+          "eventTrackerQueueSize must be greater than 0");
+    }
+
+    const auto eventTrackerFilePath = config_.eventTrackerFilePath;
+    const auto eventTrackerSamplingRate = config_.eventTrackerSamplingRate;
+    const auto eventTrackerQueueSize = config_.eventTrackerQueueSize;
+    allocatorConfig_.setEventTrackerConfigFactory([eventTrackerFilePath,
+                                                   eventTrackerSamplingRate,
+                                                   eventTrackerQueueSize] {
+      EventTracker::Config trackerConfig;
+      trackerConfig.queueSize = eventTrackerQueueSize;
+      trackerConfig.sampler =
+          std::make_unique<FurcHashSampler>(eventTrackerSamplingRate);
+      trackerConfig.eventSink =
+          std::make_unique<FileEventSink>(eventTrackerFilePath);
+      return trackerConfig;
+    });
   }
 
   if (config_.usePosixShm) {
@@ -1159,6 +1182,9 @@ std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
   const auto cacheStats = cache_->getGlobalCacheStats();
   const auto rebalanceStats = cache_->getSlabReleaseStats();
   const auto navyStats = cache_->getNvmCacheStatsMap().toMap();
+  for (const auto& [name, value] : cache_->getEventTrackerStatsMap()) {
+    ret.eventTrackerCounters[name] = value;
+  }
 
   ret.allocationClassStats = allocationClassStats;
   ret.numEvictions = aggregate.numEvictions();

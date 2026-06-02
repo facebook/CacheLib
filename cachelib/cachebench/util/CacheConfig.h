@@ -292,6 +292,17 @@ struct CacheConfig : public JSONConfig {
   // eviction-age is more than this threshold. 0 means no threshold
   uint32_t nvmAdmissionRetentionTimeThreshold{0};
 
+  // If specified, enable CacheLib's EventTracker and write sampled events to
+  // this CSV file.
+  std::string eventTrackerFilePath;
+
+  // EventTracker sampling rate. 1 records every key, N records roughly 1/N of
+  // keys, and 0 records no keys.
+  uint32_t eventTrackerSamplingRate{1};
+
+  // EventTracker queue size. Events are dropped when this queue is full.
+  uint32_t eventTrackerQueueSize{100000};
+
   // CoroFiberAdapter config for FlashCacheComponent run via
   // CacheComponentStressor.
   // Number of worker threads for the CoroFiberAdapter executor

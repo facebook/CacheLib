@@ -30,6 +30,10 @@ void validate(const CacheConfig& config) {
     throw std::invalid_argument(
         "enableItemDestructorCheck is not yet supported for "
         "FlashCacheComponent in cachebench");
+  } else if (!config.eventTrackerFilePath.empty()) {
+    throw std::invalid_argument(
+        "eventTracker is not yet supported for FlashCacheComponent in "
+        "cachebench");
   } else if (config.navyAdmissionWriteRateMB ||
              config.nvmAdmissionRetentionTimeThreshold ||
              config.nvmAdmissionPolicyFactory) {

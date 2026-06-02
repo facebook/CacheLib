@@ -166,6 +166,8 @@ class Stats : public StatsBase {
   // cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
+  std::unordered_map<std::string, uint64_t> eventTrackerCounters;
+
   std::map<PoolId, std::map<ClassId, uint64_t>> backgroundEvictionClasses;
   std::map<PoolId, std::map<ClassId, uint64_t>> backgroundPromotionClasses;
 
@@ -245,6 +247,7 @@ class Stats : public StatsBase {
     };
     accumulateMap(nvmCounters, other.nvmCounters);
     accumulateMap(nvmErrors, other.nvmErrors);
+    accumulateMap(eventTrackerCounters, other.eventTrackerCounters);
 
     return *this;
   }
@@ -576,6 +579,13 @@ class Stats : public StatsBase {
     if (!nvmCounters.empty()) {
       out << "== NVM Counters Map ==" << std::endl;
       for (const auto& it : nvmCounters) {
+        out << it.first << "  :  " << it.second << std::endl;
+      }
+    }
+
+    if (!eventTrackerCounters.empty()) {
+      out << "== Event Tracker Counters Map ==" << std::endl;
+      for (const auto& it : eventTrackerCounters) {
         out << it.first << "  :  " << it.second << std::endl;
       }
     }
