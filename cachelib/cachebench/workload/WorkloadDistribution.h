@@ -20,6 +20,7 @@
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/FastDiscrete.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -41,6 +42,9 @@ class WorkloadDistribution {
         useDiscreteValSizes_(config_.usesDiscreteValueSizes()),
         valSizeDiscreteDist_{initDiscreteValSize(config_)},
         valSizePiecewiseDist_{initPiecewiseValSize(config_)},
+        useDiscreteTtl_(config_.usesDiscreteTtl()),
+        ttlDiscreteDist_{initDiscreteTtl(config_)},
+        ttlPiecewiseDist_{initPiecewiseTtl(config_)},
         chainedValDist_(config_.chainedItemValSizeRange.begin(),
                         config_.chainedItemValSizeRange.end(),
                         config_.chainedItemValSizeRangeProbability.begin()),
@@ -55,6 +59,14 @@ class WorkloadDistribution {
             config_.valSizeRangeProbability.size() + 1) {
       throw std::invalid_argument(
           "Val size range and their probabilities do not match up for either "
+          "discrete or continuous probability. Check your "
+          "test config.");
+    }
+
+    if (config_.hasTtl() && !config_.usesDiscreteTtl() &&
+        !config_.usesPiecewiseTtl()) {
+      throw std::invalid_argument(
+          "TTL range and their probabilities do not match up for either "
           "discrete or continuous probability. Check your "
           "test config.");
     }
@@ -85,6 +97,20 @@ class WorkloadDistribution {
   }
 
   double sampleKeySizeDist(std::mt19937_64& gen) { return keySizeDist_(gen); }
+
+  bool hasTtl() const { return config_.hasTtl(); }
+
+  uint32_t sampleTtlSecs(std::mt19937_64& gen) {
+    if (!config_.hasTtl()) {
+      return 0u;
+    }
+    if (useDiscreteTtl_) {
+      size_t idx = ttlDiscreteDist_(gen);
+      return util::narrow_cast<uint32_t>(config_.ttlSecsRange[idx]);
+    } else {
+      return util::narrow_cast<uint32_t>(ttlPiecewiseDist_(gen));
+    }
+  }
 
   // unlike other sources, we let the workload generator directly make copies
   // of the base popularity distribution and sample from that.
@@ -128,6 +154,25 @@ class WorkloadDistribution {
     return std::piecewise_constant_distribution<double>{};
   }
 
+  static std::discrete_distribution<size_t> initDiscreteTtl(
+      const DistributionConfig& c) {
+    if (c.usesDiscreteTtl()) {
+      return std::discrete_distribution<size_t>(
+          c.ttlSecsRangeProbability.begin(), c.ttlSecsRangeProbability.end());
+    }
+    return {};
+  }
+
+  static std::piecewise_constant_distribution<double> initPiecewiseTtl(
+      const DistributionConfig& c) {
+    if (c.usesPiecewiseTtl()) {
+      return std::piecewise_constant_distribution<double>{
+          c.ttlSecsRange.begin(), c.ttlSecsRange.end(),
+          c.ttlSecsRangeProbability.begin()};
+    }
+    return std::piecewise_constant_distribution<double>{};
+  }
+
   const DistributionConfig config_;
   std::discrete_distribution<uint8_t> opDist_;
   // depending on the config's val size range and probability, decides if we
@@ -136,6 +181,10 @@ class WorkloadDistribution {
   const bool useDiscreteValSizes_{false};
   std::discrete_distribution<size_t> valSizeDiscreteDist_;
   std::piecewise_constant_distribution<double> valSizePiecewiseDist_;
+  // same discrete/piecewise switch as val size, applied to per-request TTL.
+  const bool useDiscreteTtl_{false};
+  std::discrete_distribution<size_t> ttlDiscreteDist_;
+  std::piecewise_constant_distribution<double> ttlPiecewiseDist_;
   std::piecewise_constant_distribution<double> chainedValDist_;
   std::piecewise_constant_distribution<double> chainedLenDist_;
   std::piecewise_constant_distribution<double> keySizeDist_;

@@ -133,6 +133,9 @@ void WorkloadGenerator::generateReqs() {
       sizes_.emplace_back(chainSizes);
       auto reqSizes = sizes_.end() - 1;
       reqs_.emplace_back(keys_[j], reqSizes->begin(), reqSizes->end());
+      if (workloadDist_[idx].hasTtl()) {
+        reqs_.back().ttlSecs = workloadDist_[idx].sampleTtlSecs(gen);
+      }
     }
   }
 }

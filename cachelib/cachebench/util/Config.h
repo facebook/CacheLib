@@ -54,6 +54,15 @@ struct DistributionConfig : public JSONConfig {
   std::vector<double> chainedItemValSizeRange{};
   std::vector<double> chainedItemValSizeRangeProbability{};
 
+  // Per-request TTL distribution (in seconds). Same shape as valSizeRange:
+  // - discrete (range.size() == probability.size()): each entry is a bucket
+  //   value, picked with the matching probability.
+  // - piecewise (range.size() == probability.size() + 1): each adjacent pair
+  //   defines a uniform bucket, picked with the matching probability.
+  // Empty (default) means no TTL (items live until evicted).
+  std::vector<double> ttlSecsRange{};
+  std::vector<double> ttlSecsRangeProbability{};
+
   // Popularity distribution shape.  This is defined by a set of weighted
   // buckets. popularityBuckets defines the number of objects in a bucket, and
   // popularityWeights defines the weight of each buckets.
@@ -99,6 +108,20 @@ struct DistributionConfig : public JSONConfig {
 
   bool usesDiscretePopularity() const {
     return popularityBuckets.size() && popularityWeights.size();
+  }
+
+  bool hasTtl() const {
+    return !ttlSecsRange.empty() || !ttlSecsRangeProbability.empty();
+  }
+
+  bool usesDiscreteTtl() const {
+    return !ttlSecsRange.empty() &&
+           ttlSecsRange.size() == ttlSecsRangeProbability.size();
+  }
+
+  bool usesPiecewiseTtl() const {
+    return !ttlSecsRangeProbability.empty() &&
+           ttlSecsRange.size() == ttlSecsRangeProbability.size() + 1;
   }
 };
 

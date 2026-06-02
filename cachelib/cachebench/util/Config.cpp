@@ -175,6 +175,9 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
   JSONSetVal(jsonConfig, chainedItemValSizeRange);
   JSONSetVal(jsonConfig, chainedItemValSizeRangeProbability);
 
+  JSONSetVal(jsonConfig, ttlSecsRange);
+  JSONSetVal(jsonConfig, ttlSecsRangeProbability);
+
   JSONSetVal(jsonConfig, popularityBuckets);
   JSONSetVal(jsonConfig, popularityWeights);
 
@@ -213,7 +216,7 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
     JSONSetVal(configJsonPop, popularityWeights);
   }
 
-  checkCorrectSize<DistributionConfig, 376>();
+  checkCorrectSize<DistributionConfig, 424>();
 }
 
 ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
