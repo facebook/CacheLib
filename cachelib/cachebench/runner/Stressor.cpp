@@ -22,6 +22,7 @@
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
+#include "cachelib/cachebench/runner/ObjectCacheStressor.h"
 #include "cachelib/cachebench/workload/BinaryKVReplayGenerator.h"
 #include "cachelib/cachebench/workload/BlockChunkReplayGenerator.h"
 #include "cachelib/cachebench/workload/KVReplayGenerator.h"
@@ -207,6 +208,25 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   } else if (stressorConfig.name == "cache_component") {
     return std::make_unique<CacheComponentStressor>(
         cacheConfig, stressorConfig, makeGenerator(stressorConfig));
+  } else if (stressorConfig.name == "object_cache") {
+    auto generator = makeGenerator(stressorConfig);
+    if (cacheConfig.allocator == "LRU") {
+      return std::make_unique<ObjectCacheStressor<LruAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU2Q") {
+      return std::make_unique<ObjectCacheStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B") {
+      return std::make_unique<ObjectCacheStressor<Lru5BAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B2Q") {
+      return std::make_unique<ObjectCacheStressor<Lru5B2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    }
+    throw std::invalid_argument(folly::sformat(
+        "object_cache stressor does not support allocator '{}'. Supported: "
+        "LRU, LRU2Q, LRU5B, LRU5B2Q.",
+        cacheConfig.allocator));
   } else {
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {

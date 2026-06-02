@@ -1,0 +1,29 @@
+// @nolint small object-cache smoke config for validating the object_cache stressor end-to-end.
+{
+  "cache_config": {
+    "cacheSizeMB": 64,
+    "htBucketPower": 18,
+    "htLockPower": 16,
+    "customConfigJson": {
+      "l1EntriesLimit": 20000,
+      "l1NumShards": 4,
+      "objectSizeTrackingEnabled": true
+    }
+  },
+  "test_config": {
+    "name": "object_cache",
+    "numOps": 140000,
+    "numThreads": 4,
+    "numKeys": 30000,
+    "enableLookaside": true,
+    "touchValue": true,
+    "keySizeRange": [16, 17],
+    "keySizeRangeProbability": [1.0],
+    "valSizeRange": [128, 512, 2048],
+    "valSizeRangeProbability": [0.5, 0.4, 0.1],
+    "getRatio": 0.82,
+    "setRatio": 0.1,
+    "delRatio": 0.03,
+    "updateRatio": 0.05
+  }
+}
