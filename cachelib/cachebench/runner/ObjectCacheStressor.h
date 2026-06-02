@@ -185,7 +185,7 @@ class ObjectCacheStressor : public CacheStressorBase {
   }
 
   std::unique_ptr<StatsBase> getCacheStats() const override {
-    auto retPtr = std::make_unique<Stats>();
+    auto retPtr = std::make_unique<ObjectCacheStats>();
     auto& ret = *retPtr;
 
     std::optional<PoolStats> aggregate;
@@ -241,6 +241,9 @@ class ObjectCacheStressor : public CacheStressorBase {
 
     ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
 
+    util::StatsMap objectCacheCounters;
+    cache_->getObjectCacheCounters(objectCacheCounters.createCountVisitor());
+    ret.objectCacheCounters = objectCacheCounters.toMap();
     return retPtr;
   }
 

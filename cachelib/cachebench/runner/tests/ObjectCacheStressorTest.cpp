@@ -19,6 +19,7 @@
 #include <memory>
 #include <vector>
 
+#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/ObjectCacheStressor.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 
@@ -122,9 +123,13 @@ TEST(ObjectCacheStressorTest, RunsDeterministicObjectCacheWorkload) {
   EXPECT_EQ(0, throughput.delNotFound);
 
   auto stats = stressor.getCacheStats();
-  auto* cacheStats = stats->asPtr<const Stats>();
-  ASSERT_NE(nullptr, cacheStats);
-  EXPECT_EQ(0, cacheStats->numItems);
+  auto* objectCacheStats = stats->asPtr<const ObjectCacheStats>();
+  ASSERT_NE(nullptr, objectCacheStats);
+  EXPECT_EQ(0, objectCacheStats->numItems);
+  EXPECT_TRUE(objectCacheStats->objectCacheCounters.count("objcache.lookups") >
+              0);
+  EXPECT_TRUE(objectCacheStats->objectCacheCounters.count("objcache.removes") >
+              0);
 }
 
 } // namespace

@@ -735,6 +735,59 @@ class Stats : public StatsBase {
   }
 };
 
+class ObjectCacheStats : public Stats {
+ public:
+  std::unordered_map<std::string, double> objectCacheCounters;
+
+  ObjectCacheStats& operator+=(const StatsBase& otherBase) override {
+    Stats::operator+=(otherBase);
+    const auto& other = otherBase.as<ObjectCacheStats>();
+    for (const auto& [key, value] : other.objectCacheCounters) {
+      objectCacheCounters[key] += value;
+    }
+    return *this;
+  }
+
+  void render(std::ostream& out) const override {
+    Stats::render(out);
+    renderObjectCacheCounters(out, objectCacheCounters,
+                              "== Object Cache Counters ==");
+  }
+
+  void render(const StatsBase& prevStatsBase,
+              std::ostream& out) const override {
+    Stats::render(prevStatsBase, out);
+
+    const auto& prevStats = prevStatsBase.as<ObjectCacheStats>();
+    std::unordered_map<std::string, double> deltas;
+    for (const auto& [key, value] : objectCacheCounters) {
+      double delta = value;
+      if (const auto it = prevStats.objectCacheCounters.find(key);
+          it != prevStats.objectCacheCounters.end()) {
+        delta -= it->second;
+      }
+      if (delta != 0) {
+        deltas[key] = delta;
+      }
+    }
+    renderObjectCacheCounters(out, deltas, "== Object Cache Counters Delta ==");
+  }
+
+ private:
+  static void renderObjectCacheCounters(
+      std::ostream& out,
+      const std::unordered_map<std::string, double>& counters,
+      const char* header) {
+    if (counters.empty()) {
+      return;
+    }
+    out << header << std::endl;
+    for (const auto& [key, value] : counters) {
+      out << key << "  :  " << value << std::endl;
+    }
+  }
+};
+
 class ComponentStats : public StatsBase {
  public:
   interface::CacheComponentStats stats_;
