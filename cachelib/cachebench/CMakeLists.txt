@@ -13,6 +13,7 @@
 # limitations under the License.
 
 add_library (cachelib_cachebench
+  ${PERSISTENCE_THRIFT_FILES}
   ./cache/Cache.cpp
   ./cache/components/Components.cpp
   ./cache/components/FlashComponent.cpp
@@ -41,7 +42,6 @@ add_library (cachelib_cachebench
   ./workload/WorkloadGenerator.cpp
   ./workload/PieceWiseReplayGenerator.cpp
   ./workload/SimpleFlashBenchmarkGenerator.cpp
-  ${OBJCACHE_PERSISTENCE_THRIFT_FILES}
   )
 
 add_dependencies(cachelib_cachebench thrift_generated_files)
@@ -53,6 +53,7 @@ target_link_libraries(cachelib_cachebench PUBLIC
 )
 
 add_library (cachelib_binary_trace_gen
+  ${PERSISTENCE_THRIFT_FILES}
   ./runner/Runner.cpp
   ./runner/Stressor.cpp
   ./util/CacheConfig.cpp
@@ -63,7 +64,6 @@ add_library (cachelib_binary_trace_gen
   ./workload/OnlineGenerator.cpp
   ./workload/WorkloadGenerator.cpp
   ./workload/PieceWiseReplayGenerator.cpp
-  ${OBJCACHE_PERSISTENCE_THRIFT_FILES}
   )
 add_dependencies(cachelib_binary_trace_gen thrift_generated_files)
 target_link_libraries(cachelib_binary_trace_gen PUBLIC
