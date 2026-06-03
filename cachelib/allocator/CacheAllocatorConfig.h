@@ -323,12 +323,16 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setSlabRebalanceTimeout(
       std::chrono::milliseconds timeout);
 
-  // This customizes how many items we try to evict before giving up.s
-  // We may fail to evict if someone else (another thread) is using an item.
+  // This customizes how many items we search to try to evict before giving up.
+  // We may fail to evict if someone else (another thread) is using an item or
+  // if the eviction predicate filtered the item (see setEvictionPredicate()).
   // Setting this to a high limit leads to a higher chance of successful
-  // evictions but it can lead to higher allocation latency as well.
-  // Unless you're very familiar with caching, come talk to Cache Library team
-  // before you start customizing this option.
+  // evictions but it can lead to higher allocation latency as well. Setting
+  // this to zero will keep searching forever. Be careful setting this to zero
+  // and using an eviction predicate -- you can cause a livelock (loop forever
+  // trying to find eviction candidate) if the eviction predicate filters out
+  // all items. Unless you're very familiar with caching, come talk to Cache
+  // Library team before you start customizing this option.
   CacheAllocatorConfig& setEvictionSearchLimit(uint32_t limit);
 
   // Set a predicate that is called for each eviction candidate. Return true to
