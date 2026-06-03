@@ -309,6 +309,8 @@ function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
  set(${PREFIX}_THRIFT_FILES "${${PREFIX}_THRIFT_FILES}" PARENT_SCOPE)
 endfunction()
 
+add_thrift_file(OBJECT_CACHE_PERSISTENCE
+                object_cache/persistence/persistent_data.thrift json)
 
 add_subdirectory (common)
 add_subdirectory (shm)

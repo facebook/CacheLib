@@ -41,6 +41,7 @@ add_library (cachelib_cachebench
   ./workload/WorkloadGenerator.cpp
   ./workload/PieceWiseReplayGenerator.cpp
   ./workload/SimpleFlashBenchmarkGenerator.cpp
+  ${OBJECT_CACHE_PERSISTENCE_THRIFT_FILES}
   )
 
 add_dependencies(cachelib_cachebench thrift_generated_files)
@@ -62,6 +63,7 @@ add_library (cachelib_binary_trace_gen
   ./workload/OnlineGenerator.cpp
   ./workload/WorkloadGenerator.cpp
   ./workload/PieceWiseReplayGenerator.cpp
+  ${OBJECT_CACHE_PERSISTENCE_THRIFT_FILES}
   )
 add_dependencies(cachelib_binary_trace_gen thrift_generated_files)
 target_link_libraries(cachelib_binary_trace_gen PUBLIC
