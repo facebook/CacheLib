@@ -348,30 +348,6 @@ uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
   return serializedSize(hk.key().size(), value.size());
 }
 
-BlockCache::LookupData BlockCache::readOpenResult(
-    RegionDescriptor desc,
-    RelAddress addrEnd,
-    uint32_t approxSize,
-    std::optional<HashedKey> expected) {
-  LookupData ld;
-  ld.desc_ = std::move(desc);
-
-  switch (ld.desc_.status()) {
-  case OpenStatus::Ready:
-    ld.status_ = readEntry(ld, addrEnd, approxSize, expected);
-    break;
-  case OpenStatus::Retry:
-    ld.status_ = Status::Retry;
-    break;
-  case OpenStatus::Error:
-    XLOG(DFATAL) << "openForRead() unexpectedly returned Error";
-    ld.status_ = Status::DeviceError;
-    break;
-  }
-
-  return ld;
-}
-
 template <typename KeyT, typename IndexLookupT>
 BlockCache::LookupData BlockCache::lookupInternal(const KeyT& key,
                                                   IndexLookupT&& indexLookup) {
@@ -423,10 +399,11 @@ BlockCache::LookupData BlockCache::lookupInternal(const KeyT& key,
   if constexpr (kIsHashedKey) {
     expected = key;
   }
-  ld = readOpenResult(std::move(desc), addrEnd, decodeSizeHint(lr.sizeHint()),
-                      expected);
 
-  if (ld.desc_.isReady()) {
+  switch (desc.status()) {
+  case OpenStatus::Ready: {
+    SCOPE_EXIT { regionManager_.close(std::move(desc)); };
+    readEntry(desc, ld, addrEnd, decodeSizeHint(lr.sizeHint()), expected);
     if (FOLLY_UNLIKELY(ld.status_ == Status::DeviceError)) {
       // Remove this item from index so no future lookup will ever attempt to
       // read it. If the address still matches and the item is removed, reclaim
@@ -437,8 +414,7 @@ BlockCache::LookupData BlockCache::lookupInternal(const KeyT& key,
     } else if (ld.status_ == Status::ChecksumError) {
       // In case we are getting transient checksum error, we will retry to read
       // the entry (S421120)
-      ld.status_ =
-          readEntry(ld, addrEnd, decodeSizeHint(lr.sizeHint()), expected);
+      readEntry(desc, ld, addrEnd, decodeSizeHint(lr.sizeHint()), expected);
       XLOGF(ERR,
             "Retry reading an entry after checksum error. Return code: "
             "{}",
@@ -471,7 +447,17 @@ BlockCache::LookupData BlockCache::lookupInternal(const KeyT& key,
         reinsertionPolicy_->onLookup(key.key());
       }
     }
+    break;
   }
+  case OpenStatus::Retry:
+    ld.status_ = Status::Retry;
+    break;
+  case OpenStatus::Error:
+    XLOG(DFATAL) << "openForRead() unexpectedly returned Error";
+    ld.status_ = Status::DeviceError;
+    break;
+  }
+
   return ld;
 }
 
@@ -487,9 +473,6 @@ Status BlockCache::lookup(HashedKey hk,
   // return 0 if there is an issue in lookup (e.g. device error)
   lastAccessTimeSecs = 0;
   auto ld = lookupInternal(hk);
-  if (ld.desc_.isReady()) {
-    regionManager_.close(std::move(ld.desc_));
-  }
   if (ld.status_ == Status::Ok) {
     value = std::move(ld.buffer_);
     value.shrink(ld.valueSize_);
@@ -510,12 +493,6 @@ folly::Expected<BlockCache::ReadResult, Status> BlockCache::lookup(
   };
 
   auto ld = lookupInternal(entry, indexLookup);
-
-  SCOPE_EXIT {
-    if (ld.desc_.isReady()) {
-      regionManager_.close(std::move(ld.desc_));
-    }
-  };
   if (ld.status_ != Status::Ok) {
     return folly::makeUnexpected(ld.status_);
   }
@@ -1371,10 +1348,11 @@ void BlockCache::writeEntry(MutableBufferView buffer,
   logicalWrittenCount_.add(logicalWriteSize);
 }
 
-Status BlockCache::readEntry(LookupData& ld,
-                             RelAddress addrEnd,
-                             uint32_t approxSize,
-                             std::optional<HashedKey> expected) {
+void BlockCache::readEntry(RegionDescriptor& regionDesc,
+                           LookupData& ld,
+                           RelAddress addrEnd,
+                           uint32_t approxSize,
+                           std::optional<HashedKey> expected) {
   // Because region opened for read, nobody will reclaim it or modify. Safe
   // without locks.
 
@@ -1396,9 +1374,10 @@ Status BlockCache::readEntry(LookupData& ld,
   XDCHECK_GE(approxSize, folly::nextPowTwo(sizeof(EntryDesc)));
 
   auto buffer =
-      regionManager_.read(ld.desc_, addrEnd.sub(approxSize), approxSize);
+      regionManager_.read(regionDesc, addrEnd.sub(approxSize), approxSize);
   if (buffer.isNull()) {
-    return Status::DeviceError;
+    ld.status_ = Status::DeviceError;
+    return;
   }
 
   auto entryEnd = buffer.data() + buffer.size();
@@ -1414,7 +1393,8 @@ Status BlockCache::readEntry(LookupData& ld,
         sizeof(EntryDesc),
         folly::hexlify(
             folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
-    return Status::ChecksumError;
+    ld.status_ = Status::ChecksumError;
+    return;
   }
 
   folly::StringPiece key{reinterpret_cast<const char*>(
@@ -1423,7 +1403,8 @@ Status BlockCache::readEntry(LookupData& ld,
   if (expected.has_value() &&
       HashedKey::precomputed(key, desc.keyHash) != *expected) {
     lookupFalsePositiveCount_.inc();
-    return Status::NotFound;
+    ld.status_ = Status::NotFound;
+    return;
   }
 
   // Update the size to actual, defined by key and value size
@@ -1434,9 +1415,10 @@ Status BlockCache::readEntry(LookupData& ld,
     buffer.trimStart(buffer.size() - size);
   } else if (buffer.size() < size) {
     // Read less than actual size. Read again with proper buffer.
-    buffer = regionManager_.read(ld.desc_, addrEnd.sub(size), size);
+    buffer = regionManager_.read(regionDesc, addrEnd.sub(size), size);
     if (buffer.isNull()) {
-      return Status::DeviceError;
+      ld.status_ = Status::DeviceError;
+      return;
     }
   }
 
@@ -1457,9 +1439,10 @@ Status BlockCache::readEntry(LookupData& ld,
             folly::ByteRange(slice.data(), slice.data() + slice.size())));
     ld.buffer_.reset();
     lookupValueChecksumErrorCount_.inc();
-    return Status::ChecksumError;
+    ld.status_ = Status::ChecksumError;
+    return;
   }
-  return Status::Ok;
+  ld.status_ = Status::Ok;
 }
 
 void BlockCache::drain() { regionManager_.drain(); }

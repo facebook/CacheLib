@@ -362,7 +362,6 @@ class BlockCache final : public Engine {
 
   struct LookupData {
     Buffer buffer_;
-    RegionDescriptor desc_;
     uint32_t keySize_{0};
     uint32_t valueSize_{0};
     uint32_t lastAccessTimeSecs_{0};
@@ -374,14 +373,6 @@ class BlockCache final : public Engine {
   LookupData lookupInternal(HashedKey hk);
   template <typename KeyT, typename IndexLookupT>
   LookupData lookupInternal(const KeyT& key, IndexLookupT&& indexLookup);
-
-  // Reads an entry using the result of a preceding openForRead() attempt.
-  // On Ready, the returned LookupData retains the opened descriptor so callers
-  // can decide whether to retry or close it.
-  LookupData readOpenResult(RegionDescriptor desc,
-                            RelAddress addrEnd,
-                            uint32_t approxSize,
-                            std::optional<HashedKey> expected);
 
   // Read and write are time consuming. It isn't worth inlining them from a
   // performance point of view, but makes sense to track them for performance,
@@ -397,15 +388,17 @@ class BlockCache final : public Engine {
                   BufferView value,
                   bool combinedEntry,
                   uint32_t lastAccessTimeSecs = 0);
+  // @param regionDesc  Region descriptor for reading
   // @param ld          LookupData containing the entry metadata for reading
   // @param addrEnd     End of the entry since the item layout is backward
   // @param approxSize  Approximate size since we got this size from index
   // @param expected    We expect the entry's key to match with our key when
   //                    provided
-  Status readEntry(LookupData& ld,
-                   RelAddress addrEnd,
-                   uint32_t approxSize,
-                   std::optional<HashedKey> expected);
+  void readEntry(RegionDescriptor& regionDesc,
+                 LookupData& ld,
+                 RelAddress addrEnd,
+                 uint32_t approxSize,
+                 std::optional<HashedKey> expected);
 
   // Update the index with the new entry
   // @param keyHash      Hash of the key

@@ -364,16 +364,9 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
           -> folly::Expected<BlockCache::LookupData, navy::Status> {
         auto ld = cache_->lookupInternal(hashedKey);
         if (ld.status_ == Status::Retry) {
-          XDCHECK(!ld.desc_.isReady())
-              << "should not have a ready descriptor for retry status";
           return folly::makeUnexpected(ld.status_);
         }
         return ld;
-      },
-      [this](auto&& res) {
-        if (res.hasValue() && res->desc_.isReady()) {
-          cache_->regionManager_.close(std::move(res->desc_));
-        }
       });
   if (res.hasError()) {
     stats_->find_.throughput_.errors_.inc();
@@ -381,12 +374,6 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
                         "flash lookup retries exhausted");
   }
   auto& ld = res.value();
-
-  // No need to hold on to the descriptor - we can't write to it (no write back)
-  // and remove(handle) only uses the buffer for the destructor callback
-  if (ld.desc_.isReady()) {
-    cache_->regionManager_.close(std::move(ld.desc_));
-  }
 
   switch (ld.status_) {
   case Status::Ok: {

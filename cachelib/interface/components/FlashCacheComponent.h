@@ -134,7 +134,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   // Runs func() on a worker fiber
   template <typename FuncT,
             typename ReturnT = std::invoke_result_t<FuncT>,
-            typename CleanupFuncT = std::function<void(ReturnT)>>
+            typename CleanupFuncT = utils::detail::DefaultCleanupT>
   folly::coro::Task<ReturnT> onWorkerThread(FuncT&& func,
                                             CleanupFuncT&& cleanup = {});
 
