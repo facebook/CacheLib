@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set_source_files_properties(
+  ${OBJECT_CACHE_PERSISTENCE_THRIFT_FILES}
+  PROPERTIES GENERATED TRUE
+)
+
 add_library (cachelib_cachebench
   ./cache/Cache.cpp
   ./cache/components/Components.cpp
@@ -75,7 +80,8 @@ target_link_libraries(cachelib_binary_trace_gen PUBLIC
 if ((CMAKE_SYSTEM_NAME STREQUAL Linux) AND
     (CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64))
 else()
-  target_compile_definitions(cachelib_cachebench PRIVATE SKIP_OPTION_SIZE_VERIFY)
+  target_compile_definitions(cachelib_cachebench
+                             PRIVATE SKIP_OPTION_SIZE_VERIFY)
 endif()
 
 
