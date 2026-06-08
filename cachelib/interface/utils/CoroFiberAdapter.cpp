@@ -47,7 +47,7 @@ CoroFiberAdapter::CoroFiberAdapter(ValidConstructorTag, const Config& config)
     : fibersPerThread_(config.fibersPerThread) {
   for (size_t i = 0; i < config.numThreads; ++i) {
     XLOG(INFO) << "Starting coro<->fiber adapter thread " << i << " with "
-               << fibersPerThread_ << " fibers";
+               << fibersPerThread_ << " fiber(s)";
     auto& ctx = workers_.emplace_back(std::make_unique<WorkerContext>(
         fmt::format("{}_{}", config.threadName, i),
         navy::NavyThread::Options(config.stackSize)));

@@ -69,7 +69,7 @@ class CoroFiberAdapter {
    *
    * Your function should return a folly::Expected<ValueT, navy::Status> --
    * onWorkerThread() will retry up to kMaxAttempts times if it returns a
-   * navy::Status::Retry error, using exponential backoff with jitter between
+   * navy::Status::Retry status, using exponential backoff with jitter between
    * attempts. If all attempts return Retry, the final Retry error is returned
    * to the caller. Note that the return value from the fiber *must* be movable.
    * If your type isn't movable, wrap it in a unique_ptr.

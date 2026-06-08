@@ -140,6 +140,32 @@ CO_TEST_F(CoroFiberAdapterTest, cancellation) {
   EXPECT_TRUE(ranCleanup);
 }
 
+CO_TEST_F(CoroFiberAdapterTest, cancellationNoCleanup) {
+  folly::CancellationSource cs;
+  folly::fibers::Baton fiberReady, cancelReady;
+
+  // Same as previous test but ensures default cleanup functions don't throw
+
+  auto fiberFunc = [&]() -> Result<int> {
+    fiberReady.post();
+    cancelReady.wait();
+    return 42;
+  };
+  auto cancelTask = [&]() -> folly::coro::Task<void> {
+    fiberReady.wait();
+    cs.requestCancellation();
+    cancelReady.post();
+    co_return;
+  };
+
+  auto result = co_await folly::coro::collectAllTry(
+      folly::coro::co_withCancellation(
+          cs.getToken(), executor_.onWorkerThread(std::move(fiberFunc))),
+      cancelTask());
+  EXPECT_TRUE(std::get<0>(result).hasException<folly::OperationCancelled>());
+  executor_.drain(); // ensure fiberFunc() finishes running & sets the promise
+}
+
 CO_TEST_F(CoroFiberAdapterTest, concurrent) {
   auto task = [&](int value) -> folly::coro::Task<void> {
     auto result = co_await executor_.onWorkerThread(
