@@ -194,7 +194,7 @@ void ObjectCacheSizeController<AllocatorT>::work() {
                  "object size = {}, new entries limit = {}, current entries "
                  "limit = {}",
                  totalObjSize, totalObjectSizeLimit, currentNumEntries,
-                 averageObjSize, newEntriesLimit, currentEntriesLimit_);
+                 averageObjSize, newEntriesLimit, getCurrentEntriesLimit());
 
   // We have computed the newEntriesLimit to satisfy the numEntries and
   // totalObjSize limits. If user has specified additional control
@@ -294,7 +294,7 @@ void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
       "(actual: {}). "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, actualShrunk, before, objCache_.getNumPlaceholders(),
-      currentEntriesLimit_);
+      getCurrentEntriesLimit());
 }
 
 template <typename AllocatorT>
@@ -326,7 +326,7 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
       "(actual: {}). "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, actualExpanded, before, objCache_.getNumPlaceholders(),
-      currentEntriesLimit_);
+      getCurrentEntriesLimit());
 }
 
 template <typename AllocatorT>

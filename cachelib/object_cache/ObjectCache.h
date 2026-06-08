@@ -22,12 +22,14 @@
 #include <folly/synchronization/RelaxedAtomic.h>
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/common/Utils.h"
 #include "cachelib/object_cache/ObjectCacheBase.h"
 #include "cachelib/object_cache/ObjectCacheConfig.h"
 #include "cachelib/object_cache/ObjectCacheSizeController.h"
@@ -170,14 +172,24 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return (-keySize) & (kValueAlignment - 1);
   }
 
+ private:
+  static size_t getValueAlignmentOffset(const void* memory) {
+    const auto address = reinterpret_cast<uintptr_t>(memory);
+    return util::getAlignedSize(address,
+                                static_cast<uint32_t>(kValueAlignment)) -
+           address;
+  }
+
+ public:
   static ObjectCacheItem* getAlignedItemPtr(void* memory) {
     return reinterpret_cast<ObjectCacheItem*>(
-        __builtin_align_up(memory, kValueAlignment));
+        static_cast<unsigned char*>(memory) + getValueAlignmentOffset(memory));
   }
 
   static const ObjectCacheItem* getAlignedItemPtr(const void* memory) {
     return reinterpret_cast<const ObjectCacheItem*>(
-        __builtin_align_up(memory, kValueAlignment));
+        static_cast<const unsigned char*>(memory) +
+        getValueAlignmentOffset(memory));
   }
 
   // Wrapper iterator that provides aligned access to ObjectCacheItem. Does not
