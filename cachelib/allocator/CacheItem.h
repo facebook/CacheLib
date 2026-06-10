@@ -385,7 +385,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * Unmarking exclusive will also return the refcount at the moment of
    * unmarking.
    */
-  bool markForEviction() noexcept;
+  MarkForEvictionResult markForEviction() noexcept;
   RefcountWithFlags::Value unmarkForEviction() noexcept;
   bool isMarkedForEviction() const noexcept;
 
@@ -835,7 +835,7 @@ bool CacheItem<CacheTrait>::isInMMContainer() const noexcept {
 }
 
 template <typename CacheTrait>
-bool CacheItem<CacheTrait>::markForEviction() noexcept {
+MarkForEvictionResult CacheItem<CacheTrait>::markForEviction() noexcept {
   return ref_.markForEviction();
 }
 

@@ -244,6 +244,15 @@ struct Stats {
   // Eviction failures due to parent cannot be removed from access container
   AtomicCounter evictFailParentAC{0};
 
+  // Breakdown of evictFailParentAC by the reason the parent could not be
+  // marked for eviction.
+  // Parent was no longer in the MMContainer (kLinked cleared).
+  AtomicCounter evictFailParentUnlinkedAC{0};
+  // Parent was already being evicted or moved (kExclusive set).
+  AtomicCounter evictFailParentExclusiveAC{0};
+  // Parent had an outstanding access refcount (a handle was held).
+  AtomicCounter evictFailParentRefHeldAC{0};
+
   // Eviction failures due to parent cannot be removed because it's being
   // moved
   AtomicCounter evictFailParentMove{0};

@@ -171,7 +171,7 @@ void RefCountTest::testMarkForEvictionAndMoving() {
   {
     // cannot mark for eviction when not in MMContainer
     RefcountWithFlags ref;
-    ASSERT_FALSE(ref.markForEviction());
+    ASSERT_EQ(ref.markForEviction(), MarkForEvictionResult::kUnlinked);
   }
 
   {
@@ -179,7 +179,7 @@ void RefCountTest::testMarkForEvictionAndMoving() {
     // and unmarkForEviction return value contains admin bits
     RefcountWithFlags ref;
     ref.markInMMContainer();
-    ASSERT_TRUE(ref.markForEviction());
+    ASSERT_EQ(ref.markForEviction(), MarkForEvictionResult::kSuccess);
     ASSERT_TRUE(ref.unmarkForEviction() > 0);
   }
 
@@ -189,7 +189,7 @@ void RefCountTest::testMarkForEvictionAndMoving() {
     ref.markInMMContainer();
 
     ASSERT_TRUE(ref.markMoving());
-    ASSERT_FALSE(ref.markForEviction());
+    ASSERT_EQ(ref.markForEviction(), MarkForEvictionResult::kExclusive);
 
     ref.unmarkInMMContainer();
     auto ret = ref.unmarkMoving();
@@ -201,7 +201,7 @@ void RefCountTest::testMarkForEvictionAndMoving() {
     RefcountWithFlags ref;
     ref.markInMMContainer();
 
-    ASSERT_TRUE(ref.markForEviction());
+    ASSERT_EQ(ref.markForEviction(), MarkForEvictionResult::kSuccess);
     ASSERT_FALSE(ref.markMoving());
 
     ref.unmarkInMMContainer();
@@ -225,7 +225,7 @@ void RefCountTest::testMarkForEvictionAndMoving() {
     ref.markInMMContainer();
 
     ref.incRef();
-    ASSERT_FALSE(ref.markForEviction());
+    ASSERT_EQ(ref.markForEviction(), MarkForEvictionResult::kRefHeld);
   }
 }
 } // namespace

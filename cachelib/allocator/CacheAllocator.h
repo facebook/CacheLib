@@ -4078,10 +4078,23 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
       const bool evictToNvmCache = shouldWriteToNvmCache(*candidate_);
 
       auto markForEviction = [&candidate_, this]() {
-        auto markedForEviction = candidate_->markForEviction();
-        if (!markedForEviction) {
+        auto markForEvictionResult = candidate_->markForEviction();
+        if (markForEvictionResult != MarkForEvictionResult::kSuccess) {
           if (candidate_->hasChainedItem()) {
             stats_.evictFailParentAC.inc();
+            switch (markForEvictionResult) {
+            case MarkForEvictionResult::kUnlinked:
+              stats_.evictFailParentUnlinkedAC.inc();
+              break;
+            case MarkForEvictionResult::kExclusive:
+              stats_.evictFailParentExclusiveAC.inc();
+              break;
+            case MarkForEvictionResult::kRefHeld:
+              stats_.evictFailParentRefHeldAC.inc();
+              break;
+            default:
+              break;
+            }
           } else {
             stats_.evictFailAC.inc();
           }

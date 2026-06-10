@@ -91,8 +91,7 @@ TEST(ItemTest, ExpiryTime) {
 
   // Test that writes fail while the item is marked for eviction
   item->markAccessible();
-  result = item->markForEviction();
-  EXPECT_TRUE(result);
+  EXPECT_EQ(item->markForEviction(), MarkForEvictionResult::kSuccess);
   result = item->updateExpiryTime(0);
   EXPECT_FALSE(result);
   item->unmarkForEviction();

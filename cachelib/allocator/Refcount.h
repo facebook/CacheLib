@@ -32,6 +32,8 @@
 
 namespace facebook {
 namespace cachelib {
+enum class MarkForEvictionResult { kSuccess, kUnlinked, kExclusive, kRefHeld };
+
 // refcount and flag in the CacheItem.
 class FOLLY_PACK_ATTR RefcountWithFlags {
  public:
@@ -288,21 +290,30 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    * Unmarking for eviction clears the `kExclusive` bit. `unamrkForEviction`
    * does not depend on `isInMMContainer` nor `isAccessible`
    */
-  bool markForEviction() noexcept {
+  MarkForEvictionResult markForEviction() noexcept {
     Value linkedBitMask = getAdminRef<kLinked>();
     Value exclusiveBitMask = getAdminRef<kExclusive>();
 
-    auto predicate = [linkedBitMask, exclusiveBitMask](const Value curValue) {
+    MarkForEvictionResult res = MarkForEvictionResult::kSuccess;
+    auto predicate = [linkedBitMask, exclusiveBitMask,
+                      &res](const Value curValue) {
       const bool unlinked = !(curValue & linkedBitMask);
       const bool alreadyExclusive = curValue & exclusiveBitMask;
 
-      if (unlinked || alreadyExclusive) {
+      if (unlinked) {
+        res = MarkForEvictionResult::kUnlinked;
+        return false;
+      }
+      if (alreadyExclusive) {
+        res = MarkForEvictionResult::kExclusive;
         return false;
       }
       if ((curValue & kAccessRefMask) != 0) {
+        res = MarkForEvictionResult::kRefHeld;
         return false;
       }
 
+      res = MarkForEvictionResult::kSuccess;
       return true;
     };
 
@@ -310,7 +321,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
       return curValue | exclusiveBitMask;
     };
 
-    return atomicUpdateValue(predicate, newValue);
+    atomicUpdateValue(predicate, newValue);
+    return res;
   }
 
   Value unmarkForEviction() noexcept {

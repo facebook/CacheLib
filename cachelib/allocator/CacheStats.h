@@ -511,6 +511,10 @@ struct GlobalCacheStats {
   uint64_t numEvictionFailureFromConcurrentAccess{0};
   uint64_t numEvictionFailureFromPutTokenLock{0};
   uint64_t numEvictionFailureFromParentAccessContainer{0};
+  // Breakdown of numEvictionFailureFromParentAccessContainer by reason.
+  uint64_t numEvictionFailureFromParentUnlinked{0};
+  uint64_t numEvictionFailureFromParentExclusive{0};
+  uint64_t numEvictionFailureFromParentRefHeld{0};
   uint64_t numEvictionFailureFromMoving{0};
   uint64_t numEvictionFailureFromParentMoving{0};
 

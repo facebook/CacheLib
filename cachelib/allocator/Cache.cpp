@@ -398,6 +398,14 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                         stats.numEvictionFailureFromMoving);
   counters_.updateDelta(statPrefix + "evictions.remove_parent_failure",
                         stats.numEvictionFailureFromParentAccessContainer);
+  counters_.updateDelta(
+      statPrefix + "evictions.remove_parent_failure_parent_unlinked",
+      stats.numEvictionFailureFromParentUnlinked);
+  counters_.updateDelta(
+      statPrefix + "evictions.remove_parent_failure_parent_exclusive",
+      stats.numEvictionFailureFromParentExclusive);
+  counters_.updateDelta(statPrefix + "evictions.remove_parent_failure_ref_held",
+                        stats.numEvictionFailureFromParentRefHeld);
   counters_.updateDelta(statPrefix + "evictions.moving_parent_failure",
                         stats.numEvictionFailureFromParentMoving);
 
