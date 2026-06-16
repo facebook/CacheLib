@@ -182,14 +182,6 @@ RelAddress Region::allocateLocked(uint32_t size) {
   return RelAddress{regionId_, offset};
 }
 
-void Region::writeToBuffer(uint32_t offset, BufferView buf) {
-  std::lock_guard l{lock_};
-  XDCHECK_NE(buffer_, nullptr);
-  auto size = buf.size();
-  XDCHECK_LE(offset + size, buffer_->size());
-  memcpy(buffer_->data() + offset, buf.data(), size);
-}
-
 void Region::readFromBuffer(uint32_t fromOffset,
                             MutableBufferView outBuf) const {
   std::lock_guard l{lock_};

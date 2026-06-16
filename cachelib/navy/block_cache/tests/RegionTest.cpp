@@ -73,12 +73,13 @@ TEST(Region, BufferAttachDetach) {
   Region r{RegionId(0), 1024};
   r.attachBuffer(std::move(b));
   EXPECT_TRUE(r.hasBuffer());
-  Buffer writeBuf(1024);
-  memset(writeBuf.data(), 'A', 1024);
+  auto [desc, _, writeView] = r.openAndAllocate(1024);
+  memset(writeView.data(), 'A', 1024);
+  r.close(std::move(desc));
   Buffer readBuf(1024);
-  r.writeToBuffer(0, writeBuf.view());
   r.readFromBuffer(0, readBuf.mutableView());
-  EXPECT_TRUE(writeBuf.view() == readBuf.view());
+  const std::vector<char> expected(1024, 'A');
+  EXPECT_EQ(std::memcmp(expected.data(), readBuf.data(), 1024), 0);
   b = r.detachBuffer();
   EXPECT_FALSE(r.hasBuffer());
 }

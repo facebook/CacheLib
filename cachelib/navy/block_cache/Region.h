@@ -142,9 +142,6 @@ class Region {
     return 0;
   }
 
-  // Writes buf to attached buffer at offset 'offset'.
-  void writeToBuffer(uint32_t offset, BufferView buf);
-
   // Reads from attached buffer from 'fromOffset' into 'outBuf'.
   void readFromBuffer(uint32_t fromOffset, MutableBufferView outBuf) const;
 

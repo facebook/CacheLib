@@ -228,7 +228,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     return {OpenStatus::Retry, nullptr};
   }
 
-  auto status = OpenStatus::Retry;
+  OpenStatus status;
   std::unique_ptr<CondWaiter> waiter;
   uint32_t newSched = 0;
   {
