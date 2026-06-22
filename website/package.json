@@ -44,7 +44,7 @@
     "tmp": "^0.2.4",
     "typescript": "^4.5.2",
     "ua-parser-js": "^1.0.33",
-    "webpack-dev-server": "^5.2.1",
+    "webpack-dev-server": "^5.2.5",
     "ws": "^8.17.1"
   },
   "devDependencies": {
@@ -93,7 +93,7 @@
     "@docusaurus/plugin-content-docs/**/js-yaml": "^4.1.1",
     "algoliasearch-helper": "^3.11.2",
     "tmp": "^0.2.4",
-    "webpack-dev-server": "^5.2.1",
+    "webpack-dev-server": "^5.2.5",
     "brace-expansion": "^1.1.12",
     "@babel/runtime": "^7.26.10",
     "lodash": "^4.18.0",
