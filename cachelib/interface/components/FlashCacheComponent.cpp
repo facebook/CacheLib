@@ -16,8 +16,6 @@
 
 #include "cachelib/interface/components/FlashCacheComponent.h"
 
-#include <variant>
-
 #include "cachelib/common/Time.h"
 
 using namespace facebook::cachelib::navy;
@@ -32,6 +30,16 @@ namespace facebook::cachelib::interface {
  *   ---------------------------------------------------------------------------
  *   | creation & expiry time ||  value  || (empty) |  key  | entry descriptor |
  *   ---------------------------------------------------------------------------
+ *
+ * Internally uses a tagged union with two representations:
+ *   - Alloc path (allocate / findToWrite): MutableBufferView into a Region
+ *     buffer, plus RegionDescriptor and RelAddress for lifecycle management.
+ *   - Find path (find / iterator): owned Buffer from a device read.
+ *
+ * The two representations are overlapped in storage to minimize size. The tag_
+ * field discriminates the two paths (1 = alloc, 0 = find).  We don't use a
+ * std::variant because it requires an extra 8 bytes of metadata; 63 size bits
+ * is more than enough to represent the sizes of cache items.
  */
 class FlashCacheItem : public CacheItem {
  public:
@@ -46,9 +54,7 @@ class FlashCacheItem : public CacheItem {
                  FlashCacheComponent::AllocData&& allocation,
                  const uint32_t creationTime,
                  const uint32_t ttlSecs)
-      : desc_(std::move(std::get<0>(allocation))),
-        relAddr_(std::move(std::get<2>(allocation))),
-        data_(std::get<3>(allocation)) {
+      : FlashCacheItem(std::move(allocation)) {
     XDCHECK_GE(valueSize, 2 * sizeof(uint32_t))
         << "valueSize doesn't include space for metadata";
     auto view = getMutableBufferView();
@@ -59,35 +65,65 @@ class FlashCacheItem : public CacheItem {
   }
 
   // Constructor for find() and iterator() - owns the buffer from device read
-  explicit FlashCacheItem(Buffer&& buffer) : data_(std::move(buffer)) {}
+  explicit FlashCacheItem(Buffer&& buffer)
+      : tag_(0), size_(0), buffer_(std::move(buffer)) {}
 
   // FindToWrite constructor - uses MutableBufferView into region buffer for new
   // allocation, copies existing data into it
   FlashCacheItem(FlashCacheComponent::AllocData&& allocation,
                  const Buffer& existingData)
-      : desc_(std::move(std::get<0>(allocation))),
-        relAddr_(std::move(std::get<2>(allocation))),
-        data_(std::get<3>(allocation)) {
+      : FlashCacheItem(std::move(allocation)) {
     XDCHECK_EQ(existingData.size(), getTotalSize())
         << "New allocation has a different size than existing data";
     auto view = getMutableBufferView();
     std::memcpy(view.data(), existingData.data(), existingData.size());
   }
 
-  RegionDescriptor& getRegionDescriptor() noexcept { return desc_; }
-  RelAddress& getRelAddress() noexcept { return relAddr_; }
-  BufferView getBufferView() const noexcept {
-    return std::visit(
-        [](const auto& d) { return BufferView{d.size(), d.data()}; }, data_);
+  FlashCacheItem(FlashCacheItem&& other) noexcept
+      : tag_(other.tag_), size_(other.size_) {
+    // We *have* to move-construct/placement-new the union since it's UB to just
+    // move-assign into alloc_ or buffer_ (they're not constructed yet)
+    if (other.isAllocPath()) {
+      new (&alloc_) AllocFields(std::move(other.alloc_));
+    } else {
+      new (&buffer_) Buffer(std::move(other.buffer_));
+    }
   }
+
+  FlashCacheItem(const FlashCacheItem&) = delete;
+  FlashCacheItem& operator=(const FlashCacheItem&) = delete;
+  FlashCacheItem& operator=(FlashCacheItem&&) = delete;
+
+  ~FlashCacheItem() override {
+    if (isAllocPath()) {
+      alloc_.~AllocFields();
+    } else {
+      buffer_.~Buffer();
+    }
+  }
+
+  bool isAllocPath() const noexcept { return tag_ != 0; }
+  RegionDescriptor& getRegionDescriptor() noexcept {
+    XDCHECK(isAllocPath());
+    return alloc_.desc_;
+  }
+  RelAddress& getRelAddress() noexcept {
+    XDCHECK(isAllocPath());
+    return alloc_.relAddr_;
+  }
+  BufferView getBufferView() const noexcept {
+    return isAllocPath() ? BufferView(size_, alloc_.data_) : buffer_.view();
+  }
+  // NOTE: can only be called for items constructed via the
+  // allocate()/findToWrite() constructor
   MutableBufferView getMutableBufferView() noexcept {
-    return std::visit(
-        [](auto& d) { return MutableBufferView{d.size(), d.data()}; }, data_);
+    XDCHECK(isAllocPath());
+    return MutableBufferView(size_, alloc_.data_);
   }
   // NOTE: can only be called for items constructed via the find() constructor
   Buffer& getBuffer() noexcept {
-    XDCHECK(std::holds_alternative<Buffer>(data_));
-    return std::get<Buffer>(data_);
+    XDCHECK(!isAllocPath());
+    return buffer_;
   }
   EntryDesc* getEntryDescriptor() const noexcept {
     auto view = getBufferView();
@@ -140,12 +176,44 @@ class FlashCacheItem : public CacheItem {
   }
 
  private:
-  // Used for region lifecycle management & indexing
-  RegionDescriptor desc_;
-  RelAddress relAddr_;
-  // Allocation and findToWrite paths use MutableBufferView (points into region
-  // buffer). Find path uses Buffer (owned copy from device read).
-  std::variant<Buffer, MutableBufferView> data_;
+  struct AllocFields {
+    uint8_t* data_;
+    RegionDescriptor desc_;
+    RelAddress relAddr_;
+
+    AllocFields(MutableBufferView view,
+                RegionDescriptor&& desc,
+                RelAddress&& relAddr) noexcept
+        : data_(view.data()),
+          desc_(std::move(desc)),
+          relAddr_(std::move(relAddr)) {}
+    ~AllocFields() = default;
+
+    // Move-constructible but not move-assignable or
+    // copy-constructible/assignable
+    AllocFields(AllocFields&& rhs) noexcept
+        : data_(rhs.data_),
+          desc_(std::move(rhs.desc_)),
+          relAddr_(std::move(rhs.relAddr_)) {}
+    AllocFields& operator=(AllocFields&& rhs) = delete;
+    AllocFields(const AllocFields&) = delete;
+    AllocFields& operator=(const AllocFields&) = delete;
+  };
+
+  // Contains tag bit for both union types but only size for AllocFields
+  uint64_t tag_ : 1;
+  uint64_t size_ : 63;
+  union {
+    AllocFields alloc_;
+    Buffer buffer_;
+  };
+
+  explicit FlashCacheItem(FlashCacheComponent::AllocData&& allocation)
+      : tag_(1),
+        size_(std::get<3>(allocation).size()),
+        alloc_(std::get<3>(allocation),
+               std::move(std::get<0>(allocation)),
+               std::move(std::get<2>(allocation))) {}
 
   void move(void* dest) noexcept override {
     new (dest) FlashCacheItem(std::move(*this));
@@ -155,6 +223,9 @@ class FlashCacheItem : public CacheItem {
 
 static_assert(sizeof(FlashCacheItem) <= Handle::kInlineBufSize,
               "FlashCacheItem must fit in Handle's inline buffer");
+static_assert(
+    alignof(FlashCacheItem) <= Handle::kInlineBufAlignment,
+    "FlashCacheItem alignment is bigger than inline buffer alignment");
 
 namespace {
 UnitResult initConfig(
@@ -593,7 +664,7 @@ void FlashCacheComponent::release(CacheItem& item, bool inserted) {
   if (!inserted) {
     cache_->addHole(fccItem.getTotalSize());
   }
-  if (fccItem.getRegionDescriptor().isReady()) {
+  if (fccItem.isAllocPath() && fccItem.getRegionDescriptor().isReady()) {
     cache_->regionManager_.close(std::move(fccItem.getRegionDescriptor()));
   }
   // Item is stored inline in the Handle's buffer; destroy without deallocating
@@ -676,6 +747,9 @@ class ConsistentFlashCacheItem : public FlashCacheItem {
 
 static_assert(sizeof(ConsistentFlashCacheItem) <= Handle::kInlineBufSize,
               "ConsistentFlashCacheItem must fit in Handle's inline buffer");
+static_assert(alignof(ConsistentFlashCacheItem) <= Handle::kInlineBufAlignment,
+              "ConsistentFlashCacheItem alignment is bigger than inline buffer "
+              "alignment");
 
 /* static */ Result<ConsistentFlashCacheComponent>
 ConsistentFlashCacheComponent::create(

@@ -29,7 +29,7 @@ namespace cachelib {
 namespace navy {
 using folly::fibers::TimedMutex;
 
-enum class OpenMode {
+enum class OpenMode : uint8_t {
   // Not opened
   None,
 
@@ -40,7 +40,7 @@ enum class OpenMode {
   Read,
 };
 
-enum class OpenStatus {
+enum class OpenStatus : uint8_t {
   // Caller can proceed
   Ready,
 
@@ -269,9 +269,9 @@ class RegionDescriptor {
 
   RegionDescriptor(RegionDescriptor&& o) noexcept
       : status_{o.status_},
-        regionId_{o.regionId_},
         mode_{o.mode_},
-        physReadMode_{o.physReadMode_} {
+        physReadMode_{o.physReadMode_},
+        regionId_{o.regionId_} {
     o.mode_ = OpenMode::None;
     o.regionId_ = RegionId{};
     o.status_ = OpenStatus::Retry;
@@ -309,15 +309,15 @@ class RegionDescriptor {
                    OpenMode mode,
                    bool physReadMode = false)
       : status_(status),
-        regionId_(regionId),
         mode_(mode),
-        physReadMode_(physReadMode) {}
+        physReadMode_(physReadMode),
+        regionId_(regionId) {}
 
   OpenStatus status_{OpenStatus::Error};
-  RegionId regionId_{};
   OpenMode mode_{OpenMode::None};
   // physReadMode_ is applicable only in read mode
   bool physReadMode_{false};
+  RegionId regionId_{};
 };
 } // namespace navy
 } // namespace cachelib

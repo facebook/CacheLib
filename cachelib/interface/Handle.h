@@ -46,7 +46,10 @@ constexpr InlineItemTag InlineItem;
 class Handle {
  public:
   // Size of the inline buffer for storing cache items without heap allocation
-  static constexpr unsigned kInlineBufSize = 80;
+  static constexpr size_t kInlineBufSize = 64;
+  static constexpr size_t kInlineBufAlignment = 8;
+  static_assert(folly::isPowTwo(kInlineBufAlignment),
+                "inline item buffer alignment must be power of 2");
 
   /**
    * Whether the handle is valid. All handles are valid unless they have been
@@ -94,11 +97,11 @@ class Handle {
 
   CacheComponent& cache_;
   CacheItem* item_;
-  // Note: not explicitly initializing so implementations that don't use it
-  // don't pay the cost to zero it out
-  alignas(8) uint8_t buf_[kInlineBufSize]; // NOLINT
 
  private:
+  // Note: not explicitly initializing so implementations that don't use it
+  // don't pay the cost to zero it out
+  alignas(kInlineBufAlignment) uint8_t buf_[kInlineBufSize]; // NOLINT
   // Whether the CacheItem has been inserted
   bool inserted_;
 
