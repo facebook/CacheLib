@@ -23,6 +23,7 @@
 #include <map>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
@@ -1299,19 +1300,27 @@ template <typename T,
 void ChainedHashTable::Container<T, HookPtr, LockT>::getBucketElems(
     BucketId bucket, std::vector<Handle>& handles) const {
   handles.clear();
-  auto l = locks_.lockShared(bucket);
 
-  ht_.forEachBucketElem(bucket, [this, &handles](T* e) {
-    try {
-      XDCHECK(e);
-      auto h = handleMaker_(e);
-      if (h) {
-        handles.emplace_back(std::move(h));
+  // Handle validity can wait on a moving item, which may need the bucket lock
+  // to finish moving. Check validity after releasing the lock to avoid
+  // deadlock.
+  {
+    auto l = locks_.lockShared(bucket);
+    ht_.forEachBucketElem(bucket, [this, &handles](T* e) {
+      try {
+        XDCHECK(e);
+        handles.emplace_back(handleMaker_(e));
+      } catch (const std::exception&) {
+        // if we are not able to acquire a handle, skip over them.
       }
-    } catch (const std::exception&) {
-      // if we are not able to acquire a handle, skip over them.
-    }
-  });
+    });
+  }
+
+  if (handles.empty()) {
+    return;
+  }
+
+  std::erase_if(handles, [](const auto& h) { return !h; });
 }
 
 // Container's Iterator
