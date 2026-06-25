@@ -25,6 +25,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::slice;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -39,7 +40,6 @@ use bytes::buf::UninitSlice;
 use cxx::let_cxx_string;
 use fbinit::FacebookInit;
 use folly::StringPiece;
-use once_cell::sync::OnceCell;
 
 use crate::errors::ErrorKind;
 use crate::ffi;
@@ -279,7 +279,7 @@ impl LruCacheConfig {
     }
 }
 
-static GLOBAL_CACHE: OnceCell<LruCache> = OnceCell::new();
+static GLOBAL_CACHE: OnceLock<LruCache> = OnceLock::new();
 
 struct LruCache {
     pools: Mutex<HashMap<String, LruCachePool>>,

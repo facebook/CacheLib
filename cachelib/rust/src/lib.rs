@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#![feature(once_cell_try)]
+
 pub mod abomonation_cache;
 pub mod bincode_cache;
 mod errors;
