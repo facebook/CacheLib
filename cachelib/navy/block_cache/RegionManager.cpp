@@ -36,7 +36,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint16_t inMemBufFlushRetryLimit,
                              bool workerFlushAsync,
                              bool allowReadDuringReclaim,
-                             bool recoverEvictionPolicy)
+                             bool recoverEvictionPolicy,
+                             bool directFlush)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -49,12 +50,14 @@ RegionManager::RegionManager(uint32_t numRegions,
       workerFlushAsync_{workerFlushAsync},
       allowReadDuringReclaim_(allowReadDuringReclaim),
       recoverEvictionPolicy_{recoverEvictionPolicy},
+      directFlush_{directFlush},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
       placementHandle_{device_.allocatePlacementHandle()} {
-  XLOGF(INFO, "{} regions, {} bytes each, allowReadDuringReclaim {}",
-        numRegions_, regionSize_, allowReadDuringReclaim);
+  XLOGF(INFO,
+        "{} regions, {} bytes each, allowReadDuringReclaim {}, directFlush {}",
+        numRegions_, regionSize_, allowReadDuringReclaim, directFlush);
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
   }
@@ -125,10 +128,19 @@ void RegionManager::reset() {
 Region::FlushRes RegionManager::flushBuffer(const RegionId& rid) {
   auto& region = getRegion(rid);
   auto callBack = [this](RelAddress addr, BufferView view) {
-    auto writeBuffer = device_.makeIOBuffer(view.size());
-    writeBuffer.copyFrom(0, view);
-    if (!deviceWrite(addr, std::move(writeBuffer))) {
-      return false;
+    if (directFlush_) {
+      XDCHECK_EQ(0u, reinterpret_cast<uintptr_t>(view.data()) %
+                         device_.getIOAlignmentSize());
+      XDCHECK_EQ(0u, view.size() % device_.getIOAlignmentSize());
+      if (!deviceWrite(addr, view)) {
+        return false;
+      }
+    } else {
+      auto writeBuffer = device_.makeIOBuffer(view.size());
+      writeBuffer.copyFrom(0, view);
+      if (!deviceWrite(addr, std::move(writeBuffer))) {
+        return false;
+      }
     }
     numInMemBufWaitingFlush_.dec();
     return true;

@@ -90,6 +90,8 @@ class RegionManager {
   //                                  convinced there's no missing corner cases.
   // @param recoverEvictionPolicy     whether to persist and recover eviction
   //                                  policy ordering across restarts
+  // @param directFlush               whether to write region buffer directly
+  //                                  to device without intermediate copy
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -105,7 +107,8 @@ class RegionManager {
                 uint16_t inMemBufFlushRetryLimit,
                 bool workerFlushAsync,
                 bool allowReadDuringReclaim = false,
-                bool recoverEvictionPolicy = false);
+                bool recoverEvictionPolicy = false,
+                bool directFlush = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -372,6 +375,9 @@ class RegionManager {
 
   // Whether to persist and recover eviction policy ordering across restarts
   const bool recoverEvictionPolicy_{false};
+
+  // Whether to write region buffer directly without intermediate copy
+  const bool directFlush_{false};
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

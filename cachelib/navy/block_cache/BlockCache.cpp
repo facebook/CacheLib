@@ -248,7 +248,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.inMemBufFlushRetryLimit,
                      config.regionManagerFlushAsync,
                      true /* allowReadDuringReclaim */,
-                     config.recoverEvictionPolicy},
+                     config.recoverEvictionPolicy,
+                     config.directFlush},
       allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);

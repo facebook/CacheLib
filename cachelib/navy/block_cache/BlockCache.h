@@ -111,6 +111,11 @@ class BlockCache final : public Engine {
     // no effect on eviction ordering.
     bool recoverEvictionPolicy{false};
 
+    // Whether to write region buffer directly to device on flush path without
+    // allocating an intermediate IO buffer and copying. Default false preserves
+    // old behavior for safe rollout. When true, avoids redundant copy.
+    bool directFlush{false};
+
     // name of this BC instance
     std::string name{};
 

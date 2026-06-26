@@ -135,6 +135,8 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.recoverEvictionPolicy = enable;
   }
 
+  void setDirectFlush(bool enable) override { config_.directFlush = enable; }
+
   void setUseCombinedEntryBlock(bool useCombinedEntryBlock) override {
     config_.useCombinedEntryBlock = useCombinedEntryBlock;
   }

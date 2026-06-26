@@ -555,6 +555,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setDirectFlush(bool enable) noexcept {
+    directFlush_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
     return *this;
@@ -617,6 +622,8 @@ class BlockCacheConfig {
 
   bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
 
+  bool isDirectFlush() const { return directFlush_; }
+
   bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
 
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
@@ -665,6 +672,9 @@ class BlockCacheConfig {
 
   // Whether to persist and recover eviction policy ordering across restarts.
   bool recoverEvictionPolicy_{false};
+
+  // Whether to write region buffer directly without intermediate copy.
+  bool directFlush_{false};
 
   // Whether to use Combined entry block (For index entries and small sized
   // items).

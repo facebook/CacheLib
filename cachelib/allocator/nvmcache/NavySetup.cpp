@@ -181,6 +181,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 
   blockCache->setRecoverEvictionPolicy(
       blockCacheConfig.isRecoverEvictionPolicy());
+  blockCache->setDirectFlush(blockCacheConfig.isDirectFlush());
   blockCache->setUseCombinedEntryBlock(
       blockCacheConfig.isCombinedEntryBlockEnabled());
   blockCache->setNumAllocatorsPerPriority(
