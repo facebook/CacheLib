@@ -940,8 +940,8 @@ TEST_F(ShmManagerTestSysV, TestMappingAlignment) {
 }
 
 // Verify that ShmManager can attach to segments created with the old
-// (fnv64_BROKEN) hash, and that newly created segments also use the old hash
-// (for backward-compatibility until we create new segments with xxhash3).
+// (fnv64_BROKEN) hash, but that newly created segments use the new (xxhash3)
+// hash.
 void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
   // fnv64_BROKEN and xxhash3 produce different hashes for any input.
   // Use a path with a high byte to be safe.
@@ -1007,8 +1007,7 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
   }
 
   // Phase 2: Create a new ShmManager. It should attach to the old-hash
-  // segments, and any newly created segment should also use the old hash
-  // (for backward-compatibility during migration).
+  // segments, but any newly created segment should use the new hash.
   {
     ShmManager s(migrationDir, posix);
     auto baseline = ShmManager::getNumOldHashAttaches();
@@ -1023,7 +1022,7 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
     ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     // Create a brand-new segment (e.g. shm_info on first warm roll after
-    // migration). This should still use the old hash for backward compat.
+    // migration). This should now use the new hash.
     s.createShm(segNew, size);
     ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
@@ -1036,15 +1035,14 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
     ASSERT_THROW(ShmSegment(ShmAttach, newId1, posix), std::system_error);
     ASSERT_THROW(ShmSegment(ShmAttach, newId2, posix), std::system_error);
 
-    // Verify: new segment exists under the old hash name only (write path
-    // uses fnv64_BROKEN during migration).
+    // Verify: new segment exists under the new hash name only (write path
+    // now uses xxhash3).
     ASSERT_NO_THROW(ShmSegment(
-        ShmAttach, ShmManager::oldUniqueIdForName(segNew, migrationDir),
-        posix));
-    ASSERT_THROW(ShmSegment(ShmAttach,
-                            ShmManager::uniqueIdForName(segNew, migrationDir),
-                            posix),
-                 std::system_error);
+        ShmAttach, ShmManager::uniqueIdForName(segNew, migrationDir), posix));
+    ASSERT_THROW(
+        ShmSegment(ShmAttach,
+                   ShmManager::oldUniqueIdForName(segNew, migrationDir), posix),
+        std::system_error);
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
@@ -1065,7 +1063,9 @@ void ShmManagerTest::testHashMigrationWarmRoll(bool posix) {
     ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     ASSERT_NO_THROW(s.attachShm(segNew));
-    ASSERT_EQ(baseline + 3, ShmManager::getNumOldHashAttaches());
+    // segNew was created with new hash, so attaching to it should NOT increment
+    // the counter
+    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
@@ -1085,8 +1085,7 @@ TEST_F(ShmManagerTestSysV, HashMigrationWarmRoll) {
 }
 
 // Verify that when shared memory segments are wiped (simulating a machine
-// restart), all segments are created with the old (fnv64_BROKEN) hash
-// for backward-compatibility during migration.
+// restart), all segments are created with the new (xxhash3) hash.
 void ShmManagerTest::testHashMigrationColdStart(bool posix) {
   // Use a path with a high byte so fnv64_BROKEN != xxhash3.
   const std::string migrationDir = cacheDir + std::string(1, '\x80');
@@ -1121,30 +1120,31 @@ void ShmManagerTest::testHashMigrationColdStart(bool posix) {
 
     ASSERT_EQ(baseline, ShmManager::getNumOldHashAttaches());
 
-    // Verify: segments exist under old hash names only (write path uses
-    // fnv64_BROKEN during migration).
-    ASSERT_NO_THROW(ShmSegment(ShmAttach, oldId1, posix));
-    ASSERT_NO_THROW(ShmSegment(ShmAttach, oldId2, posix));
+    // Verify: segments exist under new hash names only (write path now uses
+    // xxhash3).
+    ASSERT_NO_THROW(ShmSegment(ShmAttach, newId1, posix));
+    ASSERT_NO_THROW(ShmSegment(ShmAttach, newId2, posix));
 
-    // Verify: segments do NOT exist under new hash names.
-    ASSERT_THROW(ShmSegment(ShmAttach, newId1, posix), std::system_error);
-    ASSERT_THROW(ShmSegment(ShmAttach, newId2, posix), std::system_error);
+    // Verify: segments do NOT exist under old hash names.
+    ASSERT_THROW(ShmSegment(ShmAttach, oldId1, posix), std::system_error);
+    ASSERT_THROW(ShmSegment(ShmAttach, oldId2, posix), std::system_error);
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
 
-  // Re-attach after shutdown - should work using old hash fallback.
+  // Re-attach after shutdown - should work using new hash.
   {
     ShmManager s(migrationDir, posix);
     auto baseline = ShmManager::getNumOldHashAttaches();
 
     auto m1 = s.attachShm(seg1);
     checkMemory(m1.addr, m1.size, magicVal);
-    ASSERT_EQ(baseline + 1, ShmManager::getNumOldHashAttaches());
+    // Attaching to new-hash segment should NOT increment counter
+    ASSERT_EQ(baseline, ShmManager::getNumOldHashAttaches());
 
     auto m2 = s.attachShm(seg2);
     checkMemory(m2.addr, m2.size, magicVal + 1);
-    ASSERT_EQ(baseline + 2, ShmManager::getNumOldHashAttaches());
+    ASSERT_EQ(baseline, ShmManager::getNumOldHashAttaches());
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }

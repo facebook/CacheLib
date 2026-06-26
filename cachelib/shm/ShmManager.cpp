@@ -300,7 +300,7 @@ ShmAddr ShmManager::createShm(const std::string& shmName,
 
   std::unique_ptr<ShmSegment> newSeg;
   try {
-    newSeg = std::make_unique<ShmSegment>(ShmNew, oldUniqueIdForName(shmName),
+    newSeg = std::make_unique<ShmSegment>(ShmNew, uniqueIdForName(shmName),
                                           size, usePosix_, opts);
   } catch (const std::system_error& e) {
     // if segment already exists by this key and we dont know about
