@@ -174,13 +174,14 @@ class AllocationClass {
     auto allocInfo = lock_->lock_combine([this, slab]() -> Return {
       auto slabHdr = slabAlloc_.getSlabHeader(slab);
 
-      if (!slabHdr || slabHdr->classId != classId_ ||
-          slabHdr->poolId != poolId_ || slabHdr->isAdvised() ||
+      if (!slabHdr || slabHdr->getClassId() != classId_ ||
+          slabHdr->getPoolId() != poolId_ || slabHdr->isAdvised() ||
           slabHdr->isMarkedForRelease()) {
         return folly::none;
       }
 
-      return Return{{slabHdr->poolId, slabHdr->classId, slabHdr->allocSize}};
+      return Return{{slabHdr->getPoolId(), slabHdr->getClassId(),
+                     slabHdr->getAllocSize()}};
     });
     if (!allocInfo) {
       return SlabIterationStatus::kSkippedCurrentSlabAndContinue;

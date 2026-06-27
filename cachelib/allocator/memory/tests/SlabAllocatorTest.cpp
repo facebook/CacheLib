@@ -149,7 +149,7 @@ TEST_F(SlabAllocatorTest, SlabHeader) {
     auto slabHeader = s.getSlabHeader(slab);
     ASSERT_NE(slabHeader, nullptr);
     slabHeaders.push_back(slabHeader);
-    ASSERT_EQ(slabHeader->poolId, poolId);
+    ASSERT_EQ(slabHeader->getPoolId(), poolId);
   }
 
   // ensure we have headers for everything.
@@ -185,7 +185,7 @@ TEST_F(SlabAllocatorTest, SlabHeader) {
     slabs.pop_back();
     auto header = slabHeaders.back();
     // ensure that the pool id is reset.
-    ASSERT_NE(poolId, header->poolId);
+    ASSERT_NE(poolId, header->getPoolId());
     slabHeaders.pop_back();
   }
 
@@ -197,7 +197,7 @@ TEST_F(SlabAllocatorTest, SlabHeader) {
     ASSERT_NE(slabHeader, nullptr);
     slabs.push_back(slab);
     slabHeaders.push_back(slabHeader);
-    ASSERT_EQ(slabHeader->poolId, poolIdNew);
+    ASSERT_EQ(slabHeader->getPoolId(), poolIdNew);
   }
 
   checkSlabHeaderFn(s, slabs, slabHeaders);
@@ -209,6 +209,31 @@ TEST_F(SlabAllocatorTest, SlabHeader) {
     ASSERT_EQ(nullptr, s.getSlabHeader(reinterpret_cast<uint8_t*>(memory) + i));
   }
 }
+
+#if FOLLY_SANITIZE_ADDRESS
+// Slab headers are kept poisoned at rest when poisoning is enabled. Reads must
+// go through the getters; a direct, unguarded write to a header must be caught
+// by ASAN.
+TEST_F(SlabAllocatorTest, AsanHeaderPoisoning) {
+  const size_t size = 10 * Slab::kSize;
+  void* memory = allocate(size);
+  SlabAllocator s(memory, size, getDefaultConfig());
+
+  auto* slab = s.makeNewSlab(0);
+  ASSERT_NE(slab, nullptr);
+  auto* header = s.getSlabHeader(slab);
+  ASSERT_NE(header, nullptr);
+
+  // Reading via the getter is allowed on a poisoned header.
+  EXPECT_EQ(header->getPoolId(), 0);
+
+  // Setters elide ASAN checks. A raw memory write (simulating corruption / a
+  // wild pointer) to the poisoned header must trip ASAN.
+  EXPECT_DEATH(
+      { *reinterpret_cast<volatile uint8_t*>(header) = 0xFF; },
+      "AddressSanitizer");
+}
+#endif
 
 TEST_F(SlabAllocatorTest, SlabMemoryValidity) {
   // allocator enough for 100 slabs

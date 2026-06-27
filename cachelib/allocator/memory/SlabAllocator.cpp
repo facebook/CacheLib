@@ -143,6 +143,11 @@ SlabAllocator::SlabAllocator(void* memoryStart,
       reinterpret_cast<const uint8_t*>(getSlabMemoryEnd()) -
           reinterpret_cast<const uint8_t*>(slabMemoryStart_));
 
+  // Poison the slab header array - headers are kept poisoned at rest
+  asanPoisonMemoryRegion(memoryStart_,
+                         reinterpret_cast<const uint8_t*>(slabMemoryStart_) -
+                             reinterpret_cast<const uint8_t*>(memoryStart_));
+
   XDCHECK_EQ(0u, reinterpret_cast<uintptr_t>(memoryStart_) % sizeof(Slab));
   XDCHECK_EQ(0u, memorySize_ % sizeof(Slab));
   XDCHECK(nextSlabAllocation_ != nullptr);
@@ -240,6 +245,12 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
   for (const auto* slab : advisedSlabs_) {
     asanPoisonMemoryRegion(slab, Slab::kSize);
   }
+
+  // Poison the slab header array last, after the restore-time header reads
+  // (checkState) and writes (advised flag) above have run on live headers.
+  asanPoisonMemoryRegion(memoryStart_,
+                         reinterpret_cast<const uint8_t*>(slabMemoryStart_) -
+                             reinterpret_cast<const uint8_t*>(memoryStart_));
 }
 
 void SlabAllocator::lockMemoryAsync() noexcept {
@@ -377,7 +388,7 @@ Slab* SlabAllocator::makeNewSlabImpl() {
 void SlabAllocator::initializeHeader(Slab* slab, PoolId id) {
   auto* header = getSlabHeader(slab);
   XDCHECK(header != nullptr);
-  new (header) SlabHeader(id);
+  header->initialize(id);
 }
 
 Slab* SlabAllocator::makeNewSlab(PoolId id) {
@@ -400,7 +411,7 @@ void SlabAllocator::freeSlab(Slab* slab) {
     throw std::runtime_error(fmt::format("Invalid Slab {}", fmt::ptr(slab)));
   }
 
-  memoryPoolSize_[header->poolId] -= sizeof(Slab);
+  memoryPoolSize_[header->getPoolId()] -= sizeof(Slab);
   // grab the lock
   LockHolder l(lock_);
   freeSlabs_.push_back(slab);
@@ -511,7 +522,7 @@ std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
   // allocSize read may at worst produce an invalid sample, which is reported as
   // nullptr below or rejected by the caller's lookup validation.
   folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
-  const auto allocSize = header->allocSize;
+  const auto allocSize = header->getAllocSize();
   if (allocSize == 0) {
     return std::make_tuple(0, nullptr);
   }
@@ -577,7 +588,7 @@ void* SlabAllocator::unCompressAlt(const CompressedPtr4B cPtr) const {
       reinterpret_cast<const uint8_t*>(slabMemoryStart_) + markerOffset;
 
   const auto* header = getSlabHeader(markerPtr);
-  const auto allocSize = header->allocSize;
+  const auto allocSize = header->getAllocSize();
 
   XDCHECK_GE(allocSize, 1u << kMarkerBits);
 

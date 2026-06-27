@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/CPortability.h>
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
@@ -116,14 +117,37 @@ enum class SlabHeaderFlag : uint8_t {
 // one per slab. This is not colocated with the slab. But could be if there is
 // trailing space based on the slab's allocation size.
 struct CACHELIB_PACKED_ATTR SlabHeader {
-  constexpr SlabHeader() noexcept = default;
-  explicit SlabHeader(PoolId pid) : poolId(pid) {}
-  SlabHeader(PoolId pid, ClassId cid, uint32_t size)
-      : poolId(pid), classId(cid), allocSize(size) {}
+  // Field-access contract when ASAN slab-header poisoning is enabled:
+  //   - The allocator poisons the entire slab-header region once, at
+  //     construction, and keeps it poisoned for the process's lifetime. No
+  //     individual header is ever selectively unpoisoned.
+  //   - Every getter and mutator that touches header memory bypasses ASAN
+  //     instrumentation (FOLLY_DISABLE_ADDRESS_SANITIZER), so blessed accesses
+  //     read/write the poisoned region freely while any non-blessed (stray)
+  //     access is still flagged by ASAN.
+  //   - Consequently these methods must only touch SlabHeader's own fields; any
+  //     other memory they touched would silently lose ASAN coverage.
+  FOLLY_DISABLE_ADDRESS_SANITIZER PoolId getPoolId() const noexcept {
+    return poolId;
+  }
+  FOLLY_DISABLE_ADDRESS_SANITIZER ClassId getClassId() const noexcept {
+    return classId;
+  }
+  FOLLY_DISABLE_ADDRESS_SANITIZER uint32_t getAllocSize() const noexcept {
+    return allocSize;
+  }
 
-  // This doesn't reset the flags. That's done explcitly by calling
-  // setFlag/unsetFlag above.
-  void resetAllocInfo() {
+  // Initialize a freshly carved or reclaimed header so it belongs to `pid`.
+  FOLLY_DISABLE_ADDRESS_SANITIZER void initialize(PoolId pid) noexcept {
+    poolId = pid;
+    classId = Slab::kInvalidClassId;
+    allocSize = 0;
+    flags = 0;
+  }
+
+  // Clear pool/class/size info, e.g. when a slab is freed back to the
+  // allocator. Leaves flags untouched.
+  FOLLY_DISABLE_ADDRESS_SANITIZER void resetAllocInfo() noexcept {
     poolId = Slab::kInvalidPoolId;
     classId = Slab::kInvalidClassId;
     allocSize = 0;
@@ -133,7 +157,7 @@ struct CACHELIB_PACKED_ATTR SlabHeader {
     return isFlagSet(SlabHeaderFlag::IS_ADVISED);
   }
 
-  void setAdvised(bool value) {
+  void setAdvised(bool value) noexcept {
     value ? setFlag(SlabHeaderFlag::IS_ADVISED)
           : unSetFlag(SlabHeaderFlag::IS_ADVISED);
   }
@@ -142,29 +166,37 @@ struct CACHELIB_PACKED_ATTR SlabHeader {
     return isFlagSet(SlabHeaderFlag::IS_MARKED_FOR_RELEASE);
   }
 
-  void setMarkedForRelease(bool value) {
+  void setMarkedForRelease(bool value) noexcept {
     value ? setFlag(SlabHeaderFlag::IS_MARKED_FOR_RELEASE)
           : unSetFlag(SlabHeaderFlag::IS_MARKED_FOR_RELEASE);
   }
 
-  // id of the pool that this slab currently belongs to.
-  PoolId poolId{Slab::kInvalidPoolId};
+  // Assign the slab to an allocation class (classId + allocSize).
+  FOLLY_DISABLE_ADDRESS_SANITIZER void assignToClass(ClassId cid,
+                                                     uint32_t size) noexcept {
+    classId = cid;
+    allocSize = size;
+  }
 
-  // the allocation class id that this slab currently belongs to
-  ClassId classId{Slab::kInvalidClassId};
+  // Release the slab from its class: clear classId/allocSize and the
+  // marked-for-release flag.
+  FOLLY_DISABLE_ADDRESS_SANITIZER void clearClassAndUnmark() noexcept {
+    classId = Slab::kInvalidClassId;
+    allocSize = 0;
+    unSetFlag(SlabHeaderFlag::IS_MARKED_FOR_RELEASE);
+  }
 
-  // whether the slab is currently being released or not.
-  uint8_t flags{0};
-
-  // the allocation size of the allocation class. Useful for pointer
-  // compression. the current size of this struct is 1 + 1 + 1 + 4 = 7 bytes.
-  // This allocSize is accessed on every decompression of the
-  // compressed pointer. If the offset of this changes, use the benchmark to
-  // figure out if it moves the needle by a big margin.
-  uint32_t allocSize{0};
+  // Restore the slab to its class (classId + allocSize) and clear the
+  // marked-for-release flag, e.g. when a release is aborted.
+  FOLLY_DISABLE_ADDRESS_SANITIZER void restoreClassAndUnmark(
+      ClassId cid, uint32_t size) noexcept {
+    classId = cid;
+    allocSize = size;
+    unSetFlag(SlabHeaderFlag::IS_MARKED_FOR_RELEASE);
+  }
 
  private:
-  void setFlag(SlabHeaderFlag flag) noexcept {
+  FOLLY_DISABLE_ADDRESS_SANITIZER void setFlag(SlabHeaderFlag flag) noexcept {
     const uint8_t bitmask =
         static_cast<uint8_t>(1u << static_cast<unsigned int>(flag));
 // FIXME: https://fb.workplace.com/groups/cachelibusers/posts/2345418462311949/
@@ -174,16 +206,36 @@ struct CACHELIB_PACKED_ATTR SlabHeader {
 #pragma clang diagnostic pop
   }
 
-  void unSetFlag(SlabHeaderFlag flag) noexcept {
+  FOLLY_DISABLE_ADDRESS_SANITIZER void unSetFlag(SlabHeaderFlag flag) noexcept {
     const uint8_t bitmask =
         static_cast<uint8_t>(std::numeric_limits<uint8_t>::max() -
                              (1u << static_cast<unsigned int>(flag)));
     __sync_fetch_and_and(&flags, bitmask);
   }
 
-  bool isFlagSet(SlabHeaderFlag flag) const noexcept {
+  // Reads a flag bit. ASAN instrumentation is disabled because headers are
+  // poisoned at rest and these reads happen on live, poisoned headers (the
+  // de-instrumented read survives inlining into the public flag getters).
+  FOLLY_DISABLE_ADDRESS_SANITIZER bool isFlagSet(
+      SlabHeaderFlag flag) const noexcept {
     return flags & (1u << static_cast<unsigned int>(flag));
   }
+
+  // id of the pool that this slab currently belongs to.
+  PoolId poolId{Slab::kInvalidPoolId};
+
+  // the allocation class id that this slab currently belongs to
+  ClassId classId{Slab::kInvalidClassId};
+
+  // flag bits; see SlabHeaderFlag.
+  uint8_t flags{0};
+
+  // the allocation size of the allocation class. Useful for pointer
+  // compression. the current size of this struct is 1 + 1 + 1 + 4 = 7 bytes.
+  // This allocSize is accessed on every decompression of the
+  // compressed pointer. If the offset of this changes, use the benchmark to
+  // figure out if it moves the needle by a big margin.
+  uint32_t allocSize{0};
 };
 
 // Definition for slab based resizing and rebalancing.

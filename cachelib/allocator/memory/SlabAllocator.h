@@ -164,7 +164,7 @@ class SlabAllocator {
   }
 
   // Assumes there are no slabs that have been advised away from given memory.
-  // returns the number of usable slabs  for the given amount of memory in
+  // returns the number of usable slabs for the given amount of memory in
   // bytes aligned to Slab's size.
   static unsigned int getNumUsableSlabs(size_t memorySize) noexcept;
 
@@ -249,7 +249,7 @@ class SlabAllocator {
     const auto slabIndex = static_cast<SlabIdx>(slab - slabMemoryStart_);
     const SlabHeader* header = getSlabHeader(slabIndex);
 
-    const uint32_t allocSize = header->allocSize;
+    const uint32_t allocSize = header->getAllocSize();
     XDCHECK(allocSize >= getMinAllocSize());
 
     const auto allocIdx =
@@ -285,7 +285,7 @@ class SlabAllocator {
 #endif
 
     const auto* header = getSlabHeader(slabIndex);
-    const uint32_t allocSize = header->allocSize;
+    const uint32_t allocSize = header->getAllocSize();
 
     XDCHECK_GE(allocSize, getMinAllocSize());
     const auto offset = allocSize * allocIdx;

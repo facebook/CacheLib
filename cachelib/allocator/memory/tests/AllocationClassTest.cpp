@@ -175,7 +175,7 @@ TEST_F(AllocationClassTest, BadFree) {
   // memory belonging to a slab that is not part of this MC.
   auto slab = slabAlloc->makeNewSlab(pid);
   auto header = slabAlloc->getSlabHeader(slab);
-  header->classId = 6; // belongs to diff class.
+  setSlabHeaderClassId(header, 6); // belongs to diff class.
   void* memory = slab->memoryAtOffset(folly::Random::rand32() % Slab::kSize);
   ASSERT_THROW(ac.free(memory), std::invalid_argument);
 }
@@ -191,7 +191,7 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
   ASSERT_NE(firstSlab, nullptr);
 
   auto header = slabAlloc->getSlabHeader(firstSlab);
-  header->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(header, Slab::kInvalidClassId);
 
   // use 1K allocations.
   const auto allocSize = 1 << 10;
@@ -200,7 +200,7 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
   // add the slab and check that the classId of the slab reflects that.
   ac.addSlab(firstSlab);
 
-  ASSERT_EQ(header->classId, ac.getId());
+  ASSERT_EQ(header->getClassId(), ac.getId());
 
   std::vector<void*> firstSlabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {
@@ -256,7 +256,7 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
   }
 
   header = slabAlloc->getSlabHeader(secondSlab);
-  ASSERT_EQ(header->classId, ac.getId());
+  ASSERT_EQ(header->getClassId(), ac.getId());
 
   const SlabReleaseMode dummyMode = SlabReleaseMode::kResize;
   // release the second slab. after this, we should not be getting back any
@@ -270,9 +270,9 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
   ASSERT_THROW(ac.startSlabRelease(dummyMode, secondSlabAllocations.back()),
                std::invalid_argument);
 
-  ASSERT_EQ(ac.getId(), header->classId);
-  ASSERT_EQ(ac.getAllocSize(), header->allocSize);
-  ASSERT_EQ(pid, header->poolId);
+  ASSERT_EQ(ac.getId(), header->getClassId());
+  ASSERT_EQ(ac.getAllocSize(), header->getAllocSize());
+  ASSERT_EQ(pid, header->getPoolId());
   ASSERT_TRUE(header->isMarkedForRelease());
 
   auto freeActiveAllocs = [&ac](const SlabReleaseContext& sr,
@@ -302,20 +302,20 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
 
   // the header should reflect that the slab does not belong to the allocation
   // class anymore.
-  ASSERT_EQ(Slab::kInvalidClassId, header->classId);
-  ASSERT_EQ(0, header->allocSize);
-  ASSERT_EQ(pid, header->poolId);
+  ASSERT_EQ(Slab::kInvalidClassId, header->getClassId());
+  ASSERT_EQ(0, header->getAllocSize());
+  ASSERT_EQ(pid, header->getPoolId());
   ASSERT_FALSE(header->isMarkedForRelease());
 
   // trying to release the second slab again should fail.
   ASSERT_THROW(ac.startSlabRelease(dummyMode, secondSlabAllocations.back()),
                std::invalid_argument);
 
-  ASSERT_EQ(header->classId, Slab::kInvalidClassId);
+  ASSERT_EQ(header->getClassId(), Slab::kInvalidClassId);
   ASSERT_FALSE(header->isMarkedForRelease());
 
   header = slabAlloc->getSlabHeader(thirdSlab);
-  ASSERT_EQ(header->classId, ac.getId());
+  ASSERT_EQ(header->getClassId(), ac.getId());
   ASSERT_FALSE(header->isMarkedForRelease());
 
   // release the third slab as well. This is unused inside the ac at this
@@ -326,9 +326,9 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
 
   // the header should reflect that the slab does not belong to the allocation
   // class anymore.
-  ASSERT_EQ(Slab::kInvalidClassId, header->classId);
-  ASSERT_EQ(0, header->allocSize);
-  ASSERT_EQ(pid, header->poolId);
+  ASSERT_EQ(Slab::kInvalidClassId, header->getClassId());
+  ASSERT_EQ(0, header->getAllocSize());
+  ASSERT_EQ(pid, header->getPoolId());
   ASSERT_FALSE(header->isMarkedForRelease());
 
   auto thirdSlabActiveAllocs = thirdSlabReleaseContext.getActiveAllocations();
@@ -336,7 +336,7 @@ TEST_F(AllocationClassTest, AddReleaseSlab) {
   // calling completeSlabRelease with a released slab is a no-op
   ASSERT_NO_THROW(ac.completeSlabRelease(std::move(thirdSlabReleaseContext)));
 
-  ASSERT_EQ(header->classId, Slab::kInvalidClassId);
+  ASSERT_EQ(header->getClassId(), Slab::kInvalidClassId);
 
   // any allocation after this should not contain the second or third slab.
   // all allocated memory should belong to first slab and we should be able to
@@ -550,7 +550,7 @@ TEST_F(AllocationClassTest, ReleaseSlabWithActiveAllocations) {
   ASSERT_NE(firstSlab, nullptr);
 
   auto firstSlabHeader = slabAlloc->getSlabHeader(firstSlab);
-  firstSlabHeader->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(firstSlabHeader, Slab::kInvalidClassId);
 
   // use 1K allocations.
   const auto allocSize = 1 << 10;
@@ -558,7 +558,7 @@ TEST_F(AllocationClassTest, ReleaseSlabWithActiveAllocations) {
 
   // add the slab and check that the classId of the slab reflects that.
   ac.addSlab(firstSlab);
-  ASSERT_EQ(firstSlabHeader->classId, ac.getId());
+  ASSERT_EQ(firstSlabHeader->getClassId(), ac.getId());
 
   std::vector<void*> firstSlabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {
@@ -582,7 +582,7 @@ TEST_F(AllocationClassTest, ReleaseSlabWithActiveAllocations) {
     ac.free(alloc);
   }
   ASSERT_NO_THROW(ac.completeSlabRelease(std::move(firstSlabReleaseContext)));
-  ASSERT_EQ(firstSlabHeader->classId, Slab::kInvalidClassId);
+  ASSERT_EQ(firstSlabHeader->getClassId(), Slab::kInvalidClassId);
 
   // allocate another slab. allocate some memory and release some memory.
   // release the slab we should get back a list of memory allocs that have not
@@ -591,10 +591,10 @@ TEST_F(AllocationClassTest, ReleaseSlabWithActiveAllocations) {
   ASSERT_NE(secondSlab, nullptr);
 
   auto secondSlabHeader = slabAlloc->getSlabHeader(secondSlab);
-  secondSlabHeader->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(secondSlabHeader, Slab::kInvalidClassId);
 
   ac.addSlab(secondSlab);
-  ASSERT_EQ(secondSlabHeader->classId, ac.getId());
+  ASSERT_EQ(secondSlabHeader->getClassId(), ac.getId());
 
   std::vector<void*> secondSlabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {
@@ -627,7 +627,7 @@ TEST_F(AllocationClassTest, ReleaseSlabWithActiveAllocations) {
     ac.free(alloc);
   }
   ASSERT_NO_THROW(ac.completeSlabRelease(std::move(secondSlabReleaseContext)));
-  ASSERT_EQ(secondSlabHeader->classId, Slab::kInvalidClassId);
+  ASSERT_EQ(secondSlabHeader->getClassId(), Slab::kInvalidClassId);
 }
 
 // 1. Add two slabs to the AC
@@ -656,10 +656,10 @@ TEST_F(AllocationClassTest, ReleaseSlabMultithread) {
   ASSERT_NE(firstSlab, nullptr);
 
   auto firstSlabHeader = slabAlloc->getSlabHeader(firstSlab);
-  firstSlabHeader->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(firstSlabHeader, Slab::kInvalidClassId);
 
   ac.addSlab(firstSlab);
-  ASSERT_EQ(firstSlabHeader->classId, ac.getId());
+  ASSERT_EQ(firstSlabHeader->getClassId(), ac.getId());
 
   std::vector<void*> firstSlabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {
@@ -674,10 +674,10 @@ TEST_F(AllocationClassTest, ReleaseSlabMultithread) {
   ASSERT_NE(secondSlab, nullptr);
 
   auto secondSlabHeader = slabAlloc->getSlabHeader(secondSlab);
-  secondSlabHeader->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(secondSlabHeader, Slab::kInvalidClassId);
 
   ac.addSlab(secondSlab);
-  ASSERT_EQ(secondSlabHeader->classId, ac.getId());
+  ASSERT_EQ(secondSlabHeader->getClassId(), ac.getId());
 
   std::vector<void*> secondSlabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {
@@ -771,10 +771,10 @@ TEST_F(AllocationClassTest, ReleaseSlabWithManyFrees) {
     ASSERT_NE(slab, nullptr);
 
     auto slabHeader = slabAlloc->getSlabHeader(slab);
-    slabHeader->classId = Slab::kInvalidClassId;
+    setSlabHeaderClassId(slabHeader, Slab::kInvalidClassId);
 
     ac.addSlab(slab);
-    ASSERT_EQ(slabHeader->classId, ac.getId());
+    ASSERT_EQ(slabHeader->getClassId(), ac.getId());
 
     std::vector<void*> slabAllocations;
     for (unsigned int j = 0; j < ac.getAllocsPerSlab(); j++) {
@@ -984,13 +984,13 @@ TEST_F(AllocationClassTest, InvalidDeSerialization) {
 
   slab = grabFreeSlab();
   auto header = slabAlloc->getSlabHeader(slab);
-  header->classId = cid + 1;
+  setSlabHeaderClassId(header, cid + 1);
   *incorrectCurrSlabState.currSlabIdx() = slabAlloc->slabIdx(slab);
   ASSERT_THROW(AllocationClass(incorrectCurrSlabState, pid, *slabAlloc),
                std::invalid_argument);
 
   // even if the classId is correct, it must belong to the allocated slab.
-  header->classId = cid;
+  setSlabHeaderClassId(header, cid);
   ASSERT_THROW(AllocationClass(incorrectClassIdState, pid, *slabAlloc),
                std::invalid_argument);
 }
@@ -1183,7 +1183,7 @@ TEST_F(AllocationClassTest, AbortSlabReleaseTest) {
   ASSERT_NE(slab, nullptr);
 
   auto header = slabAlloc->getSlabHeader(slab);
-  header->classId = Slab::kInvalidClassId;
+  setSlabHeaderClassId(header, Slab::kInvalidClassId);
 
   // use 1K allocations.
   const auto allocSize = 1 << 10;
@@ -1192,7 +1192,7 @@ TEST_F(AllocationClassTest, AbortSlabReleaseTest) {
   // add the slab and check that the classId of the slab reflects that.
   ac.addSlab(slab);
 
-  ASSERT_EQ(header->classId, ac.getId());
+  ASSERT_EQ(header->getClassId(), ac.getId());
 
   std::vector<void*> slabAllocations;
   for (unsigned int i = 0; i < ac.getAllocsPerSlab(); i++) {

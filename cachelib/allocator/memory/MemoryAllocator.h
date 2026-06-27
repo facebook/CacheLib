@@ -485,7 +485,8 @@ class MemoryAllocator {
       throw std::invalid_argument(
           fmt::format("invalid header for slab memory addr: {}", memory));
     }
-    return AllocInfo{header->poolId, header->classId, header->allocSize};
+    return AllocInfo{header->getPoolId(), header->getClassId(),
+                     header->getAllocSize()};
   }
 
   // Check whether a pointer falls within a valid, allocated slab managed by
@@ -615,8 +616,8 @@ class MemoryAllocator {
       if (!slabHdr) {
         continue;
       }
-      auto classId = slabHdr->classId;
-      auto poolId = slabHdr->poolId;
+      auto classId = slabHdr->getClassId();
+      auto poolId = slabHdr->getPoolId();
       if (poolId == Slab::kInvalidPoolId || classId == Slab::kInvalidClassId ||
           slabHdr->isAdvised() || slabHdr->isMarkedForRelease()) {
         ++slabSkipped;

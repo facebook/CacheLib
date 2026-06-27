@@ -91,7 +91,7 @@ TEST_F(MemoryPoolTest, Alloc) {
       ASSERT_LE(size, classSize);
       ASSERT_EQ(before + classSize, after);
       auto header = slabAlloc->getSlabHeader(memory);
-      ASSERT_EQ(header->allocSize, classSize);
+      ASSERT_EQ(header->getAllocSize(), classSize);
     }
     prevLow = classSize + 1;
   }
@@ -248,7 +248,7 @@ TEST_F(MemoryPoolTest, Free) {
         folly::Random::rand32() % *allocSizes.rbegin() + 1;
     void* memory = mp1.allocate(randomSize);
     auto header = slabAlloc->getSlabHeader(memory);
-    sumSize += header->allocSize;
+    sumSize += header->getAllocSize();
     ASSERT_NE(memory, nullptr);
     ASSERT_NE(mp2.allocate(randomSize), nullptr);
     allocs1.push_back(memory);
@@ -684,7 +684,7 @@ TEST_F(MemoryPoolTest, SlabRelease) {
         ASSERT_EQ(slabAlloc->getSlabForMemory(alloc), slab);
       }
 
-      ASSERT_EQ(id, header->classId);
+      ASSERT_EQ(id, header->getClassId());
       ASSERT_EQ(id, context.getClassId());
       ASSERT_EQ(mp.getId(), context.getPoolId());
 
@@ -696,12 +696,12 @@ TEST_F(MemoryPoolTest, SlabRelease) {
 
       // slab header must reflect the fact that the slab does not belong to
       // the allocation class , but belongs to the pool.
-      ASSERT_EQ(Slab::kInvalidClassId, header->classId);
-      ASSERT_EQ(0, header->allocSize);
+      ASSERT_EQ(Slab::kInvalidClassId, header->getClassId());
+      ASSERT_EQ(0, header->getAllocSize());
       auto stat = mp.getStats();
       switch (mode) {
       case SlabReleaseMode::kResize:
-        ASSERT_EQ(Slab::kInvalidPoolId, header->poolId);
+        ASSERT_EQ(Slab::kInvalidPoolId, header->getPoolId());
         // resize should not have added the slab within the pool.
         ASSERT_EQ(prevStat.freeSlabs, stat.freeSlabs);
         ASSERT_EQ(prevStat.allocatedSlabs() - 1, stat.allocatedSlabs());
@@ -711,7 +711,7 @@ TEST_F(MemoryPoolTest, SlabRelease) {
         ASSERT_EQ(prevStat.numSlabResize + 1, stat.numSlabResize);
         break;
       case SlabReleaseMode::kAdvise:
-        ASSERT_EQ(Slab::kInvalidPoolId, header->poolId);
+        ASSERT_EQ(Slab::kInvalidPoolId, header->getPoolId());
         // advise should not have added the slab within the pool.
         ASSERT_EQ(prevStat.freeSlabs, stat.freeSlabs);
         ASSERT_EQ(prevStat.allocatedSlabs() - 1, stat.allocatedSlabs());
@@ -721,7 +721,7 @@ TEST_F(MemoryPoolTest, SlabRelease) {
         ASSERT_EQ(prevStat.numSlabAdvise + 1, stat.numSlabAdvise);
         break;
       case SlabReleaseMode::kRebalance:
-        ASSERT_EQ(mp.getId(), header->poolId);
+        ASSERT_EQ(mp.getId(), header->getPoolId());
         ASSERT_EQ(prevStat.freeSlabs + 1, stat.freeSlabs);
         ASSERT_EQ(prevStat.allocatedSlabs(), stat.allocatedSlabs());
         ASSERT_EQ(prevStat.slabsUnAllocated, stat.slabsUnAllocated);

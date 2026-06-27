@@ -126,6 +126,12 @@ class AllocTestBase : public testing::Test {
     return pool.currSlabAllocSize_;
   }
 
+  // Test helper to override a slab header's classId (preserving its allocSize)
+  // through the guarded mutation API.
+  static void setSlabHeaderClassId(SlabHeader* header, ClassId classId) {
+    header->assignToClass(classId, header->getAllocSize());
+  }
+
  private:
   std::vector<void*> toFree_{};
 };

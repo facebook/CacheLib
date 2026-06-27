@@ -809,6 +809,35 @@ TEST_F(MemoryAllocatorTest, AsanPoisoningDisabled) {
   uint8_t byte = reinterpret_cast<uint8_t*>(alloc)[0];
   ASSERT_EQ(byte, 0xAB);
 }
+
+TEST_F(MemoryAllocatorTest, AsanPoisoningEnabled) {
+  const size_t poolSize = 10 * Slab::kSize;
+  const size_t allocatorSize = poolSize + 2 * Slab::kSize;
+  const uint32_t allocSize = 1024;
+
+  MemoryAllocator::Config config{
+      std::set<uint32_t>{allocSize}, false /* enableZeroedSlabAllocs */,
+      true /* disableFullCoredump */, false /* lockMemory */,
+      true /* enableAsanPoisoning */};
+
+  void* memory = allocate(allocatorSize);
+  MemoryAllocator m(config, memory, allocatorSize);
+  auto pid = m.addPool(getRandomStr(), poolSize);
+
+  void* alloc = m.allocate(pid, allocSize);
+  ASSERT_NE(alloc, nullptr);
+  memset(alloc, 0xAB, allocSize);
+
+  m.free(alloc);
+
+  // With poisoning enabled, reading the freed allocation must trip ASAN.
+  EXPECT_DEATH(
+      {
+        volatile uint8_t byte = reinterpret_cast<uint8_t*>(alloc)[0];
+        (void)byte;
+      },
+      "AddressSanitizer");
+}
 #endif
 
 } // namespace facebook::cachelib

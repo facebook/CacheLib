@@ -157,7 +157,7 @@ MemoryPool& MemoryAllocator::getMemoryPool(const void* memory) const {
   if (header == nullptr) {
     throw std::invalid_argument("not recognized by this allocator");
   }
-  auto poolId = header->poolId;
+  auto poolId = header->getPoolId();
   return memoryPoolManager_.getPoolById(poolId);
 }
 

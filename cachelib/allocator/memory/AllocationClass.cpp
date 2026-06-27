@@ -78,10 +78,10 @@ void AllocationClass::checkState() const {
                     fmt::ptr(currSlab_)));
   }
 
-  if (header != nullptr && header->classId != classId_) {
+  if (header != nullptr && header->getClassId() != classId_) {
     throw std::invalid_argument(
         fmt::format("ClassId of currSlab {} is not the same as our classId {}",
-                    header->classId, classId_));
+                    header->getClassId(), classId_));
   }
 
   if (currSlab_ != nullptr &&
@@ -156,8 +156,7 @@ AllocationClass::AllocationClass(
 void AllocationClass::addSlabLocked(Slab* slab) {
   canAllocate_ = true;
   auto header = slabAlloc_.getSlabHeader(slab);
-  header->classId = classId_;
-  header->allocSize = allocationSize_;
+  header->assignToClass(classId_, allocationSize_);
   freeSlabs_.push_back(slab);
 }
 
@@ -268,14 +267,15 @@ SlabReleaseContext AllocationClass::startSlabRelease(
 
     header = slabAlloc_.getSlabHeader(slab);
     // slab header must be valid and NOT marked for release
-    if (header == nullptr || header->classId != getId() ||
-        header->poolId != getPoolId() || header->isMarkedForRelease()) {
+    if (header == nullptr || header->getClassId() != getId() ||
+        header->getPoolId() != getPoolId() || header->isMarkedForRelease()) {
       throw std::invalid_argument(fmt::format(
           "Slab Header {} is in invalid state for release. id = {}, "
           "markedForRelease = {}, classId = {}",
           fmt::ptr(header),
-          header == nullptr ? Slab::kInvalidClassId : header->classId,
-          header == nullptr ? false : header->isMarkedForRelease(), getId()));
+          header == nullptr ? Slab::kInvalidClassId : header->getClassId(),
+          header == nullptr ? false : header->isMarkedForRelease(),
+          getId()));
     }
 
     // if its is a free slab, get it off the freeSlabs_ and return context
@@ -283,9 +283,9 @@ SlabReleaseContext AllocationClass::startSlabRelease(
     if (freeIt != freeSlabs_.end()) {
       *freeIt = freeSlabs_.back();
       freeSlabs_.pop_back();
-      header->classId = Slab::kInvalidClassId;
-      header->allocSize = 0;
-      return SlabReleaseContext{slab, header->poolId, header->classId, mode};
+      header->assignToClass(Slab::kInvalidClassId, 0);
+      return SlabReleaseContext{slab, header->getPoolId(), header->getClassId(),
+                                mode};
     }
 
     // The slab is actively used, so we create a new release alloc map
@@ -337,17 +337,16 @@ SlabReleaseContext AllocationClass::startSlabRelease(
   std::vector<void*> activeAllocations = std::move(results.second);
   return lock_->lock_combine([&]() {
     if (activeAllocations.empty()) {
-      header->classId = Slab::kInvalidClassId;
-      header->allocSize = 0;
-      header->setMarkedForRelease(false);
+      header->clearClassAndUnmark();
       // no active allocations to be freed back. We can consider this slab as
       // released from this AllocationClass. This means we also do not need
       // to keep the slabFreeState
       slabReleaseAllocMap_.erase(getSlabPtrValue(slab));
-      return SlabReleaseContext{slab, header->poolId, header->classId, mode};
+      return SlabReleaseContext{slab, header->getPoolId(), header->getClassId(),
+                                mode};
     } else {
       ++activeReleases_;
-      return SlabReleaseContext{slab, header->poolId, header->classId,
+      return SlabReleaseContext{slab, header->getPoolId(), header->getClassId(),
                                 std::move(activeAllocations), mode};
     }
   });
@@ -549,9 +548,7 @@ void AllocationClass::abortSlabRelease(const SlabReleaseContext& context) {
     slabReleaseAllocMap_.erase(slabPtrVal);
     allocatedSlabs_.push_back(const_cast<Slab*>(slab));
     // restore the classId and allocSize
-    header->classId = classId_;
-    header->allocSize = allocationSize_;
-    header->setMarkedForRelease(false);
+    header->restoreClassAndUnmark(classId_, allocationSize_);
     --activeReleases_;
   });
 }
@@ -567,7 +564,7 @@ void AllocationClass::completeSlabRelease(const SlabReleaseContext& context) {
 
   lock_->lock_combine([&]() {
     // slab header must be valid and marked for release
-    if (header == nullptr || header->classId != getId() ||
+    if (header == nullptr || header->getClassId() != getId() ||
         !header->isMarkedForRelease()) {
       throw std::runtime_error(
           fmt::format("The slab at {} with header at {} is invalid",
@@ -586,9 +583,7 @@ void AllocationClass::completeSlabRelease(const SlabReleaseContext& context) {
   lock_->lock_combine([&]() {
     slabReleaseAllocMap_.erase(slabPtrVal);
 
-    header->classId = Slab::kInvalidClassId;
-    header->allocSize = 0;
-    header->setMarkedForRelease(false);
+    header->clearClassAndUnmark();
     --activeReleases_;
     XDCHECK_GE(activeReleases_.load(), 0);
   });
@@ -597,12 +592,12 @@ void AllocationClass::completeSlabRelease(const SlabReleaseContext& context) {
 void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
                                          const void* memory) const {
   const auto* header = slabAlloc_.getSlabHeader(memory);
-  if (header == nullptr || header->classId != classId_) {
+  if (header == nullptr || header->getClassId() != classId_) {
     throw std::invalid_argument(fmt::format(
         "trying to check memory {} (with ClassId {}), not belonging to this "
         "AllocationClass (ClassID {})",
         memory,
-        header ? header->classId : Slab::kInvalidClassId,
+        header ? header->getClassId() : Slab::kInvalidClassId,
         classId_));
   }
   if (!header->isMarkedForRelease()) {
@@ -610,7 +605,7 @@ void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
         "trying whether memory at {} (with ClassID {}) is freed, but header is "
         "not marked for release",
         memory,
-        header->classId));
+        header->getClassId()));
   }
   const auto* slab = slabAlloc_.getSlabForMemory(memory);
   if (slab != ctx.getSlab()) {
@@ -618,7 +613,7 @@ void AllocationClass::checkSlabInRelease(const SlabReleaseContext& ctx,
         "trying to check memory {} (with ClassId {}), against an invalid slab "
         "release context (ClassID {})",
         memory,
-        header ? header->classId : Slab::kInvalidClassId,
+        header ? header->getClassId() : Slab::kInvalidClassId,
         ctx.getClassId()));
   }
 }
@@ -664,11 +659,12 @@ void AllocationClass::processAllocForRelease(
 void AllocationClass::free(void* memory) {
   const auto* header = slabAlloc_.getSlabHeader(memory);
   auto* slab = slabAlloc_.getSlabForMemory(memory);
-  if (header == nullptr || header->classId != classId_) {
+  if (header == nullptr || header->getClassId() != classId_) {
     throw std::invalid_argument(fmt::format(
         "trying to free memory {} (with ClassId {}), not belonging to this "
         "AllocationClass (ClassId {})",
-        memory, header ? header->classId : Slab::kInvalidClassId, classId_));
+        memory, header ? header->getClassId() : Slab::kInvalidClassId,
+        classId_));
   }
 
   const auto slabPtrVal = getSlabPtrValue(slab);

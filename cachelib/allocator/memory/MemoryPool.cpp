@@ -215,17 +215,17 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
 
   // unallocated slab or slab not allocated to this pool or slab that is
   // allocated to this pool but not any allocation class is a failure.
-  if (header == nullptr || header->poolId != id_) {
+  if (header == nullptr || header->getPoolId() != id_) {
     throw std::invalid_argument(fmt::format(
         "Memory {} [PoolId = {}] does not belong to this pool with id {}",
         memory,
-        header ? header->poolId : Slab::kInvalidPoolId,
+        header ? header->getPoolId() : Slab::kInvalidPoolId,
         id_));
-  } else if (header->classId == Slab::kInvalidClassId) {
+  } else if (header->getClassId() == Slab::kInvalidClassId) {
     throw std::invalid_argument("Memory does not belong to any valid class Id");
   }
 
-  const auto classId = header->classId;
+  const auto classId = header->getClassId();
   if (classId < 0 || static_cast<size_t>(classId) >= ac_.size()) {
     // at this point, the slab indicates that it belongs to a bogus classId and
     // things are corrupt and the caller cant do anything about it. so throw an
@@ -465,7 +465,7 @@ size_t MemoryPool::reclaimSlabsAndGrow(size_t numSlabs) {
     if (!slab) {
       break;
     }
-    XDCHECK(slabAllocator_.getSlabHeader(slab)->poolId == getId());
+    XDCHECK(slabAllocator_.getSlabHeader(slab)->getPoolId() == getId());
     LockHolder l(lock_);
     freeSlabs_.push_back(slab);
     --curSlabsAdvised_;
@@ -556,10 +556,10 @@ void MemoryPool::completeSlabRelease(const SlabReleaseContext& context) {
   // complete the slab release process.
   allocClass.completeSlabRelease(context);
 
-  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->poolId, getId());
-  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->classId,
+  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->getPoolId(), getId());
+  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->getClassId(),
              Slab::kInvalidClassId);
-  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->allocSize, 0u);
+  XDCHECK_EQ(slabAllocator_.getSlabHeader(slab)->getAllocSize(), 0u);
 
   releaseSlab(mode, slab, zeroOnRelease, context.getReceiverClassId());
 }
