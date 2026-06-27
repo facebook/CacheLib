@@ -91,6 +91,15 @@ void AllocationClass::checkState() const {
         fmt::format("Current allocation slab {} is not in allocated slabs list",
                     fmt::ptr(currSlab_)));
   }
+
+  if (slabAlloc_.isAsanPoisoningEnabled() && (allocationSize_ % 8 != 0)) {
+    XLOGF(WARN,
+          "Slab ASAN poisoning is enabled but allocation class {} has size {}, "
+          "which is not a multiple of 8; freed-allocation poisoning will be "
+          "imprecise at allocation boundaries.",
+          classId_,
+          allocationSize_);
+  }
 }
 
 // TODO(stuclar): Add poolId to the metadata to be serialized when cache shuts

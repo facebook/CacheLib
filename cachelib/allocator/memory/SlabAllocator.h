@@ -380,6 +380,9 @@ class SlabAllocator {
   // @throw std::invalid_argument if the state is invalid.
   void checkState() const;
 
+  // Logs whether slab ASAN poisoning is active. No-op in non-ASAN builds.
+  void logAsanPoisoningStatus() const;
+
   // returns first byte after the end of memory region we own.
   const Slab* getSlabMemoryEnd() const noexcept {
     return reinterpret_cast<Slab*>(reinterpret_cast<uint8_t*>(memoryStart_) +

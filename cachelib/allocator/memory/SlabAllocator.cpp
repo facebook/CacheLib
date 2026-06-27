@@ -81,6 +81,16 @@ void SlabAllocator::checkState() const {
   }
 }
 
+void SlabAllocator::logAsanPoisoningStatus() const {
+#if FOLLY_SANITIZE_ADDRESS
+  if (asanPoisoningEnabled_) {
+    XLOG(INFO, "CacheLib slab ASAN poisoning is ENABLED");
+  } else {
+    XLOG(INFO, "CacheLib slab ASAN poisoning is DISABLED");
+  }
+#endif
+}
+
 SlabAllocator::~SlabAllocator() {
   stopMemoryLocker();
 
@@ -153,6 +163,8 @@ SlabAllocator::SlabAllocator(void* memoryStart,
   XDCHECK(nextSlabAllocation_ != nullptr);
   XDCHECK_EQ(reinterpret_cast<uintptr_t>(nextSlabAllocation_),
              reinterpret_cast<uintptr_t>(slabMemoryStart_));
+
+  logAsanPoisoningStatus();
 }
 
 SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
@@ -251,6 +263,8 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
   asanPoisonMemoryRegion(memoryStart_,
                          reinterpret_cast<const uint8_t*>(slabMemoryStart_) -
                              reinterpret_cast<const uint8_t*>(memoryStart_));
+
+  logAsanPoisoningStatus();
 }
 
 void SlabAllocator::lockMemoryAsync() noexcept {
