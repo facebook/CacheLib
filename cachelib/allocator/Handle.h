@@ -63,7 +63,12 @@ struct ReadHandleImpl {
 
   // reset the handle by releasing the item it holds.
   void reset() noexcept {
-    waitContext_.reset();
+    // Guard the shared_ptr reset: the vast majority of handles point
+    // directly at a DRAM item and have no wait context, so avoid the
+    // unconditional shared_ptr swap machinery in that common path.
+    if (waitContext_) {
+      waitContext_.reset();
+    }
 
     if (it_ == nullptr) {
       return;
