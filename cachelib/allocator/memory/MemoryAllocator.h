@@ -499,6 +499,11 @@ class MemoryAllocator {
     return (slab && slabAllocator_.isValidSlab(slab));
   }
 
+  // Get slab memory base address and size
+  std::pair<const void*, size_t> getSlabMemoryInfo() const noexcept {
+    return slabAllocator_.getSlabMemoryInfo();
+  }
+
   // fetch the allocation size for the pool id and class id.
   //
   // @param pid  the pool id

@@ -1283,6 +1283,12 @@ class CacheAllocator : public CacheBase {
   // return cache's memory usage stats
   CacheMemoryStats getCacheMemoryStats() const override final;
 
+  // Return slab memory base address and size; useful for APIs that want to
+  // pre-register buffers to avoid IO overhead (e.g., mapping pages in kernel).
+  std::pair<const void*, size_t> getSlabMemoryInfo() const noexcept {
+    return allocator_->getSlabMemoryInfo();
+  }
+
   // return the nvm cache stats map
   util::StatsMap getNvmCacheStatsMap() const override final;
 

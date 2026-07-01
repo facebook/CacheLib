@@ -363,6 +363,14 @@ class SlabAllocator {
 #endif
   }
 
+  // Returns the user-visible slab data region, excluding internal slab headers
+  // at the start of the memory arena.
+  std::pair<const void*, size_t> getSlabMemoryInfo() const noexcept {
+    auto slabStart = reinterpret_cast<uintptr_t>(slabMemoryStart_);
+    auto memStart = reinterpret_cast<uintptr_t>(memoryStart_);
+    return {slabMemoryStart_, memorySize_ - (slabStart - memStart)};
+  }
+
  private:
   // null Slab* presenttation. With 4M Slab size, a valid slab index would never
   // reach 2^16 - 1;
