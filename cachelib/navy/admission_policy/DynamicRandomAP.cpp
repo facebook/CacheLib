@@ -101,10 +101,10 @@ bool DynamicRandomAP::accept(HashedKey hk,
                              uint64_t estimatedWriteSize) {
   const auto curTime = getSteadyClockSeconds();
   if (curTime - params_.updateTime >= updateInterval_) {
-    // Lots of threads can get into this section. First to grab the lock will
-    // update. Let proceed the rest.
     std::unique_lock lock{mutex_, std::try_to_lock};
-    if (lock.owns_lock()) {
+    // Multiple threads can pass the unlocked interval check. Recheck after
+    // acquiring the lock so only one thread actually performs the update.
+    if (lock.owns_lock() && curTime - params_.updateTime >= updateInterval_) {
       updateThrottleParamsLocked(curTime);
     }
   }

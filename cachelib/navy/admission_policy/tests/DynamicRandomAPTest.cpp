@@ -17,8 +17,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <thread>
+#include <vector>
 
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Buffer.h"
@@ -270,6 +273,86 @@ TEST(DynamicRandomAPTest, AcceptedBytesCount) {
   ASSERT_EQ(stats.observedCurRate,
             bytesWritten / config.updateInterval.count());
   ASSERT_EQ(stats.acceptedRate, acceptedBytes / config.updateInterval.count());
+}
+
+TEST(DynamicRandomAPTest, ConcurrentAcceptUpdatesOncePerInterval) {
+  std::atomic<uint64_t> bytesWritten{0};
+  std::atomic<uint64_t> bytesWrittenCalls{0};
+
+  DynamicRandomAP::Config config;
+  config.targetRate = 1000;
+  config.maxRate = 1000;
+  config.updateInterval = std::chrono::seconds{10};
+  config.probabilitySeed = 1.0;
+  config.fnBytesWritten = [&]() {
+    bytesWrittenCalls.fetch_add(1, std::memory_order_relaxed);
+    return bytesWritten.load(std::memory_order_relaxed);
+  };
+  auto ap = facebook::cachelib::navy::DynamicRandomAP(std::move(config));
+  bytesWrittenCalls.store(0, std::memory_order_relaxed);
+
+  constexpr size_t kNumThreads{128};
+  constexpr size_t kNumIterations{1000};
+  std::atomic<size_t> phase{0};
+  std::atomic<size_t> completed{0};
+  std::atomic<bool> stop{false};
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+
+  for (size_t i = 0; i < kNumThreads; i++) {
+    threads.emplace_back([&, lastPhase = size_t{0}]() mutable {
+      while (!stop.load(std::memory_order_acquire)) {
+        size_t curPhase;
+        // Wait until the main thread advances the phase counter, which
+        // releases all workers for the next concurrent accept() attempt.
+        while ((curPhase = phase.load(std::memory_order_acquire)) ==
+                   lastPhase &&
+               !stop.load(std::memory_order_acquire)) {
+          std::this_thread::yield();
+        }
+        if (stop.load(std::memory_order_acquire)) {
+          break;
+        }
+
+        // Mark this phase as consumed before doing the work so this thread
+        // waits for the next release after one accept().
+        lastPhase = curPhase;
+        ap.accept(makeHK("key"), makeView("value"));
+        completed.fetch_add(1, std::memory_order_release);
+      }
+    });
+  }
+
+  uint64_t maxBytesWrittenCalls{0};
+  for (size_t i = 1; i <= kNumIterations; i++) {
+    completed.store(0, std::memory_order_relaxed);
+    bytesWrittenCalls.store(0, std::memory_order_relaxed);
+    bytesWritten.fetch_add(60'000, std::memory_order_relaxed);
+    // Make the AP look due for an update without sleeping for updateInterval_.
+    ap.params_.updateTime = getSteadyClockSeconds() - ap.updateInterval_;
+
+    phase.store(i, std::memory_order_release);
+    // Wait until every worker has made its one accept() call for this phase.
+    while (completed.load(std::memory_order_acquire) < kNumThreads) {
+      std::this_thread::yield();
+    }
+
+    maxBytesWrittenCalls =
+        std::max(maxBytesWrittenCalls,
+                 bytesWrittenCalls.load(std::memory_order_relaxed));
+    // Stop early if any interval performs more than one update.
+    if (maxBytesWrittenCalls > 1) {
+      break;
+    }
+  }
+
+  stop.store(true, std::memory_order_release);
+  phase.fetch_add(1, std::memory_order_release);
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  EXPECT_EQ(1, maxBytesWrittenCalls);
 }
 
 // Only throttle primary.

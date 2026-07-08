@@ -218,6 +218,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   FRIEND_TEST(DynamicRandomAPTest, RespectMaxWriteRate);
 
   FRIEND_TEST(DynamicRandomAPTest, AcceptedBytesCount);
+  FRIEND_TEST(DynamicRandomAPTest, ConcurrentAcceptUpdatesOncePerInterval);
   FRIEND_TEST(DynamicRandomAPTest, ThrottleRegular);
   FRIEND_TEST(DynamicRandomAPTest, ThrottleAll);
 };
