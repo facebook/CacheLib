@@ -279,7 +279,7 @@ bool BigHash::recover(RecordReader& rr) {
     if (!validBucketChecker_->recover(*pd.validBucketCheckerState())) {
       throw std::logic_error{"failed to recover valid bucket checker"};
     }
-    XLOGF(INFO, "Recovered valid bucket checker. {} buckets diabled.",
+    XLOGF(INFO, "Recovered valid bucket checker. {} buckets disabled.",
           validBucketChecker_->numDisabledBuckets());
   } catch (const std::exception& e) {
     XLOGF(ERR, "Exception: {}", e.what());
