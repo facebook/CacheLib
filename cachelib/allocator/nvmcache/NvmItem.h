@@ -38,7 +38,7 @@ struct Blob {
 };
 
 // Blob with a buffer that hold a copy of the data.
-// We'll assume the iobuf has only one node as in the current implmentation
+// We'll assume the iobuf has only one node as in the current implementation
 // under cachelib/object_cache/persistence/Persistence.h
 // TODO: Make Blob take an IOBuf instead of a StringPiece and handle the copy
 // correctly.
@@ -117,7 +117,7 @@ class FOLLY_PACK_ATTR NvmItem {
   bool isExpired() const noexcept;
 
   // @return    total size of this item including data for all the blobs. This
-  // should be alteast  estimateVariableSize() + sizeof(NvmItem)
+  // should be at least estimateVariableSize() + sizeof(NvmItem)
   size_t totalSize() const noexcept;
 
   // estimate the additional malloc size for a single blob to be passed to the
