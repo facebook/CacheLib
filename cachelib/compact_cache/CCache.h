@@ -31,7 +31,7 @@
  * operation).
  * Read ccache_descriptor.h for more information on value descriptor.
  *
- * The LRU mechanism withing a bucket is achieved by sliding the entries down
+ * The LRU mechanism within a bucket is achieved by sliding the entries down
  * each time an entry is added on top of the bucket or each time an entry is
  * promoted because it was read. This compact cache is very efficient for small
  * values but can have bad performance when used with big values as each read
@@ -277,10 +277,10 @@ class CompactCache : public ICompactCache {
    * @param val     Pointer to the memory location where the old value will be
    *                written to. Left untouched on a miss. Nullptr means we don't
    *                have a value, or we don't need to obtain the old value.
-   * @param size    Poiner to the memory location where the deleted value's size
-   *                will be written to if the value is variable. Fixed values
-   *                will NOT have their sizes written into this field. Nullptr
-   *                means caller does not need the size of the deleted value.
+   * @param size    Pointer to the memory location where the deleted value's
+   * size will be written to if the value is variable. Fixed values will NOT
+   * have their sizes written into this field. Nullptr means caller does not
+   * need the size of the deleted value.
    * @return        CCacheReturn with appropriate result type:
    *                FOUND (on hit - the value was deleted), NOTFOUND (on miss),
    *                TIMEOUT, ERROR (other error)
@@ -303,7 +303,7 @@ class CompactCache : public ICompactCache {
    * @param  val            Pointer to the memory location where the value will
    *                        be written to. Left untouched on a miss. Nullptr
    *                        means caller does not need the value.
-   * @param  size           Poiner to the memory location where the value's
+   * @param  size           Pointer to the memory location where the value's
    *                        size will be written to if the value is variable.
    *                        Fixed values will NOT have their sizes written into
    *                        this field. Nullptr means size info is not needed.
@@ -400,7 +400,7 @@ class CompactCache : public ICompactCache {
    *          int (*f)(Bucket*);
    *          The handler must return 0 on a miss, 1 on a hit, -1 in case of
    *          an error.
-   * @param Args Any extra params neeeded for Fn
+   * @param Args Any extra params needed for Fn
    *
    * @return 0 on a miss, 1 on a hit, -2 on timeout, -1 on other error
    */
@@ -412,18 +412,18 @@ class CompactCache : public ICompactCache {
                    Args... args);
 
   /** Free chunks whose index is between chunk_index_low, inclusive, and
-   * chunk_index_high, exclusive. Used which shrinking the cache. */
+   * chunk_index_high, exclusive. Used when shrinking the cache. */
   int tableChunksFree(size_t chunkIndexLow, size_t chunkIndexHigh);
 
   /**
    * Find the chunk on which the specified key would be located given the
-   * specified number of chunks. Used by tableFindBucket for looking update
+   * specified number of chunks. Used by tableFindBucket for looking up
    * buckets in the table (in which case numChunks = arena_->num_chunks) and
    * by tableRehashLarger (in which case numChunks is the new number of
    * chunks).
    *
    * @param numChunks Total number of chunks.
-   * @praam key        Key for which to compute the corresponding chunk.
+   * @param key        Key for which to compute the corresponding chunk.
    *
    * @return pointer to the first bucket of the desired chunk.
    */
@@ -433,7 +433,7 @@ class CompactCache : public ICompactCache {
    * Find out which bucket an entry might be in. Do this in a 2 step process:
    * 1. Use consistent hashing (furc_hash) to determine the table chunk.
    * 2. Treat each chunk as a small, single chunk compact cache--hash the key
-   *    again and us that to find the right bucket.
+   *    again and use that to find the right bucket.
    *
    * This means if chunk size remains fixed (ex 1MB) while the number of
    * chunks possibly varies (shrinking or growing the cache), a given key
@@ -568,7 +568,7 @@ class CompactCache : public ICompactCache {
 namespace detail {
 /**
  * Convenient macro for updating the stats about a particular operation and
- * returing an error value.
+ * returning an error value.
  * @param op_name Operation for which to update the stats.
  * @param rv return value:
  *    -1 -> error
@@ -1205,7 +1205,7 @@ template <typename C, typename A, typename B>
 bool CompactCache<C, A, B>::forEachBucket(const BucketCallBack& cb) {
   auto lock = std::shared_lock(resizeLock_);
 
-  // this obtains a resize lock so it cannot be occuring during an actual
+  // this obtains a resize lock so it cannot be occurring during an actual
   // resize; assert that
   XDCHECK_EQ(pendingNumChunks_.load(), 0u);
 
