@@ -24,6 +24,11 @@ uint64_t hashBuffer(BufferView key, uint64_t seed) {
 }
 
 uint32_t checksum(BufferView data, uint32_t startingChecksum) {
-  return folly::crc32(data.data(), data.size(), startingChecksum);
+  // CRC-32C (Castagnoli) with raw seed semantics (default 0, no final
+  // inversion). This matches the value produced by chained SSE4.2
+  // _mm_crc32_* instructions and by Intel DSA's CRC generation as used by
+  // the DTO library, so checksums can be offloaded to DSA and verified on
+  // CPU (and vice versa) interchangeably.
+  return folly::crc32c(data.data(), data.size(), startingChecksum);
 }
 } // namespace facebook::cachelib::navy

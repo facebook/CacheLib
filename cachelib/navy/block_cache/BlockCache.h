@@ -56,6 +56,13 @@ class BlockCache final : public Engine {
     DestructorCallback destructorCb;
     // Checksum data read/written
     bool checksum{};
+    // Offload value checksumming (fused with the value copy on the write
+    // path) to Intel DSA via the DTO library when available. Requires
+    // checksum to be enabled. No effect when built without DTO support.
+    bool checksumOffload{false};
+    // Minimum value size to use the offloaded (fused) path; smaller values
+    // use software copy+checksum to avoid accelerator submission overhead.
+    uint32_t checksumOffloadMinSize{4096};
     // Base offset and size (in bytes) of cache on the device
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
@@ -286,7 +293,10 @@ class BlockCache final : public Engine {
 
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 13;
+  // Version 14: navy::checksum switched from CRC-32 (IEEE) to CRC-32C
+  // (Castagnoli) for DSA offload compatibility. Entries written by prior
+  // versions would fail checksum verification.
+  static constexpr uint32_t kFormatVersion = 14;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache
@@ -535,6 +545,11 @@ class BlockCache final : public Engine {
   const ExpiredCheck checkExpired_;
   const DestructorCallback destructorCb_;
   const bool checksumData_{};
+
+  // Whether to offload value checksum+copy to DSA on the write path, and the
+  // minimum value size for which to do so. See Config::checksumOffload.
+  const bool checksumOffload_{};
+  const uint32_t checksumOffloadMinSize_{};
   // reference to the under-lying device.
   const Device& device_;
   // alloc alignment size indicates the granularity of entry sizes on device.

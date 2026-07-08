@@ -32,6 +32,7 @@ add_library (cachelib_navy
   block_cache/RegionManager.cpp
   block_cache/SparseMapIndex.cpp
   common/Buffer.cpp
+  common/ChecksumOffload.cpp
   common/Device.cpp
   common/FdpNvme.cpp
   common/Hash.cpp
@@ -65,6 +66,14 @@ target_link_libraries(cachelib_navy PUBLIC
   GTest::gmock
   )
 
+if (BUILD_WITH_DTO)
+  find_path(DTO_INCLUDE_DIR NAMES dto.h REQUIRED)
+  find_library(DTO_LIBRARY NAMES dto REQUIRED)
+  target_include_directories(cachelib_navy PRIVATE ${DTO_INCLUDE_DIR})
+  target_compile_definitions(cachelib_navy PRIVATE CACHELIB_BUILD_WITH_DTO)
+  target_link_libraries(cachelib_navy PUBLIC ${DTO_LIBRARY} accel-config)
+endif()
+
 install(TARGETS cachelib_navy
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
@@ -96,6 +105,7 @@ if (BUILD_TESTS)
   endfunction()
 
   add_source_test (common/tests/BufferTest.cpp)
+  add_source_test (common/tests/ChecksumOffloadTest.cpp)
   add_source_test (common/tests/HashTest.cpp)
   add_source_test (common/tests/UtilsTest.cpp)
   add_source_test (bighash/tests/BucketStorageTest.cpp)

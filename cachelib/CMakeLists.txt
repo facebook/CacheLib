@@ -44,6 +44,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_TESTS "If enabled, compile the tests." ON)
 
+option(BUILD_WITH_DTO
+  "If enabled, build with the DTO library for Intel DSA offload support." OFF)
+
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")

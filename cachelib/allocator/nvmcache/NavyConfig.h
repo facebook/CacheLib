@@ -535,6 +535,18 @@ class BlockCacheConfig {
     return *this;
   }
 
+  // Offload data checksumming (fused with the value copy on the write path)
+  // to Intel DSA via the DTO library. Requires data checksum to be enabled
+  // and CacheLib built with BUILD_WITH_DTO. @minSize is the minimum value
+  // size to use the offloaded path; smaller values are checksummed in
+  // software to avoid accelerator submission overhead.
+  BlockCacheConfig& setChecksumOffload(bool checksumOffload,
+                                       uint32_t minSize = 4096) noexcept {
+    checksumOffload_ = checksumOffload;
+    checksumOffloadMinSize_ = minSize;
+    return *this;
+  }
+
   BlockCacheConfig& setPreciseRemove(bool preciseRemove) noexcept {
     preciseRemove_ = preciseRemove;
     return *this;
@@ -616,6 +628,10 @@ class BlockCacheConfig {
 
   bool getDataChecksum() const { return dataChecksum_; }
 
+  bool getChecksumOffload() const { return checksumOffload_; }
+
+  uint32_t getChecksumOffloadMinSize() const { return checksumOffloadMinSize_; }
+
   uint64_t getSize() const { return size_; }
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
@@ -659,6 +675,10 @@ class BlockCacheConfig {
   uint32_t regionSize_{16 * 1024 * 1024};
   // Whether enabling data checksum for Navy BlockCache.
   bool dataChecksum_{true};
+  // Whether to offload data checksumming to Intel DSA (fused with the value
+  // copy on the write path), and the minimum value size to do so.
+  bool checksumOffload_{false};
+  uint32_t checksumOffloadMinSize_{4096};
   // Whether to remove an item by checking the key (true) or only the hash value
   // (false).
   bool preciseRemove_{false};
@@ -738,6 +758,14 @@ class BigHashConfig {
     return *this;
   }
 
+  // Offload bucket checksumming to Intel DSA via the DTO library. Most
+  // beneficial with large buckets (16KB+). Requires CacheLib built with
+  // BUILD_WITH_DTO.
+  BigHashConfig& setChecksumOffload(bool checksumOffload) noexcept {
+    checksumOffload_ = checksumOffload;
+    return *this;
+  }
+
   bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
 
   unsigned int getSizePct() const { return sizePct_; }
@@ -749,6 +777,8 @@ class BigHashConfig {
   uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
 
   uint8_t getNumMutexesPower() const { return numMutexesPower_; }
+
+  bool getChecksumOffload() const { return checksumOffload_; }
 
  private:
   // Percentage of how much of the device out of all is given to BigHash
@@ -765,6 +795,8 @@ class BigHashConfig {
   uint64_t smallItemMaxSize_{};
   // numMutexes = 1 << numMutexesPower_.
   uint8_t numMutexesPower_{14};
+  // Whether to offload bucket checksumming to Intel DSA.
+  bool checksumOffload_{false};
 };
 
 // Config for a pair of small,large engines.

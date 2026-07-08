@@ -678,6 +678,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)
+                         .setChecksumOffload(config_.navyChecksumOffload,
+                                             config_.navyChecksumOffloadMinSize)
                          .setCleanRegions(config_.navyCleanRegions,
                                           config_.navyCleanRegionThreads)
                          .setRegionSize(config_.navyRegionSizeMB * MB);
@@ -716,7 +718,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
           .setSizePctAndMaxItemSize(config_.navyBigHashSizePct,
                                     config_.navySmallItemMaxSize)
           .setBucketSize(config_.navyBigHashBucketSize)
-          .setBucketBfSize(config_.navyBloomFilterPerBucketSize);
+          .setBucketBfSize(config_.navyBloomFilterPerBucketSize)
+          .setChecksumOffload(config_.navyBigHashChecksumOffload);
     }
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
