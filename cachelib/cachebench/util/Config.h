@@ -185,7 +185,7 @@ struct ReplayGeneratorConfig : public JSONConfig {
   uint64_t relaxedSerialIntervalMs{500};
 
   // # of extra fields in trace sample. These are used to offer break down of
-  // stats by some workloadload generators.  These fields are placed after
+  // stats by some workload generators.  These fields are placed after
   // defined fields
   uint32_t numAggregationFields{0};
 
@@ -214,7 +214,7 @@ struct ReplayGeneratorConfig : public JSONConfig {
 // The class defines the admission policy at stressor level. The stressor
 // checks the admission policy first before inserting an item into cache.
 //
-// This base class always returns true, allowing the insersion.
+// This base class always returns true, allowing the insertion.
 class StressorAdmPolicy {
  public:
   virtual ~StressorAdmPolicy() = default;
@@ -380,7 +380,7 @@ using StressorConfigCustomizer = std::function<StressorConfig(StressorConfig)>;
 // Configs for setting up the cache allocator and specify load test parameters
 class CacheBenchConfig {
  public:
-  // read the json file in the path and intialize the cache bench
+  // read the json file in the path and initialize the cache bench
   // configuration. Some fb specific configuration is abstracted out of the
   // json file and is set through a custom setup to keep the dependencies
   // separate.
