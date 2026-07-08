@@ -315,7 +315,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   std::shared_ptr<T> peekToWrite(folly::StringPiece key);
 
   // Insert the object into the cache with given key. If the key exists in the
-  // cache, it will be replaced with new obejct.
+  // cache, it will be replaced with new object.
   //
   // @param key          the key to the object.
   // @param object       unique pointer for the object to be inserted.
@@ -394,7 +394,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return this->l1Cache_->getAccessContainerNumKeys();
   }
 
-  // Get direct access to the interal CacheAllocator.
+  // Get direct access to the internal CacheAllocator.
   // This is only used in tests.
   AllocatorT& getL1Cache() { return *this->l1Cache_; }
 
@@ -637,7 +637,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   void initWorkers();
 
-  // Allocate an item handle from the interal cache allocator. This item's
+  // Allocate an item handle from the internal cache allocator. This item's
   // storage is used to cache pointer to objects in object-cache.
   typename AllocatorT::WriteHandle allocateFromL1(folly::StringPiece key,
                                                   uint32_t ttl,
@@ -865,8 +865,8 @@ void ObjectCache<AllocatorT>::init() {
   XDCHECK_GE(slabsPerShard * allocsPerSlab, allocsPerShard);
   XDCHECK_LT(l1PlaceHoldersPerShard, allocsPerSlab);
 
-  // allocsPerShard is celing of the division by numShards, meaning
-  // additional number (i.e., extraLimit) of placesholders need to be created
+  // allocsPerShard is ceiling of the division by numShards, meaning
+  // additional number (i.e., extraLimit) of placeholders need to be created
   const size_t extraLimit =
       allocsPerShard * config_.l1NumShards - config_.l1EntriesLimit;
   XDCHECK_GE(allocsPerShard * config_.l1NumShards, config_.l1EntriesLimit);
@@ -1023,7 +1023,7 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   if (replaced) {
     replaces_.inc();
     auto itemPtr = getAlignedItemPtr(replaced->getMemory());
-    // Just release the handle. Cache destorys object when all handles
+    // Just release the handle. Cache destroys object when all handles
     // released.
     auto deleter = [h = std::move(replaced)](T*) {};
     replacedPtr = std::shared_ptr<T>(reinterpret_cast<T*>(itemPtr->objectPtr),
