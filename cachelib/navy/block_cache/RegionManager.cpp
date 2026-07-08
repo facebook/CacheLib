@@ -636,7 +636,7 @@ void RegionManager::restoreUntrackedRegions(
     }
     if (regions_[i]->getNumItems() == 0 &&
         cleanRegions_.size() < numCleanRegions_) {
-      cleanRegions_.push_back(RegionId{i});
+      cleanRegions_.emplace_back(i);
     } else {
       track(RegionId{i});
     }
