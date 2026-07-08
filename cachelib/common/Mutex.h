@@ -75,7 +75,7 @@ class PThreadMutexImpl {
   //
   // @return none
   // @throw pthread specific system_error that indicates whether there was an
-  // error in mutex state and guarantes. See man pthread_mutex_lock for full
+  // error in mutex state and guarantees. See man pthread_mutex_lock for full
   // details.
   void lock() {
     const int err = pthread_mutex_lock(mutex_.get());
@@ -119,7 +119,7 @@ class PThreadMutexImpl {
 
 // This looks very hacky/clowny, but is what memcached today uses in
 // production for its LRU mutex. Seems to work very well for CI like workloads
-// where all we do is LRU udpates and very few inserts/evictions.
+// where all we do is LRU updates and very few inserts/evictions.
 template <unsigned int spinCounter>
 class PThreadSpinMutexImpl {
  public:
@@ -128,7 +128,7 @@ class PThreadSpinMutexImpl {
   //
   // @return none
   // @throw pthread specific system_error that indicates whether there was an
-  // error in mutex state and guarantes. See man pthread_mutex_lock for full
+  // error in mutex state and guarantees. See man pthread_mutex_lock for full
   // details.
   void lock() {
     while (!mutex_.try_lock()) {
@@ -221,7 +221,7 @@ class PThreadSpinLock {
 };
 
 // a lock that provides a read and write holder, but both are exclusive. this
-// is used to provide the same API to chained hash table so that we dont have
+// is used to provide the same API to chained hash table so that we don't have
 // to template between using a RW mutex and a mutex
 struct RWMockLock {
   using Lock = folly::MicroSpinLock;
