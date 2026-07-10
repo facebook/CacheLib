@@ -1249,6 +1249,7 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
   auto config = this->l1Cache_->serializeConfigParams();
   config["l1EntriesLimit"] = std::to_string(config_.l1EntriesLimit);
   config["l1NumShards"] = std::to_string(config_.l1NumShards);
+  config["maxKeySizeBytes"] = std::to_string(config_.maxKeySizeBytes);
   config["aggregatePoolStats"] = config_.aggregatePoolStats ? "true" : "false";
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {

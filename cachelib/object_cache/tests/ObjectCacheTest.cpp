@@ -876,6 +876,20 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(stats.getCounts().at("objcache.total_object_size_limit"), 100);
   }
 
+  void testSerializeConfigMaxKeySize() {
+    constexpr uint32_t kMaxKeySize = 1024;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit */)
+        .setMaxKeySizeBytes(kMaxKeySize)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    auto objcache = ObjectCache::create(config);
+
+    EXPECT_EQ(objcache->serializeConfigParams().at("maxKeySizeBytes"),
+              std::to_string(kMaxKeySize));
+  }
+
   void testMultithreadObjectSizeTrackingWithMutation() {
     if (!folly::usingJEMalloc()) {
       return;
@@ -2030,6 +2044,9 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithSizeUpdate) {
 }
 TYPED_TEST(ObjectCacheTest, RuntimeTotalObjectSizeLimitVisibility) {
   this->testRuntimeTotalObjectSizeLimitVisibility();
+}
+TYPED_TEST(ObjectCacheTest, SerializeConfigMaxKeySize) {
+  this->testSerializeConfigMaxKeySize();
 }
 TYPED_TEST(ObjectCacheTest, MultithreadObjectSizeTrackingWithMutation) {
   this->testMultithreadObjectSizeTrackingWithMutation();
