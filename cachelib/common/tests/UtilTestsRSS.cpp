@@ -20,7 +20,6 @@
 #include <gtest/gtest.h>
 #include <sys/mman.h>
 
-#include <atomic>
 #include <thread>
 
 #include "cachelib/common/Utils.h"

@@ -16,7 +16,6 @@
 
 #include "cachelib/common/PeriodicWorker.h"
 
-#include <folly/Memory.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
 
