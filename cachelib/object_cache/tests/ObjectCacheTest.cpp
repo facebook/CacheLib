@@ -2750,4 +2750,88 @@ TEST(ObjectCacheTest, ExpandNeverExceedsL1EntriesLimit) {
         << "currentEntriesLimit exceeded l1EntriesLimit on cycle " << cycle;
   }
 }
+
+TEST(ObjectCacheTest, CalculateCacheCapacity) {
+  constexpr uint32_t kMaxKeySize = 255;
+  constexpr size_t kNumShards = 4;
+  constexpr uint32_t kExpectedAllocSize = 304;
+  constexpr size_t kExpectedAllocsPerSlab = Slab::kSize / kExpectedAllocSize;
+
+  ASSERT_EQ(ObjectCache::getL1AllocSize(kMaxKeySize), kExpectedAllocSize);
+
+  // Single-slab boundary: entries == allocsPerSlab * numShards.
+  {
+    constexpr size_t kEntries = kExpectedAllocsPerSlab * kNumShards;
+    auto info =
+        ObjectCache::calculateCacheCapacity(kEntries, kNumShards, kMaxKeySize);
+    EXPECT_EQ(info.l1AllocSize, kExpectedAllocSize);
+    EXPECT_EQ(info.allocsPerSlab, kExpectedAllocsPerSlab);
+    EXPECT_EQ(info.allocsPerShard, kExpectedAllocsPerSlab);
+    EXPECT_EQ(info.slabsPerShard, 1u);
+    EXPECT_EQ(info.perPoolSize, Slab::kSize);
+    // totalCacheSize = slabsPerShard * numShards slabs + 1 overhead slab.
+    EXPECT_EQ(info.totalCacheSize, (kNumShards + 1) * Slab::kSize);
+    EXPECT_EQ(info.maxEntriesForOneSlab, kEntries);
+  }
+
+  // One entry past the boundary needs a second slab per shard.
+  {
+    constexpr size_t kEntries = kExpectedAllocsPerSlab * kNumShards + 1;
+    auto info =
+        ObjectCache::calculateCacheCapacity(kEntries, kNumShards, kMaxKeySize);
+    EXPECT_EQ(info.allocsPerShard, kExpectedAllocsPerSlab + 1);
+    EXPECT_EQ(info.slabsPerShard, 2u);
+    EXPECT_EQ(info.perPoolSize, 2u * Slab::kSize);
+    EXPECT_EQ(info.totalCacheSize, (2 * kNumShards + 1) * Slab::kSize);
+    EXPECT_EQ(info.maxEntriesForOneSlab, kExpectedAllocsPerSlab * kNumShards);
+  }
+
+  // maxEntriesForOneSlab is the largest l1EntriesLimit producing slabsPerShard
+  // == 1; one entry beyond it must require a second slab.
+  {
+    auto base = ObjectCache::calculateCacheCapacity(
+        kExpectedAllocsPerSlab * kNumShards, kNumShards, kMaxKeySize);
+    auto info = ObjectCache::calculateCacheCapacity(
+        base.maxEntriesForOneSlab + 1, kNumShards, kMaxKeySize);
+    EXPECT_EQ(info.slabsPerShard, 2u);
+  }
+
+  // Multi-slab case.
+  {
+    constexpr size_t kEntries = kExpectedAllocsPerSlab * kNumShards * 3;
+    auto info =
+        ObjectCache::calculateCacheCapacity(kEntries, kNumShards, kMaxKeySize);
+    EXPECT_EQ(info.slabsPerShard, 3u);
+    EXPECT_EQ(info.perPoolSize, 3u * Slab::kSize);
+    EXPECT_EQ(info.totalCacheSize, (3 * kNumShards + 1) * Slab::kSize);
+  }
+}
+
+TEST(ObjectCacheTest, CalculateCacheCapacityMatchesRealCache) {
+  constexpr uint32_t kMaxKeySize = 255;
+  constexpr size_t kNumShards = 4;
+  const size_t allocsPerSlab =
+      Slab::kSize / ObjectCache::getL1AllocSize(kMaxKeySize);
+  const size_t kEntries = allocsPerSlab * kNumShards * 3;
+  auto info =
+      ObjectCache::calculateCacheCapacity(kEntries, kNumShards, kMaxKeySize);
+
+  ObjectCache::Config config;
+  config.setCacheName("calculate_capacity_test")
+      .setItemDestructor(
+          [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); })
+      .setCacheCapacity(kEntries, /*totalObjectSizeLimit=*/0,
+                        /*sizeControllerIntervalMs=*/0)
+      .setMaxKeySizeBytes(kMaxKeySize)
+      .setNumShards(kNumShards);
+  auto cache = ObjectCache::create(config);
+
+  auto& l1 = cache->getL1Cache();
+  const auto poolIds = l1.getPoolIds();
+  EXPECT_EQ(poolIds.size(), kNumShards);
+  for (auto pid : poolIds) {
+    EXPECT_EQ(l1.getPoolStats(pid).poolSize, info.perPoolSize);
+  }
+}
+
 } // namespace facebook::cachelib::objcache2::test
