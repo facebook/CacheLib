@@ -1170,6 +1170,16 @@ class CacheAllocator : public CacheBase {
     return allocator_->getAllocInfo(memory);
   }
 
+  // total allocated size of the item and all of its chained items.
+  uint64_t getTotalAllocSize(const Item& item,
+                             folly::Range<ChainedItemIter> chainedItems) const {
+    uint64_t size = getAllocInfo(item.getMemory()).allocSize;
+    for (const auto& c : chainedItems) {
+      size += getAllocInfo(c.getMemory()).allocSize;
+    }
+    return size;
+  }
+
   // return the ids for the set of existing pools in this cache.
   std::set<PoolId> getPoolIds() const override final {
     return allocator_->getPoolIds();

@@ -342,6 +342,10 @@ TYPED_TEST(BaseAllocatorTest, ChainedAllocsIteration) {
   this->testChainedAllocsIteration();
 }
 
+TYPED_TEST(BaseAllocatorTest, GetTotalAllocSize) {
+  this->testGetTotalAllocSize();
+}
+
 TYPED_TEST(BaseAllocatorTest, ReplaceChainedItem) {
   this->testReplaceChainedItem();
 }

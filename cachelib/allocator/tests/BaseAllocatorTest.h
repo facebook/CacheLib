@@ -2501,6 +2501,38 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testGetTotalAllocSize() {
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+    config.setCacheSize(10 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    auto parent = util::allocateAccessible(alloc, poolId, "parent", 100);
+    ASSERT_NE(nullptr, parent);
+    const int nChainedAllocs = 3;
+    for (int i = 0; i < nChainedAllocs; ++i) {
+      auto chained = alloc.allocateChainedItem(parent, 100 * (i + 1));
+      ASSERT_NE(nullptr, chained);
+      alloc.addChainedItem(parent, std::move(chained));
+    }
+
+    auto handle = alloc.find("parent");
+    auto chainedAllocs = alloc.viewAsChainedAllocs(handle);
+    auto chain = chainedAllocs.getChain();
+
+    // Independently sum the allocation-class size across the whole chain.
+    uint64_t expected = alloc.getAllocInfo(handle->getMemory()).allocSize;
+    for (const auto& c : chain) {
+      expected += alloc.getAllocInfo(c.getMemory()).allocSize;
+    }
+    // The chained parts must contribute beyond the parent's own block.
+    ASSERT_GT(expected, alloc.getAllocInfo(handle->getMemory()).allocSize);
+
+    ASSERT_EQ(expected, alloc.getTotalAllocSize(*handle, chain));
+  }
+
   // create a chain of allocations, replace the allocation and ensure that the
   // order is preserved (multithreaded version).
   void testChainedAllocsReplaceInChainMultithread() {
