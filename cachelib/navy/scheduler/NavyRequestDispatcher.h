@@ -99,6 +99,7 @@ class NavyRequestDispatcher {
   // notification
   // @param name            name of the dispatcher
   // @param maxOutstanding  maximum number of concurrently running requests
+  // @param stackSize       size of fiber stack
   NavyRequestDispatcher(JobScheduler& scheduler,
                         folly::StringPiece name,
                         size_t maxOutstanding,

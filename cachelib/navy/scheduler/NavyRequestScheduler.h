@@ -44,10 +44,13 @@ class NavyRequestScheduler : public JobScheduler {
   // Threshold to declare as unhealthy
   static constexpr size_t kHealthMaxStallTimeMs = 1000;
 
-  // @param readerThreads   number of threads for the read scheduler
-  // @param writerThreads   number of threads for the write scheduler
-  // @param numShardsPower  power of two specification for sharding internally
-  //                        to avoid contention and queueing
+  // @param numReaderThreads    number of threads for the read scheduler
+  // @param numWriterThreads    number of threads for the write scheduler
+  // @param maxNumReads         max number of outstanding reads
+  // @param maxNumWrites        max number of outstanding writes
+  // @param stackSize           size of fiber stack
+  // @param reqOrderShardPower  power of two specification for sharding
+  //                            internally to avoid contention and queueing
   explicit NavyRequestScheduler(size_t numReaderThreads,
                                 size_t numWriterThreads,
                                 size_t maxNumReads,
