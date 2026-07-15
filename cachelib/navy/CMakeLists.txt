@@ -66,13 +66,9 @@ target_link_libraries(cachelib_navy PUBLIC
   GTest::gmock
   )
 
-if (BUILD_WITH_DTO)
-  find_path(DTO_INCLUDE_DIR NAMES dto.h REQUIRED)
-  find_library(DTO_LIBRARY NAMES dto REQUIRED)
-  target_include_directories(cachelib_navy PRIVATE ${DTO_INCLUDE_DIR})
-  target_compile_definitions(cachelib_navy PRIVATE CACHELIB_BUILD_WITH_DTO)
-  target_link_libraries(cachelib_navy PUBLIC ${DTO_LIBRARY} accel-config)
-endif()
+# DTO (DSA offload runtime) is resolved in the top-level CMakeLists.txt and
+# linked PUBLIC into cachelib_common, so cachelib_navy inherits DTO::dto and
+# the CACHELIB_BUILD_WITH_DTO definition transitively.
 
 install(TARGETS cachelib_navy
         EXPORT cachelib-exports
