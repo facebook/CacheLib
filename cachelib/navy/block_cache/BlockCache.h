@@ -550,6 +550,11 @@ class BlockCache final : public Engine {
   // minimum value size for which to do so. See Config::checksumOffload.
   const bool checksumOffload_{};
   const uint32_t checksumOffloadMinSize_{};
+
+  // Computes the checksum of @value for verification (lookup, reclaim and
+  // cleanup paths), offloading to DSA when checksum offload is enabled and
+  // the value meets the size gate.
+  uint32_t valueChecksum(BufferView value) const;
   // reference to the under-lying device.
   const Device& device_;
   // alloc alignment size indicates the granularity of entry sizes on device.
