@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/container/small_vector.h>
@@ -658,7 +659,7 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
     auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
     auto blockSize = navyConfig.getBlockSize();
     if (blockSize % encryptionBlockSize != 0) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Encryption enabled but the encryption block granularity is not "
           "aligned to the navy block size. encryption block size: {}, "
           "block size: {}",
@@ -670,12 +671,12 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
       auto bucketSize = navyConfig.bigHash().getBucketSize();
       if (bucketSize % encryptionBlockSize != 0) {
         throw std::invalid_argument(
-            folly::sformat("Encryption enabled but the encryption block "
-                           "granularity is not aligned to the navy "
-                           "big hash bucket size. ecryption block "
-                           "size: {}, bucket size: {}",
-                           encryptionBlockSize,
-                           bucketSize));
+            fmt::format("Encryption enabled but the encryption block "
+                        "granularity is not aligned to the navy "
+                        "big hash bucket size. ecryption block "
+                        "size: {}, bucket size: {}",
+                        encryptionBlockSize,
+                        bucketSize));
       }
     }
   }
@@ -1156,7 +1157,7 @@ template <typename C>
 std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item,
                                                   uint8_t poolId) {
   if (item.isChainedItem()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Chained item can not be flushed separately {}", item.toString()));
   }
 
@@ -1220,13 +1221,13 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   // should not be recording a write for an nvmclean item unless it is marked
   // as evicted from nvmcache.
   if (item.isNvmClean() && !item.isNvmEvicted()) {
-    throw std::runtime_error(folly::sformat(
+    throw std::runtime_error(fmt::format(
         "Item is not nvm evicted and nvm clean {}", item.toString()));
   }
 
   if (item.isChainedItem()) {
     throw std::invalid_argument(
-        folly::sformat("Invalid item {}", item.toString()));
+        fmt::format("Invalid item {}", item.toString()));
   }
 
   // we skip writing if we know that the item is expired or has chained items
@@ -1664,8 +1665,8 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
       return;
     }
     // we set disable navy since we failed to delete something
-    disableNavy(folly::sformat("Delete Failure. status = {}",
-                               static_cast<int>(status)));
+    disableNavy(
+        fmt::format("Delete Failure. status = {}", static_cast<int>(status)));
   };
 
   navyCache_->removeAsync(HashedKey::precomputed(ctx.key(), hk.keyHash()),

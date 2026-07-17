@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/json/dynamic.h>
 #include <folly/logging/xlog.h>
 
@@ -365,10 +366,10 @@ class BlockCacheReinsertionConfig {
           "probability threshold");
     }
     if (pctThreshold > 100) {
-      throw std::invalid_argument(folly::sformat(
-          "reinsertion percentage threshold should between 0 and "
-          "100, but {} is set",
-          pctThreshold));
+      throw std::invalid_argument(
+          fmt::format("reinsertion percentage threshold should between 0 and "
+                      "100, but {} is set",
+                      pctThreshold));
     }
     pctThreshold_ = pctThreshold;
     return *this;
@@ -378,7 +379,7 @@ class BlockCacheReinsertionConfig {
       std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
           makeCustomPolicy) {
     if (hitsThreshold_ > 0 || pctThreshold_ > 0) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Already set reinsertion hits threshold {}, or reinsertion "
           "probability threshold {} while trying to set a custom reinsertion "
           "policy.",
@@ -392,7 +393,7 @@ class BlockCacheReinsertionConfig {
     if ((pctThreshold_ > 0) + (hitsThreshold_ > 0) +
             (makeCustomPolicy_ != nullptr) >
         1) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "More than one configuration for reinsertion policy is specified: "
           "pctThreshold_ {}, hitsThreshold_ {}, custom_ {}",
           pctThreshold_, hitsThreshold_, makeCustomPolicy_ != nullptr));

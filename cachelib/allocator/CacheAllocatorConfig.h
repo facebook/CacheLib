@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/CPortability.h>
 #include <folly/Optional.h>
 #include <folly/json/DynamicConverter.h>
@@ -1068,7 +1069,7 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureMemoryTiers(
     const MemoryTierConfigs& config) {
   if (config.size() > kMaxCacheMemoryTiers) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "Too many memory tiers. The number of supported tiers is {}.",
         kMaxCacheMemoryTiers));
   }
@@ -1292,7 +1293,7 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
   // Configured cache size should not exceed the maximal addressable space for
   // cache.
   if (size > maxCacheSize) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "config cache size: {}  exceeds max addressable space for cache: {}",
         size,
         maxCacheSize));

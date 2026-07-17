@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/Format.h>
 #include <folly/Range.h>
 #include <folly/container/F14Map.h>
@@ -100,7 +101,7 @@ class ContextMap {
     auto it = map_.find(ctxKey);
     if (it != map_.end()) {
       throw std::invalid_argument(
-          folly::sformat("Duplicate {} for key {}", T::type(), key));
+          fmt::format("Duplicate {} for key {}", T::type(), key));
     }
 
     auto [kv, inserted] = map_.emplace(ctxKey, std::move(ctx));
@@ -123,10 +124,10 @@ class ContextMap {
     size_t numRemoved = map_.erase(ctxKey);
     if (numRemoved != 1) {
       throw std::invalid_argument(
-          folly::sformat("Invalid {} state for {}, found {}",
-                         T::type(),
-                         ctx.key(),
-                         numRemoved));
+          fmt::format("Invalid {} state for {}, found {}",
+                      T::type(),
+                      ctx.key(),
+                      numRemoved));
     }
   }
 
