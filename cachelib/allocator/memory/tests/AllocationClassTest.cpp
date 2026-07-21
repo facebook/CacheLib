@@ -25,6 +25,7 @@
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
+#include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Serialization.h"
 
 using namespace facebook::cachelib::tests;
@@ -481,6 +482,84 @@ TEST_F(AllocationClassTest, SlabReleaseAbort) {
     ac.free(alloc);
   }
   ac.completeSlabRelease(std::move(ctx3));
+}
+
+TEST_F(AllocationClassTest, SlabReleaseAbortDuringPrunePreservesState) {
+  // A slab release aborted while pruning the free list (e.g. shouldAbortFn
+  // firing on shutdown) must not orphan the victim slab nor lose the freed
+  // allocs that were already marked in the release alloc map.
+  auto slabAlloc = createSlabAllocator(2);
+  const PoolId pid = 2;
+  const ClassId cid = 3;
+
+  auto slab = slabAlloc->makeNewSlab(pid);
+  ASSERT_NE(slab, nullptr);
+
+  // 64-byte allocs so a single slab holds far more than kFreeAllocsPruneLimit
+  // (4096) allocations, forcing pruneFreeAllocs to run multiple batches.
+  const auto allocSize = 64;
+  AllocationClass ac(cid, pid, allocSize, *slabAlloc);
+  ac.addSlab(slab);
+
+  const unsigned int nPerSlab = ac.getAllocsPerSlab();
+  ASSERT_GT(nPerSlab, 4096u);
+
+  std::vector<void*> allocations;
+  for (unsigned int i = 0; i < nPerSlab; i++) {
+    auto alloc = ac.allocate();
+    ASSERT_NE(alloc, nullptr);
+    allocations.push_back(alloc);
+  }
+  ASSERT_EQ(ac.allocate(), nullptr);
+
+  // Free more than one prune batch worth of allocations.
+  const unsigned int numFreed = 5000;
+  for (unsigned int i = 0; i < numFreed; i++) {
+    ac.free(allocations[i]);
+  }
+
+  const auto statsBefore = ac.getStats();
+  ASSERT_EQ(statsBefore.totalSlabs(), 1);
+  ASSERT_EQ(statsBefore.freeAllocs, numFreed);
+  ASSERT_EQ(statsBefore.activeAllocs, nPerSlab - numFreed);
+
+  // shouldAbortFn is checked once per prune iteration. Run one iteration to
+  // mark 4096 allocs as free, then abort on the second to validate we restore
+  // those 4096 to freedAllocations_.
+  unsigned int abortChecks = 0;
+  auto shouldAbort = [&abortChecks]() { return ++abortChecks >= 2; };
+
+  ASSERT_THROW(ac.startSlabRelease(
+                   SlabReleaseMode::kResize, allocations[0], shouldAbort),
+               exception::SlabReleaseAborted);
+
+  // The abort must leave the class exactly as it was before the release.
+  const auto statsAfter = ac.getStats();
+  ASSERT_EQ(statsAfter.totalSlabs(), statsBefore.totalSlabs());
+  ASSERT_EQ(statsAfter.freeAllocs, statsBefore.freeAllocs);
+  ASSERT_EQ(statsAfter.activeAllocs, statsBefore.activeAllocs);
+
+  // Save/restore: the restored class must reproduce the same state, proving the
+  // slab and its freed allocs are not lost across a persisted restart.
+  uint8_t buffer[SerializationBufferSize];
+  Serializer serializer(buffer, buffer + SerializationBufferSize);
+  serializer.serialize(ac.saveState());
+
+  Deserializer deserializer(buffer, buffer + SerializationBufferSize);
+  AllocationClass ac2(
+      deserializer.deserialize<serialization::AllocationClassObject>(),
+      pid,
+      *slabAlloc);
+  ASSERT_TRUE(isSameAllocationClass(ac, ac2));
+
+  // Every freed alloc is reusable in the restored class (none leaked), and no
+  // extra capacity appeared.
+  for (unsigned int i = 0; i < numFreed; i++) {
+    auto alloc = ac2.allocate();
+    ASSERT_NE(alloc, nullptr);
+    ASSERT_TRUE(slabAlloc->isMemoryInSlab(alloc, slab));
+  }
+  ASSERT_EQ(ac2.allocate(), nullptr);
 }
 
 TEST_F(AllocationClassTest, SlabReleaseAllFree) {

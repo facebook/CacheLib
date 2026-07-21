@@ -401,6 +401,13 @@ class AllocationClass {
   // @throws std::out_of_range if alloc map does not exist
   std::vector<bool>& getSlabReleaseAllocMapLocked(const Slab* slab);
 
+  // Returns allocations that were marked as freed in the slab's release alloc
+  // map back onto freedAllocations_. Used when unwinding an aborted slab
+  // release so free allocs are not leaked. Must be called with lock_ held.
+  //
+  // @param slab  the slab whose release alloc map is being unwound
+  void restoreFreedAllocsLocked(const Slab* slab);
+
   // acquires a new slab for this allocation class.
   void addSlabLocked(Slab* slab);
 
