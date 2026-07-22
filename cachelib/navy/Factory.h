@@ -50,6 +50,11 @@ class BlockCacheProto {
   // Enable data checksumming (default: disabled)
   virtual void setChecksum(bool enable) = 0;
 
+  // (Optional) Offload data checksumming to Intel DSA (fused with the value
+  // copy on the write path) for values of at least @minSize bytes. Requires
+  // checksumming enabled and a build with DTO support.
+  virtual void setChecksumOffload(bool enable, uint32_t minSize) = 0;
+
   // set*EvictionPolicy function family: sets eviction policy. Supports LRU,
   // LRU with deferred insert and FIFO. Must set up one of them.
 
@@ -135,6 +140,10 @@ class BigHashProto {
   // (Optional) Set number of mutexes for bucket locking as power of 2.
   // numMutexes = 1 << numMutexesPower. Default: 14 (16K mutexes)
   virtual void setNumMutexesPower(uint8_t numMutexesPower) = 0;
+
+  // (Optional) Offload bucket checksumming to Intel DSA. Requires a build
+  // with DTO support.
+  virtual void setChecksumOffload(bool enable) = 0;
 };
 
 class EnginePairProto {
