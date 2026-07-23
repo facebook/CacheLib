@@ -290,7 +290,7 @@ class TraceFileStream {
     if (traceFileName[0] == '/') {
       filePath = traceFileName;
     } else {
-      filePath = folly::sformat("{}/{}", configPath_, traceFileName);
+      filePath = fmt::format("{}/{}", configPath_, traceFileName);
     }
 
     infile_.open(filePath);
@@ -349,7 +349,7 @@ class BinaryFileStream {
     if (infileName_[0] == '/') {
       filePath = infileName_;
     } else {
-      filePath = folly::sformat("{}/{}", config.configPath, infileName_);
+      filePath = fmt::format("{}/{}", config.configPath, infileName_);
     }
     fd_ = open(filePath.c_str(), O_RDONLY);
     // Get the size of the file

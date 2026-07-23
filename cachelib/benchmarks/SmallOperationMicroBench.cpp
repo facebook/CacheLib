@@ -195,7 +195,7 @@ void compareString(int len) {
   std::mt19937 gen;
   std::uniform_int_distribution<int> dist(0, kObjects - 1);
   {
-    Timer t{folly::sformat("Read String - {: <3}", len), kOps};
+    Timer t{fmt::format("Read String - {: <3}", len), kOps};
     for (uint64_t i = 0; i < kOps; i++) {
       // Read from the vector of strings (first memory load)
       auto& k1 = keys[dist(gen)];

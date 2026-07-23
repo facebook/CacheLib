@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/format.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
@@ -195,7 +196,7 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
   const int nKeys = 1024;
 
   for (unsigned int i = 0; i < nKeys; i++) {
-    auto key = folly::sformat("key{}", i);
+    auto key = fmt::format("key{}", i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
     nvm.insertOrReplace(it);
@@ -221,7 +222,7 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
   // reading items from navy.
   for (unsigned int i = nKeys + 100; i-- > 0;) {
     unsigned int index = i;
-    auto key = folly::sformat("key{}", index);
+    auto key = fmt::format("key{}", index);
     auto hdl = this->fetch(key, false /* ramOnly */);
     hdl.wait();
     if (index < nKeys) {
@@ -234,14 +235,14 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
         // associated with it on the local thread. It is adjusted at destruction
         // time to be net-zero for handle count (first an Inc, and then a Dec).
         EXPECT_EQ(0, nvm.getHandleCountForThread())
-            << folly::sformat("key: {} was read from Navy", key);
+            << fmt::format("key: {} was read from Navy", key);
         ASSERT_TRUE(isClean);
         ASSERT_TRUE(hdl.wentToNvm());
       } else {
         // A handle read from ram-cache will have incremented the thread-local
         // handle count when we have acquired the handle.
         EXPECT_EQ(1, nvm.getHandleCountForThread())
-            << folly::sformat("key: {} was read from RAM cache", key);
+            << fmt::format("key: {} was read from RAM cache", key);
         ASSERT_FALSE(isClean);
       }
     } else {
@@ -1922,7 +1923,7 @@ TEST_F(NvmCacheTest, NavyStats) {
 TEST_F(NvmCacheTest, Raid0Basic) {
   auto& config = getConfig();
   auto& navyConfig = config.nvmConfig->navyConfig;
-  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  auto filePath = fmt::format("/tmp/nvmcache-navy-raid0/{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
@@ -1988,7 +1989,7 @@ TEST_F(NvmCacheTest, Raid0Basic) {
 TEST_F(NvmCacheTest, Raid0OrderChange) {
   auto& config = getConfig();
   auto& navyConfig = config.nvmConfig->navyConfig;
-  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  auto filePath = fmt::format("/tmp/nvmcache-navy-raid0/{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
@@ -2001,7 +2002,7 @@ TEST_F(NvmCacheTest, Raid0OrderChange) {
   // that everything is correct.
   std::string val = "foobar";
   int nKeys = 100;
-  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+  auto makeKey = [&](int i) { return fmt::format("blah-{}", i); };
 
   this->convertToShmCache();
   {
@@ -2062,7 +2063,7 @@ TEST_F(NvmCacheTest, Raid0OrderChange) {
 TEST_F(NvmCacheTest, Raid0NumFilesChange) {
   auto& config = getConfig();
   auto& navyConfig = config.nvmConfig->navyConfig;
-  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  auto filePath = fmt::format("/tmp/nvmcache-navy-raid0/{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
@@ -2075,7 +2076,7 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange) {
   // that everything is correct.
   std::string val = "foobar";
   int nKeys = 100;
-  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+  auto makeKey = [&](int i) { return fmt::format("blah-{}", i); };
 
   this->convertToShmCache();
   {
@@ -2135,7 +2136,7 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange) {
 TEST_F(NvmCacheTest, Raid0SizeChange) {
   auto& config = getConfig();
   auto& navyConfig = config.nvmConfig->navyConfig;
-  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  auto filePath = fmt::format("/tmp/nvmcache-navy-raid0/{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
   std::vector<std::string> vec = {filePath + "/CACHE0", filePath + "/CACHE1",
@@ -2147,7 +2148,7 @@ TEST_F(NvmCacheTest, Raid0SizeChange) {
   // that everything is correct.
   std::string val = "foobar";
   int nKeys = 100;
-  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+  auto makeKey = [&](int i) { return fmt::format("blah-{}", i); };
 
   this->convertToShmCache();
   {
@@ -2473,7 +2474,7 @@ TEST_F(NvmCacheTest, testSampleItem) {
   // Insert items until either RAM or NVM cache is full
   for (; numEvicted == 0 && nKeys < numMax; nKeys++) {
     unsigned ttl = nKeys % 2 == 0 ? kEvenKeyTTL : 0;
-    auto key = folly::sformat("key{}", nKeys);
+    auto key = fmt::format("key{}", nKeys);
     // the pool's allocsize is
     auto it = cache.allocate(pid, key, 16 * 1024, ttl);
     ASSERT_NE(nullptr, it);
@@ -3033,7 +3034,7 @@ TEST_F(NvmCacheTest, AccessTimeMapPopulatedOnDramEviction) {
   auto now = util::getCurrentTimeSec();
   int populated = 0;
   for (int i = 0; i < nKeys; i++) {
-    auto key = folly::sformat("atm_multi_{}", i);
+    auto key = fmt::format("atm_multi_{}", i);
     HashedKey hk{key};
     auto ts = atm->get(hk.keyHash());
     if (ts != std::nullopt) {
@@ -3067,7 +3068,7 @@ TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedForBigHashItems) {
   // bit is not set for BigHash items, preventing updateAccessTime().
   auto* atm = this->getAccessTimeMap();
   for (int i = 0; i < nKeys; i++) {
-    auto key = folly::sformat("bh_{}", i);
+    auto key = fmt::format("bh_{}", i);
     HashedKey hk{key};
     auto ts = atm->get(hk.keyHash());
     EXPECT_EQ(std::nullopt, ts)
@@ -3090,7 +3091,7 @@ TEST_F(NvmCacheTest, AccessTimeMapNotUpdatedOnRegularEviction) {
   // Evictions of these items go through the NVM put path, not
   // the updateAccessTime path.
   for (int i = 0; i < 1024; i++) {
-    auto key = folly::sformat("regular_{}", i);
+    auto key = fmt::format("regular_{}", i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);
@@ -3140,7 +3141,7 @@ TEST_F(NvmCacheTest, AccessTimeMapCleanupTest) {
   constexpr int kNumGroups = 4;
   std::array<std::vector<std::string>, kNumGroups> groups;
   for (int i = 0; i < nKeys; i++) {
-    auto key = folly::sformat("atm_cl_{}", i);
+    auto key = fmt::format("atm_cl_{}", i);
     HashedKey hk{key};
     if (atm->get(hk.keyHash()) != std::nullopt) {
       groups[i % kNumGroups].push_back(key);
@@ -3183,7 +3184,7 @@ TEST_F(NvmCacheTest, AccessTimeMapCleanupTest) {
   const uint32_t numKeysPerRegion =
       config_.blockCache().getRegionSize() / allocSize;
   for (int i = 0; i < 2048; i++) {
-    auto key = folly::sformat("nvm_evictor_{}", i);
+    auto key = fmt::format("nvm_evictor_{}", i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);
@@ -3234,7 +3235,7 @@ TEST_F(NvmCacheTest, AccessTimeMapSurvivesWarmRoll) {
   auto timeBefore = util::getCurrentTimeSec();
   auto evictBefore = this->evictionCount();
   for (int i = 0; i < 1024; i++) {
-    auto key = folly::sformat("atm_warm_roll_filler_{}", i);
+    auto key = fmt::format("atm_warm_roll_filler_{}", i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);

@@ -16,6 +16,8 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 
+#include <fmt/format.h>
+
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -35,7 +37,7 @@ const std::vector<std::string>& NavyConfig::getRaidPaths() const {
 // admission policy settings
 RandomAPConfig& NavyConfig::enableRandomAdmPolicy() {
   if (!admissionPolicy_.empty()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "{} admission policy is already enabled", admissionPolicy_));
   }
   admissionPolicy_ = "random";
@@ -44,7 +46,7 @@ RandomAPConfig& NavyConfig::enableRandomAdmPolicy() {
 
 DynamicRandomAPConfig& NavyConfig::enableDynamicRandomAdmPolicy() {
   if (!admissionPolicy_.empty()) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "{} admission policy is already enabled", admissionPolicy_));
   }
   admissionPolicy_ = "dynamic_random";
@@ -53,7 +55,7 @@ DynamicRandomAPConfig& NavyConfig::enableDynamicRandomAdmPolicy() {
 
 RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
   if (admProbability < 0 || admProbability > 1) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "admission probability should be in the range of [0, 1], but {} is set",
         admProbability));
   }
@@ -89,7 +91,7 @@ void NavyConfig::enableAsyncIo(uint32_t maxNumReads,
   }
 
   if ((maxNumReads % readerThreads_) || (maxNumWrites % writerThreads_)) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "reader threads ({}) and writer threads ({}) should divide evenly "
         "into maxNumReads ({}) or maxNumWrites ({})",
         readerThreads_, writerThreads_, maxNumReads, maxNumWrites));
@@ -130,7 +132,7 @@ void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
     throw std::invalid_argument("already set a simple file");
   }
   if (raidPaths.size() <= 1) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "RAID needs at least two paths, but {} path is set", raidPaths.size()));
   }
   raidPaths_ = std::move(raidPaths);
@@ -167,7 +169,7 @@ BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
 BlockCacheConfig& BlockCacheConfig::setCleanRegions(
     uint32_t cleanRegions, uint32_t cleanRegionThreads) {
   if (!cleanRegionThreads || cleanRegionThreads > cleanRegions + 1) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "number of clean region threads should be in the range of [1, {}]",
         cleanRegions + 1));
   }
@@ -219,7 +221,7 @@ BlockCacheConfig& BlockCacheConfig::enableFixedSizeIndex(
 BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
     unsigned int sizePct, uint64_t smallItemMaxSize) {
   if (sizePct > 100) {
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "to enable BigHash, BigHash size pct should be in the range of [0, 100]"
         ", but {} is set",
         sizePct));
@@ -261,7 +263,7 @@ void NavyConfig::setReaderAndWriterThreads(unsigned int readerThreads,
 
   if (maxNumReads > 0 || maxNumWrites > 0) {
     if ((maxNumReads % readerThreads_) || (maxNumWrites % writerThreads_)) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "reader threads ({}) and writer threads ({}) should divide evenly "
           "into maxNumReads ({}) or maxNumWrites ({})",
           readerThreads_, writerThreads_, maxNumReads, maxNumWrites));

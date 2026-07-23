@@ -16,6 +16,8 @@
 
 #include "cachelib/cachebench/runner/Stressor.h"
 
+#include <fmt/format.h>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
 #include "cachelib/cachebench/runner/CacheComponentStressor.h"
@@ -223,7 +225,7 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
       return std::make_unique<ObjectCacheStressor<Lru5B2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
-    throw std::invalid_argument(folly::sformat(
+    throw std::invalid_argument(fmt::format(
         "object_cache stressor does not support allocator '{}'. Supported: "
         "LRU, LRU2Q, LRU5B, LRU5B2Q.",
         cacheConfig.allocator));

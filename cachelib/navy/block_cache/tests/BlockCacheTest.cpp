@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/format.h>
 #include <folly/File.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -1564,7 +1565,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
 
     auto numItems = kDeviceSize / kRegionSize;
     for (uint64_t i = 0; i < numItems; i++) {
-      auto key = folly::sformat("key_{}", i);
+      auto key = fmt::format("key_{}", i);
       while (true) {
         if (Status::Ok ==
             engine->insert(
@@ -2446,7 +2447,7 @@ TEST(BlockCache, RandomAlloc) {
   BufferGen bg;
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 4; i++) {
-      auto key = folly::sformat("{}:{}", j, i);
+      auto key = fmt::format("{}:{}", j, i);
       CacheEntry e{makeHK(key.c_str()), bg.gen(3800)};
       driver->insertAsync(
           e.key(), e.value(),
@@ -2776,8 +2777,8 @@ TEST(BlockCache, IndexVisitsAllItems) {
 
   std::map<std::string, std::string> expected;
   for (int i = 0; i < 5; i++) {
-    auto key = folly::sformat("key_{}", i);
-    auto val = folly::sformat("value_{}", i);
+    auto key = fmt::format("key_{}", i);
+    auto val = fmt::format("value_{}", i);
     CacheEntry e{strzBuffer(key.c_str()), strzBuffer(val.c_str())};
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
     expected.emplace(std::move(key), std::move(val));
@@ -2809,8 +2810,8 @@ TEST(BlockCache, IndexEarlyTermination) {
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   for (int i = 0; i < 5; i++) {
-    auto key = folly::sformat("key_{}", i);
-    auto val = folly::sformat("value_{}", i);
+    auto key = fmt::format("key_{}", i);
+    auto val = fmt::format("value_{}", i);
     CacheEntry e{strzBuffer(key.c_str()), strzBuffer(val.c_str())};
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
   }

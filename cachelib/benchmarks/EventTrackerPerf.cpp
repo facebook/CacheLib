@@ -25,6 +25,7 @@ AllocateWithWSA                                   99.16%   790.35ms     1.27
 ============================================================================
 */
 
+#include <fmt/format.h>
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 
@@ -109,7 +110,7 @@ void runAllocateOps(std::shared_ptr<FakeWsaTracker> tracker) {
   }
 
   for (int i = 0; i < 100'000; i++) {
-    std::string key{folly::sformat("{}", i)};
+    std::string key{fmt::format("{}", i)};
     auto hdl = cache->allocate(0, key, 100);
     for (int j = 0; j < 10; j++) {
       auto c = cache->allocateChainedItem(hdl, 100);

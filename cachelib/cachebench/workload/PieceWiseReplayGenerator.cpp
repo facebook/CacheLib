@@ -16,6 +16,8 @@
 
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 
+#include <fmt/format.h>
+
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "folly/String.h"
 
@@ -193,11 +195,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         // We added cache hit field recently. Some data are still in the old
         // format.
         // TODO: remove this after legacy data saved in manifold phased out.
-        XLOG_EVERY_MS(
-            WARN, 100'000,
-            folly::sformat("Expect {} but only have {} fields in trace. "
-                           "Process it as no cache hit info field.",
-                           totalFieldCount, fields.size()));
+        XLOG_EVERY_MS(WARN, 100'000,
+                      fmt::format("Expect {} but only have {} fields in trace. "
+                                  "Process it as no cache hit info field.",
+                                  totalFieldCount, fields.size()));
         --statsAggFieldStartIndex;
         --statsAggFieldEndIndex;
       }
@@ -269,7 +270,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
           // Skip the shard if the stressor thread wants to leave
           if (threadFinished_[shard].load(std::memory_order_relaxed)) {
             XLOG_EVERY_MS(INFO, 100'000,
-                          folly::sformat("Thread {} finish, skip", shard));
+                          fmt::format("Thread {} finish, skip", shard));
             break;
           }
 

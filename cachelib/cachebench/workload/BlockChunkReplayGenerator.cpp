@@ -16,6 +16,8 @@
 
 #include "cachelib/cachebench/workload/BlockChunkReplayGenerator.h"
 
+#include <fmt/format.h>
+
 #include "cachelib/cachebench/util/Exceptions.h"
 
 namespace {
@@ -163,7 +165,7 @@ void BlockChunkReplayGenerator::getReqFromTrace() {
         // Skip the shard if the stressor thread wants to leave
         if (threadFinished_[shard].load(std::memory_order_relaxed)) {
           XLOG_EVERY_MS(INFO, 100'000,
-                        folly::sformat("Thread {} finish, skip", shard));
+                        fmt::format("Thread {} finish, skip", shard));
           break;
         }
 

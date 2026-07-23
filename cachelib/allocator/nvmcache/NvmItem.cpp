@@ -18,6 +18,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
+#include <fmt/format.h>
 #include <folly/Format.h>
 #pragma GCC diagnostic pop
 
@@ -29,7 +30,7 @@ namespace cachelib {
 Blob NvmItem::getBlob(size_t index) const {
   if (index >= numBlobs_) {
     throw std::invalid_argument(
-        folly::sformat("Index {} out of range {}", index, numBlobs_));
+        fmt::format("Index {} out of range {}", index, numBlobs_));
   }
 
   const auto& blobInfo = getBlobInfo(index);
@@ -55,7 +56,7 @@ NvmItem::NvmItem(PoolId id,
     auto& blobInfo = getBlobInfo(index++);
     if (offset + blob.data.size() >
         std::numeric_limits<decltype(blobInfo.endOffset)>::max()) {
-      throw std::out_of_range(folly::sformat(
+      throw std::out_of_range(fmt::format(
           "new offset {} is out of range. blob size {}, num blobs{}",
           offset,
           blob.data.size(),
@@ -79,7 +80,7 @@ NvmItem::NvmItem(PoolId id,
   if (blob.data.size() >
       std::numeric_limits<decltype(blobInfo.endOffset)>::max()) {
     throw std::out_of_range(
-        folly::sformat("blob is too big. size {}", blob.data.size()));
+        fmt::format("blob is too big. size {}", blob.data.size()));
   }
   std::memcpy(getDataBegin(), blob.data.data(), blob.data.size());
   blobInfo.origAllocSize = blob.origAllocSize;

@@ -129,7 +129,7 @@ void runFindMultiThreads(int numThreads,
   std::vector<std::string> keys;
   for (uint64_t i = 0; i < kObjects; i++) {
     // Length of key should be 10 bytes
-    auto key = folly::sformat("k_{: <8}", i);
+    auto key = fmt::format("k_{: <8}", i);
     auto hdl = cache->allocate(0, key, objSize);
     XCHECK(hdl);
     cache->insertOrReplace(hdl);
@@ -180,9 +180,9 @@ void runFindMultiThreads(int numThreads,
   }
 
   {
-    Timer t{folly::sformat("{} - {: <2} Threads, {: <4} Bytes, {: <2}% Write",
-                           isPeek ? "Peek" : "Find", numThreads, objSize,
-                           writePct),
+    Timer t{fmt::format("{} - {: <2} Threads, {: <4} Bytes, {: <2}% Write",
+                        isPeek ? "Peek" : "Find", numThreads, objSize,
+                        writePct),
             kLoops};
     sp.reached(0); // Start the operations
     for (auto& r : rs) {
@@ -255,7 +255,7 @@ void runAllocateMultiThreads(int numThreads,
   std::vector<std::string> keys;
   for (uint64_t i = 0; i < kObjects; i++) {
     // Length of key should be 10 bytes
-    auto key = folly::sformat("k_{: <8}", i);
+    auto key = fmt::format("k_{: <8}", i);
     keys.push_back(key);
   }
 
@@ -264,7 +264,7 @@ void runAllocateMultiThreads(int numThreads,
     std::vector<LruAllocator::WriteHandle> handles;
     while (true) {
       // Length of key should be 10 bytes
-      auto key = folly::sformat("k_{: <8}", i);
+      auto key = fmt::format("k_{: <8}", i);
       auto hdl = cache->allocate(0, key, payloadSizes[i % payloadSizes.size()]);
       if (!hdl) {
         // Cache is full. Stop prefill.
@@ -302,9 +302,9 @@ void runAllocateMultiThreads(int numThreads,
   }
 
   {
-    Timer t{folly::sformat("Allocate - {} - {: <2} Threads, {: <2} Sizes",
-                           preFillupCache ? "Eviction" : "New     ", numThreads,
-                           payloadSizes.size()),
+    Timer t{fmt::format("Allocate - {} - {: <2} Threads, {: <2} Sizes",
+                        preFillupCache ? "Eviction" : "New     ", numThreads,
+                        payloadSizes.size()),
             totalItemsPerThread};
     sp.reached(0); // Start the operations
     for (auto& w : ws) {

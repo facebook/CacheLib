@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/nvmcache/NavySetup.h"
 
+#include <fmt/format.h>
 #include <folly/logging/xlog.h>
 #include <gmock/gmock.h>
 
@@ -49,7 +50,7 @@ uint64_t getRegionSize(const navy::NavyConfig& config) {
   uint64_t regionSize = configs[0].blockCache().getRegionSize();
   for (size_t idx = 1; idx < configs.size(); idx++) {
     if (regionSize != configs[idx].blockCache().getRegionSize()) {
-      throw std::invalid_argument(folly::sformat(
+      throw std::invalid_argument(fmt::format(
           "Blockcache {} region size: {}, not equal to block cache 0: {}", idx,
           configs[idx].blockCache().getRegionSize(), regionSize));
     }
@@ -78,8 +79,8 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
   auto bucketSize = bigHashConfig.getBucketSize();
   if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
     throw std::invalid_argument(
-        folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
-                       bucketSize, ioAlignSize));
+        fmt::format("Bucket size: {} is not aligned to ioAlignSize: {}",
+                    bucketSize, ioAlignSize));
   }
 
   const uint64_t bigHashCacheOffset =
@@ -142,8 +143,8 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   auto regionSize = blockCacheConfig.getRegionSize();
   if (regionSize != alignUp(regionSize, ioAlignSize)) {
     throw std::invalid_argument(
-        folly::sformat("Region size: {} is not aligned to ioAlignSize: {}",
-                       regionSize, ioAlignSize));
+        fmt::format("Region size: {} is not aligned to ioAlignSize: {}",
+                    regionSize, ioAlignSize));
   }
 
   // Adjust starting size of block cache to ensure it is aligned to region
@@ -242,9 +243,9 @@ void setupCacheProtos(const navy::NavyConfig& config,
   metadataSize = alignUp(metadataSize, ioAlignSize);
   if (metadataSize >= totalCacheSize) {
     throw std::invalid_argument{
-        folly::sformat("Invalid metadata size: {}. Cache size: {}",
-                       metadataSize,
-                       totalCacheSize)};
+        fmt::format("Invalid metadata size: {}. Cache size: {}",
+                    metadataSize,
+                    totalCacheSize)};
   }
   proto.setMetadataSize(metadataSize);
 
@@ -293,10 +294,10 @@ void setupCacheProtos(const navy::NavyConfig& config,
           config.getStackSize(), *enginePairProto);
     }
     if (blockCacheEndOffset > bigHashStartOffset) {
-      throw std::invalid_argument(folly::sformat(
-          "Invalid engine size configurations. block cache ends at "
-          "{}, big hash starts at {}.",
-          blockCacheEndOffset, bigHashStartOffset));
+      throw std::invalid_argument(
+          fmt::format("Invalid engine size configurations. block cache ends at "
+                      "{}, big hash starts at {}.",
+                      blockCacheEndOffset, bigHashStartOffset));
     }
     proto.addEnginePair(std::move(enginePairProto));
     bigHashEndOffset = bigHashStartOffset;
@@ -317,7 +318,7 @@ void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
     proto.setDynamicRandomAdmissionPolicy(config.dynamicRandomAdmPolicy());
   } else {
     throw std::invalid_argument{
-        folly::sformat("invalid policy name {}", policyName)};
+        fmt::format("invalid policy name {}", policyName)};
   }
 }
 

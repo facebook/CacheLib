@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
@@ -161,8 +162,8 @@ class ObjectCacheStressor : public CacheStressorBase {
 
   void start() override {
     setStartTime();
-    std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                config_.numThreads * config_.numOps / 1e6)
+    std::cout << fmt::format("Total {:.2f}M ops to be run",
+                             config_.numThreads * config_.numOps / 1e6)
               << std::endl;
 
     stressWorker_ = std::thread([this] {
@@ -171,7 +172,7 @@ class ObjectCacheStressor : public CacheStressorBase {
 
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
         workers.emplace_back([this, throughputStats = &throughputStats_.at(i),
-                              threadName = folly::sformat("objcache_{}", i)]() {
+                              threadName = fmt::format("objcache_{}", i)]() {
           folly::setThreadName(threadName);
           stressByDiscreteDistribution(*throughputStats);
         });
@@ -418,7 +419,7 @@ class ObjectCacheStressor : public CacheStressorBase {
         case OpType::kSize:
         default:
           throw std::runtime_error(
-              folly::sformat("invalid operation generated: {}", (int)op));
+              fmt::format("invalid operation generated: {}", (int)op));
         }
 
         lastRequestId = req.requestId;

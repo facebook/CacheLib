@@ -1385,7 +1385,7 @@ void BlockCache::readEntry(RegionDescriptor& regionDesc,
   auto desc = *reinterpret_cast<EntryDesc*>(entryEnd - sizeof(EntryDesc));
   if (desc.csSelf != desc.computeChecksum()) {
     lookupEntryHeaderChecksumErrorCount_.inc();
-    XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
+    XLOG_N_PER_MS(ERR, 10, 10'000) << fmt::format(
         "Header checksum mismatch in readEntry() at Region: {}, Expected: {}, "
         "Actual: {}, Offset-end: {}, Physical-offset-end: {}, Header size: {}, "
         "Header (hex): {}",

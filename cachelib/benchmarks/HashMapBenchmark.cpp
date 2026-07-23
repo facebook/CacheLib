@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/format.h>
 #include <folly/Benchmark.h>
 #include <folly/Format.h>
 #include <folly/Portability.h>
@@ -188,32 +189,40 @@ int main(int argc, char** argv) {
   auto accBytesF14_64 =
       f14Map_u64.getAllocatedMemorySize() + sizeof(f14Map_u64);
 
-  auto f14Info32 = folly::sformat("f14Map_u32  :  {:,}       {:,}",
-                                  pageBytesF14_32, accBytesF14_32);
-  auto stdInfo32 = folly::sformat("stdMap_u32  :  {:,}", pageBytesStd32);
-  auto tslInfo32 = folly::sformat("tslMap_u32  :   {:,}", pageBytesTsl32);
+  auto f14Info32 = fmt::format("f14Map_u32  :  {:}       {:}",
+                               fmt::group_digits(pageBytesF14_32),
+                               fmt::group_digits(accBytesF14_32));
+  auto stdInfo32 =
+      fmt::format("stdMap_u32  :  {:}", fmt::group_digits(pageBytesStd32));
+  auto tslInfo32 =
+      fmt::format("tslMap_u32  :   {:}", fmt::group_digits(pageBytesTsl32));
 
-  auto f14Info64 = folly::sformat("f14Map_u64  :   {:,}       {:,}",
-                                  pageBytesF14_64, accBytesF14_64);
-  auto stdInfo64 = folly::sformat("stdMap_u64  :   {:,}", pageBytesStd64);
-  auto tslInfo64 = folly::sformat("tslMap_u64  :   {:,}", pageBytesTsl64);
-  auto tslInfoRec = folly::sformat("tslMap_record:   {:,}", pageBytesTslRec);
+  auto f14Info64 = fmt::format("f14Map_u64  :   {:}       {:}",
+                               fmt::group_digits(pageBytesF14_64),
+                               fmt::group_digits(accBytesF14_64));
+  auto stdInfo64 =
+      fmt::format("stdMap_u64  :   {:}", fmt::group_digits(pageBytesStd64));
+  auto tslInfo64 =
+      fmt::format("tslMap_u64  :   {:}", fmt::group_digits(pageBytesTsl64));
+  auto tslInfoRec =
+      fmt::format("tslMap_record:   {:}", fmt::group_digits(pageBytesTslRec));
 
-  std::cout << folly::sformat("Memory footprint for {:,} entries:", kNumKeys)
+  std::cout << fmt::format("Memory footprint for {:} entries:",
+                           fmt::group_digits(kNumKeys))
             << std::endl;
   std::cout << "Map            Page Bytes       Accurate Bytes" << std::endl;
-  std::cout << folly::sformat("{:-^*}", 76, "---") << std::endl;
+  std::cout << fmt::format("{0:-^{1}}", "---", 76) << std::endl;
 
   std::cout << f14Info32 << std::endl;
   std::cout << stdInfo32 << std::endl;
   std::cout << tslInfo32 << std::endl;
 
-  std::cout << folly::sformat("{:-^*}", 76, "---") << std::endl;
+  std::cout << fmt::format("{0:-^{1}}", "---", 76) << std::endl;
   std::cout << f14Info64 << std::endl;
   std::cout << stdInfo64 << std::endl;
   std::cout << tslInfo64 << std::endl;
   std::cout << tslInfoRec << std::endl;
 
-  std::cout << folly::sformat("{:=^*}", 76, "END") << std::endl;
+  std::cout << fmt::format("{0:=^{1}}", "END", 76) << std::endl;
   return 0;
 }
