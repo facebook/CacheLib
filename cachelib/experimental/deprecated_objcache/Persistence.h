@@ -227,7 +227,7 @@ class RestorerWorker : public PeriodicWorker {
   void setBreakOut() { breakOut_ = true; }
 
   bool isExpired(uint32_t expiryTime, uint32_t nowTime) {
-    if (expiryTime != 0 && expiryTime < nowTime) {
+    if (expiryTime != 0 && expiryTime <= nowTime) {
       return true;
     }
 
