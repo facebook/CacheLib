@@ -20,6 +20,7 @@
 #include <folly/futures/Promise.h>
 #include <folly/futures/SharedPromise.h>
 #pragma GCC diagnostic pop
+#include <folly/testing/TestUtil.h>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -652,11 +653,13 @@ TEST(ObjectCache, Compaction) {
 TEST(ObjectCache, PersistenceSimple) {
   using Vector = std::vector<int, LruObjectCache::Alloc<int>>;
 
+  folly::test::TemporaryDirectory tmpDir;
+  std::string tmpFilePath = (tmpDir.path() / "persist").string();
+
   LruAllocator::Config cacheAllocatorConfig;
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  std::string tmpFilePath = std::tmpnam(nullptr);
   config.enablePersistence(
       5 /* persistorRestorerThreadCount */,
       0 /* restorerTimeOutDurationInSec */,
@@ -771,9 +774,11 @@ TEST(ObjectCache, PersistenceSimple) {
 TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
   using Vector = std::vector<int, LruObjectCache::Alloc<int>>;
 
+  folly::test::TemporaryDirectory tmpDir;
+  std::string tmpFilePath = (tmpDir.path() / "persist").string();
+
   LruAllocator::Config cacheAllocatorConfig;
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
-  std::string tmpFilePath = std::tmpnam(nullptr);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
   config.enablePersistence(
@@ -881,7 +886,8 @@ TEST(ObjectCache, PersistenceMultipleTypes) {
       ObjCacheString, ObjCacheString, std::less<ObjCacheString>,
       LruObjectCache::Alloc<std::pair<const ObjCacheString, ObjCacheString>>>;
 
-  std::string tmpFilePath = std::tmpnam(nullptr);
+  folly::test::TemporaryDirectory tmpDir;
+  std::string tmpFilePath = (tmpDir.path() / "persist").string();
   LruAllocator::Config cacheAllocatorConfig;
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
