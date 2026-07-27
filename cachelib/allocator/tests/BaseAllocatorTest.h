@@ -19,9 +19,11 @@
 #include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/Singleton.h>
+#include <folly/synchronization/Baton.h>
 #include <folly/synchronization/Latch.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <ctime>
@@ -32,6 +34,7 @@
 #include <thread>
 #include <vector>
 
+#include "cachelib/allocator/BackgroundMoverStrategy.h"
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
@@ -1470,6 +1473,81 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(AllocatorT::ShutDownStatus::kFailed, alloc.shutDown());
     handle.reset();
     ASSERT_EQ(AllocatorT::ShutDownStatus::kSuccess, alloc.shutDown());
+  }
+
+  void testDuplicateShutDowns() {
+    // This tests that when multiple threads enter shutdown simultaneously, only
+    // 1 makes it to the non-reentrant (i.e., saves cache) part. To do this, we
+    // create a worker that blocks until released and get two threads into
+    // shutDown().  We then release the worker, which releases the two
+    // shutDown() callers.
+
+    using ShutDownStatus = typename AllocatorT::ShutDownStatus;
+    // Parks a mover thread on first invocation until released
+    class BlockingMoverStrategy : public BackgroundMoverStrategy {
+     public:
+      std::vector<size_t> calculateBatchSizes(
+          const CacheBase&, std::vector<MemoryDescriptorType>) override {
+        if (!parked_.exchange(true)) {
+          entered_.post();
+          release_.wait();
+        }
+        return {};
+      }
+
+      folly::Baton<> entered_; // posted once the worker is parked
+      folly::Baton<> release_; // post to let the worker (and shutDown) proceed
+
+     private:
+      std::atomic<bool> parked_{false};
+    };
+
+    // We use CacheAllocator::triggerFastShutdown_ to detect when shutDown()
+    // callers have made it into the function, so set enableFastShutdown
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.enableCachePersistence(this->cacheDir_);
+    config.enableFastShutdown = true;
+
+    AllocatorT alloc(AllocatorT::SharedMemNew, config);
+    alloc.addPool("foobar", alloc.getCacheMemoryStats().ramCacheSize);
+
+    // Start a background that blocks until released; block the test thread
+    // until we're sure the worker is where we want it
+    auto strategy = std::make_shared<BlockingMoverStrategy>();
+    ASSERT_TRUE(alloc.startNewBackgroundEvictor(std::chrono::milliseconds{100},
+                                                strategy, 1 /* threads */));
+    strategy->entered_.wait();
+
+    // Spin until a caller has entered shutDown(), then clear the flag so the
+    // next caller's entry is observable too
+    auto waitForEntry = [&] {
+      while (!alloc.triggerFastShutdown_.load()) {
+        std::this_thread::yield();
+      }
+      alloc.triggerFastShutdown_.store(false);
+    };
+
+    ShutDownStatus results[2] = {ShutDownStatus::kFailed,
+                                 ShutDownStatus::kFailed};
+    std::thread ta([&] { results[0] = alloc.shutDown(); });
+    waitForEntry();
+    std::thread tb([&] { results[1] = alloc.shutDown(); });
+    waitForEntry();
+
+    // Both callers are in shutDown() - unblock the worker
+    strategy->release_.post();
+
+    ta.join();
+    tb.join();
+
+    EXPECT_TRUE((results[0] == ShutDownStatus::kSuccess &&
+                 results[1] == ShutDownStatus::kSkipped) ||
+                (results[0] == ShutDownStatus::kSkipped &&
+                 results[1] == ShutDownStatus::kSuccess))
+        << "expected exactly one kSuccess and one kSkipped, got "
+        << static_cast<int>(results[0]) << " and "
+        << static_cast<int>(results[1]);
   }
 
   void testAttachDetachOnExit() {

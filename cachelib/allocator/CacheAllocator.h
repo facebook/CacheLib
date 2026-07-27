@@ -1042,7 +1042,8 @@ class CacheAllocator : public CacheBase {
                     // enabled but failed to persist it.
     kSavedOnlyNvmCache, // Successfully persisted the enabled NvM cache only;
                         // Failed to persist DRAM cache.
-    kFailed // Failed to persist both the DRAM cache and the enabled NvmCache.
+    kFailed, // Failed to persist both the DRAM cache and the enabled NvmCache.
+    kSkipped // Duplicate shutDown() call
   };
 
   // Persists the state of the cache allocator. On a successful shutdown,
@@ -1059,9 +1060,10 @@ class CacheAllocator : public CacheBase {
   // @return  A ShutDownStatus value indicating the result of the shutDown
   //          operation.
   //          kSuccess - successfully shut down and can be re-attached
-  //          kFailed - failure due to outstanding active handle or error with
-  //                    cache dir
+  //          kFailed - failure due to outstanding active handles, error with
+  //                    cache dir or error stopping background workers
   //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
+  //          kSkipped - duplicate shutdown call
   ShutDownStatus shutDown();
 
   // No-op for workers that are already running. Typically user uses this in
@@ -1222,9 +1224,10 @@ class CacheAllocator : public CacheBase {
     stats_.numAbortedSlabReleases.inc();
   }
 
-  // Check if shutdown is in progress
-  bool isShutdownInProgress() const override final {
-    return shutDownInProgress_.load();
+  // Check if a fast shutdown has been triggered, signalling workers to abort
+  // in-progress work (e.g. slab release) so shutDown() can proceed quickly.
+  bool isFastShutdownTriggered() const override final {
+    return triggerFastShutdown_.load();
   }
 
   // return the distribution of the keys in the cache. This is expensive to
@@ -2641,8 +2644,13 @@ class CacheAllocator : public CacheBase {
   // admission policy for nvmcache
   std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmAdmissionPolicy_;
 
-  // indicates if the shutdown of cache is in progress or not
-  std::atomic<bool> shutDownInProgress_{false};
+  // set when a fast shutdown is requested; signals background workers to abort
+  // in-progress work so shutDown() can complete quickly
+  std::atomic<bool> triggerFastShutdown_{false};
+
+  // shutDown() is one-shot. The first caller to flip this false->true owns the
+  // (destructive, non-idempotent) teardown. This is never reset.
+  std::atomic<bool> shutDownStarted_{false};
 
   // END private members
 
@@ -5300,7 +5308,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
   try {
     auto releaseContext = allocator_->startSlabRelease(
         pid, victim, receiver, mode, hint,
-        [this]() -> bool { return shutDownInProgress_; });
+        [this]() -> bool { return isFastShutdownTriggered(); });
 
     // No work needed if the slab is already released
     if (releaseContext.isReleased()) {
@@ -5692,7 +5700,7 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     // when checking with the AllocationClass
     itemFreed = true;
 
-    if (isShutdownInProgress()) {
+    if (isFastShutdownTriggered()) {
       abortWithMessage("due to shutdown");
     }
 
@@ -5888,16 +5896,26 @@ CacheAllocator<CacheTrait>::shutDown() {
   XDCHECK(!config_.cacheDir.empty());
 
   if (config_.enableFastShutdown) {
-    shutDownInProgress_ = true;
+    triggerFastShutdown_ = true;
   }
 
-  stopWorkers();
+  if (!stopWorkers()) {
+    XLOG(ERR) << "Failed to stop workers during shutdown, aborting";
+    return ShutDownStatus::kFailed;
+  }
 
   const auto handleCount = getNumActiveHandles();
   if (handleCount != 0) {
     XLOGF(ERR, "Found {} active handles while shutting down cache. aborting",
           handleCount);
     return ShutDownStatus::kFailed;
+  }
+
+  // The rest of the procedure is one-shot, the first caller owns the
+  // destructive teardown below.
+  if (shutDownStarted_.exchange(true)) {
+    XLOG(WARN) << "Duplicate shutDown() call ignored";
+    return ShutDownStatus::kSkipped;
   }
 
   const auto nvmShutDownStatusOpt = saveNvmCache();

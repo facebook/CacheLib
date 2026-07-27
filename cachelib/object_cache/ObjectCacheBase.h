@@ -113,9 +113,9 @@ class ObjectCacheBase : public CacheBase {
     l1Cache_->incrementAbortedSlabReleases();
   }
 
-  // Check if shutdown is in progress
-  bool isShutdownInProgress() const override {
-    return l1Cache_->isShutdownInProgress();
+  // Check if a fast shutdown has been triggered
+  bool isFastShutdownTriggered() const override {
+    return l1Cache_->isFastShutdownTriggered();
   }
 
   // return the list of currently active pools that are oversized

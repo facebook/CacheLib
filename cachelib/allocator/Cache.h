@@ -148,9 +148,9 @@ class CacheBase {
   // Increment the number of aborted slab releases stat
   virtual void incrementAbortedSlabReleases() = 0;
 
-  // Check if shutdown is in progress
-  // @return true if shutdown is in progress, false otherwise
-  virtual bool isShutdownInProgress() const = 0;
+  // Check if a fast shutdown has been triggered
+  // @return true if a fast shutdown has been triggered, false otherwise
+  virtual bool isFastShutdownTriggered() const = 0;
 
   // export stats via callback. This function is not thread safe
   //

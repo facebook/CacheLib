@@ -249,6 +249,10 @@ TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {
   this->testShutDownWithActiveHandles();
 }
 
+TYPED_TEST(BaseAllocatorTest, DuplicateShutDowns) {
+  this->testDuplicateShutDowns();
+}
+
 TYPED_TEST(BaseAllocatorTest, BasicFreeMemStrategy) {
   this->testBasicFreeMemStrategy();
 }

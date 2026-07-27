@@ -204,7 +204,7 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
         } catch (const exception::SlabReleaseAborted& e) {
           cache_.incrementAbortedSlabReleases();
           // Check if this is due to shutdown or timeout
-          if (cache_.isShutdownInProgress()) {
+          if (cache_.isFastShutdownTriggered()) {
             XLOGF(WARN,
                   "Shutdown in progress, aborting slab advise from pool {} for"
                   " allocation class {}. Error: {}",

@@ -79,7 +79,7 @@ void PoolResizer::work() {
         numIterations++;
       } catch (const exception::SlabReleaseAborted& e) {
         cache_.incrementAbortedSlabReleases();
-        if (cache_.isShutdownInProgress()) {
+        if (cache_.isFastShutdownTriggered()) {
           XLOGF(WARN,
                 "Shutdown in progress, aborted trying to resize pool {} for "
                 "allocation class {}. "
