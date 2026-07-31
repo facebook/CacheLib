@@ -414,9 +414,12 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   counters_.updateCount(statPrefix + "ram.uptime", stats.ramUpTime);
   counters_.updateCount(statPrefix + "nvm.uptime", stats.nvmUpTime);
   counters_.updateCount(statPrefix + "ram.new_cache", stats.isNewRamCache);
-  counters_.updateCount(statPrefix + "nvm.new_cache", stats.isNewNvmCache);
+  // isNewNvmCache is always true when nvm is disabled, so gate on
+  // nvmCacheEnabled to avoid falsely reporting a new cache.
+  const bool isNewNvmCache = stats.nvmCacheEnabled && stats.isNewNvmCache;
+  counters_.updateCount(statPrefix + "nvm.new_cache", isNewNvmCache);
   counters_.updateCount(statPrefix + "cache.new_cache",
-                        stats.isNewRamCache || stats.isNewNvmCache);
+                        stats.isNewRamCache || isNewNvmCache);
 
   counters_.updateCount(statPrefix + "nvm.enabled", stats.nvmCacheEnabled);
 
