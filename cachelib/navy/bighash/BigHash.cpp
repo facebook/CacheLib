@@ -18,6 +18,7 @@
 
 #include <fmt/core.h>
 #include <folly/Random.h>
+#include <folly/ScopeGuard.h>
 
 #include <chrono>
 
@@ -224,6 +225,8 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   bucketExpirationsDist_x100_.visitQuantileEstimator(
       visitor, "navy_bh_expired_loop_x100");
   bhLifetimeSecs_.visitQuantileEstimator(visitor, "navy_bh_item_lifetime_secs");
+  lookupLatency_.visitQuantileEstimator(visitor, "navy_bh_lookup_latency_us");
+  insertLatency_.visitQuantileEstimator(visitor, "navy_bh_insert_latency_us");
 }
 
 void BigHash::persist(RecordWriter& rw) {
@@ -297,6 +300,10 @@ Status BigHash::insert(HashedKey hk,
                        uint8_t /* poolId */,
                        uint32_t /* expiryTime */,
                        uint32_t /* lastAccessTimeSecs */) {
+  auto start = getSteadyClock();
+  SCOPE_EXIT {
+    insertLatency_.trackValue(toMicros(getSteadyClock() - start).count());
+  };
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 
@@ -397,6 +404,10 @@ uint64_t BigHash::estimateWriteSize(HashedKey, BufferView) const {
 Status BigHash::lookup(HashedKey hk,
                        Buffer& value,
                        uint32_t& lastAccessTimeSecs) {
+  auto start = getSteadyClock();
+  SCOPE_EXIT {
+    lookupLatency_.trackValue(toMicros(getSteadyClock() - start).count());
+  };
   lastAccessTimeSecs = 0;
   const auto bid = getBucketId(hk);
   lookupCount_.inc();

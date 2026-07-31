@@ -184,6 +184,28 @@ TEST(BigHash, SimpleStats) {
   }
 }
 
+TEST(BigHash, LatencyStats) {
+  BigHash::Config config;
+  setLayout(config, 64, 1);
+  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 64);
+  config.device = device.get();
+
+  BigHash bh(std::move(config));
+
+  Buffer value;
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key"), makeView("12345"), 0 /* poolId */,
+                      0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
+
+  MockCounterVisitor helper;
+  EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
+  EXPECT_CALL(helper, call(strPiece("navy_bh_lookup_latency_us_p99"), _));
+  EXPECT_CALL(helper, call(strPiece("navy_bh_insert_latency_us_p99"), _));
+  bh.getCounters({toCallback(helper)});
+}
+
 TEST(BigHash, EvictionStats) {
   BigHash::Config config;
   setLayout(config, 64, 1);

@@ -271,6 +271,8 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
   // PercentileStats generates outputs in integers, so amplify by 100x
   mutable util::PercentileStats bucketExpirationsDist_x100_;
   mutable util::PercentileStats bhLifetimeSecs_;
+  mutable util::PercentileStats lookupLatency_;
+  mutable util::PercentileStats insertLatency_;
 
   friend class ValidBucketChecker;
 };
