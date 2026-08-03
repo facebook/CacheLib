@@ -19,6 +19,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 
@@ -405,6 +406,48 @@ class ObjectCacheTest : public ::testing::Test {
     std::this_thread::sleep_for(std::chrono::seconds{3});
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_EQ(nullptr, found2);
+  }
+
+  void testSuccessfulReplacementFlag() {
+    std::atomic<int> numReplaced{0};
+    std::atomic<int> numNotReplaced{0};
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000)
+        .setItemReaperInterval(std::chrono::seconds{1})
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          EXPECT_EQ(data.context, ObjectCacheDestructorContext::kRemoved);
+          if (data.removedBySuccessfulReplacement) {
+            ++numReplaced;
+          } else {
+            ++numNotReplaced;
+          }
+          data.deleteObject<Foo>();
+        });
+    auto objcache = ObjectCache::create(config);
+
+    objcache->insertOrReplace("k", std::make_unique<Foo>(), 0 /*object size*/,
+                              1000 /*ttlSecs*/);
+    auto heldOldObject = objcache->template find<Foo>("k");
+    auto [status, newObject, replacedObject] = objcache->insertOrReplace(
+        "k", std::make_unique<Foo>(), 0 /*object size*/, 1000 /*ttlSecs*/);
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+
+    heldOldObject.reset();
+    EXPECT_EQ(0, numReplaced.load());
+    replacedObject.reset();
+    EXPECT_EQ(1, numReplaced.load());
+    EXPECT_EQ(0, numNotReplaced.load());
+
+    ASSERT_TRUE(objcache->remove("k"));
+    newObject.reset();
+    EXPECT_EQ(1, numReplaced.load());
+    EXPECT_EQ(1, numNotReplaced.load());
+
+    objcache->insertOrReplace("e", std::make_unique<Foo>(), 0 /*object size*/,
+                              1 /*ttlSecs*/);
+    ASSERT_EVENTUALLY_TRUE([&] { return numNotReplaced.load() == 2; });
+    EXPECT_EQ(1, numReplaced.load());
   }
 
   void testExpirationWithCustomizedReaper() {
@@ -2025,6 +2068,9 @@ TYPED_TEST(ObjectCacheTest, UserItemDestructor) {
   this->testUserItemDestructor();
 }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
+TYPED_TEST(ObjectCacheTest, SuccessfulReplacementFlag) {
+  this->testSuccessfulReplacementFlag();
+}
 TYPED_TEST(ObjectCacheTest, ExpirationWithCustomizedReaper) {
   this->testExpirationWithCustomizedReaper();
 }

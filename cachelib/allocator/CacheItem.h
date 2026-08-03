@@ -264,6 +264,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   void markNvmLargeItem() noexcept;
   bool isNvmLargeItem() const noexcept;
 
+  void markRemovedByReplacement() noexcept;
+  bool isRemovedByReplacement() const noexcept;
+
   /**
    * Function to set the timestamp for when to expire an item
    *
@@ -907,6 +910,16 @@ void CacheItem<CacheTrait>::markNvmLargeItem() noexcept {
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isNvmLargeItem() const noexcept {
   return ref_.isNvmLargeItem();
+}
+
+template <typename CacheTrait>
+void CacheItem<CacheTrait>::markRemovedByReplacement() noexcept {
+  ref_.markRemovedByReplacement();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isRemovedByReplacement() const noexcept {
+  return ref_.isRemovedByReplacement();
 }
 
 template <typename CacheTrait>

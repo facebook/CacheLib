@@ -51,7 +51,9 @@ struct ObjectCacheItem {
 enum class ObjectCacheDestructorContext {
   // evicted from cache
   kEvicted,
-  // removed by user calling remove()/insertOrReplace() or due to expired
+  // removed by user calling remove()/insertOrReplace() or due to expired.
+  // Use ObjectCacheDestructorData::removedBySuccessfulReplacement to
+  // distinguish a successful insertOrReplace() from other removals.
   kRemoved,
   // unknown cases
   kUnknown,
@@ -63,13 +65,15 @@ struct ObjectCacheDestructorData {
                             const KAllocation::Key& k,
                             uint32_t expiryTime,
                             uint32_t creationTime,
-                            uint32_t lastAccessTime)
+                            uint32_t lastAccessTime,
+                            bool removedBySuccessfulReplacement = false)
       : context(ctx),
         objectPtr(ptr),
         key(k),
         expiryTime(expiryTime),
         creationTime(creationTime),
-        lastAccessTime(lastAccessTime) {}
+        lastAccessTime(lastAccessTime),
+        removedBySuccessfulReplacement(removedBySuccessfulReplacement) {}
 
   // release the evicted/removed/expired object memory
   template <typename T>
@@ -94,6 +98,10 @@ struct ObjectCacheDestructorData {
 
   // the last time this object was accessed
   uint32_t lastAccessTime;
+
+  // Whether the object was removed by an insertOrReplace() that successfully
+  // installed its replacement. Always false for kEvicted/kUnknown.
+  bool removedBySuccessfulReplacement;
 };
 
 // Information about cache memory capacity calculated from configuration
@@ -792,6 +800,9 @@ void ObjectCache<AllocatorT>::init() {
           auto& item = data.item;
 
           auto itemPtr = getAlignedItemPtr(item.getMemory());
+          const bool removedBySuccessfulReplacement =
+              ctx == ObjectCacheDestructorContext::kRemoved &&
+              item.isRemovedByReplacement();
 
           SCOPE_EXIT {
             if (config_.objectSizeTrackingEnabled) {
@@ -804,7 +815,8 @@ void ObjectCache<AllocatorT>::init() {
             // execute user defined item destructor
             config_.itemDestructor(ObjectCacheDestructorData(
                 ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-                item.getCreationTime(), item.getLastAccessTime()));
+                item.getCreationTime(), item.getLastAccessTime(),
+                removedBySuccessfulReplacement));
           };
         });
   } else {
@@ -822,6 +834,9 @@ void ObjectCache<AllocatorT>::init() {
       auto& item = data.item;
 
       auto itemPtr = getAlignedItemPtr(item.getMemory());
+      const bool removedBySuccessfulReplacement =
+          ctx == ObjectCacheDestructorContext::kRemoved &&
+          item.isRemovedByReplacement();
 
       SCOPE_EXIT {
         if (config_.objectSizeTrackingEnabled) {
@@ -834,7 +849,8 @@ void ObjectCache<AllocatorT>::init() {
         // execute user defined item destructor
         config_.removeCb(ObjectCacheDestructorData(
             ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-            item.getCreationTime(), item.getLastAccessTime()));
+            item.getCreationTime(), item.getLastAccessTime(),
+            removedBySuccessfulReplacement));
       };
     });
   }

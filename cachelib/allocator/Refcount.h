@@ -122,6 +122,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // Set during NVM promotion when the exact NVM buffer size is known.
     kNvmLargeItem,
 
+    // Item was removed by a successful replacement.
+    kRemovedByReplacement,
+
     // Unused. This is just to indciate the maximum number of flags
     kFlagMax,
   };
@@ -454,6 +457,13 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    */
   void markNvmLargeItem() noexcept { return setFlag<kNvmLargeItem>(); }
   bool isNvmLargeItem() const noexcept { return isFlagSet<kNvmLargeItem>(); }
+
+  void markRemovedByReplacement() noexcept {
+    return setFlag<kRemovedByReplacement>();
+  }
+  bool isRemovedByReplacement() const noexcept {
+    return isFlagSet<kRemovedByReplacement>();
+  }
 
   // Whether or not an item is completely drained of access
   // Refcount is 0 and the item is not linked, accessible, nor exclusive
