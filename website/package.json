@@ -34,7 +34,7 @@
     "http-proxy-middleware": "^2.0.7",
     "js-yaml": "^4.1.1",
     "mermaid": "^10.9.4",
-    "postcss": "^8.4.31",
+    "postcss": "^8.5.23",
     "qs": "^6.15.2",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
@@ -107,7 +107,7 @@
     "follow-redirects": "^1.16.0",
     "@babel/helpers": "^7.26.10",
     "got": "^11.8.5",
-    "postcss": "^8.4.31",
+    "postcss": "^8.5.23",
     "trim": "^0.0.3"
   },
   "browserslist": {
