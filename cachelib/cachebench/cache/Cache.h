@@ -26,7 +26,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cstring>
 #include <iostream>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -678,6 +680,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)
+                         .setChecksumOffload(config_.navyChecksumOffload,
+                                             config_.navyChecksumOffloadMinSize)
                          .setCleanRegions(config_.navyCleanRegions,
                                           config_.navyCleanRegionThreads)
                          .setRegionSize(config_.navyRegionSizeMB * MB);
@@ -716,7 +720,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
           .setSizePctAndMaxItemSize(config_.navyBigHashSizePct,
                                     config_.navySmallItemMaxSize)
           .setBucketSize(config_.navyBigHashBucketSize)
-          .setBucketBfSize(config_.navyBloomFilterPerBucketSize);
+          .setBucketBfSize(config_.navyBloomFilterPerBucketSize)
+          .setChecksumOffload(config_.navyBigHashChecksumOffload);
     }
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
@@ -1408,11 +1413,18 @@ void Cache<Allocator>::setStringItem(WriteHandle& handle,
   }
 
   auto ptr = reinterpret_cast<char*>(getMemory(handle));
-  std::strncpy(ptr, str.c_str(), dataSize);
+  // memcpy/memset instead of strncpy: strncpy scans for the terminator byte
+  // by byte and is not interposed by DTO, while memcpy/memset of large
+  // values can be offloaded to DSA. Like strncpy, write exactly dataSize
+  // bytes: the string (truncated if needed), then a zero-filled tail.
+  const size_t copyLen = std::min<size_t>(str.size() + 1, dataSize);
+  std::memcpy(ptr, str.c_str(), copyLen);
 
   // Make sure the copied string ends with null char
   if (str.size() + 1 > dataSize) {
     ptr[dataSize - 1] = '\0';
+  } else if (copyLen < dataSize) {
+    std::memset(ptr + copyLen, 0, dataSize - copyLen);
   }
 }
 

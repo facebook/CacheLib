@@ -137,6 +137,8 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   // BlockCacheConfig::setCleanRegions() in NavyConfig.cpp
   bcConfig.numInMemBuffers = 2 * config.navyCleanRegions;
   bcConfig.checksum = config.navyDataChecksum;
+  bcConfig.checksumOffload = config.navyChecksumOffload;
+  bcConfig.checksumOffloadMinSize = config.navyChecksumOffloadMinSize;
   // Note: LRU is not yet supported
   if (config.navySegmentedFifoSegmentRatio.empty() ||
       config.navySegmentedFifoSegmentRatio.size() == 1) {

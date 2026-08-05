@@ -233,6 +233,17 @@ struct CacheConfig : public JSONConfig {
   // default
   bool navyDataChecksum{true};
 
+  // offloads navy BlockCache data checksumming (fused with the value copy on
+  // the write path) to Intel DSA via the DTO library, for values of at least
+  // navyChecksumOffloadMinSize bytes. Requires navyDataChecksum and a build
+  // with BUILD_WITH_DTO.
+  bool navyChecksumOffload{false};
+  uint32_t navyChecksumOffloadMinSize{4096};
+
+  // offloads navy BigHash bucket checksumming to Intel DSA. Most beneficial
+  // with large buckets (navyBigHashBucketSize of 16KB+).
+  bool navyBigHashChecksumOffload{false};
+
   // by default, only store the size requested by the user into nvm cache
   bool truncateItemToOriginalAllocSizeInNvm = false;
 
