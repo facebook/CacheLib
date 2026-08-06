@@ -19,6 +19,8 @@
 #include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/TokenBucket.h>
+#include <folly/executors/FunctionScheduler.h>
+#include <folly/stats/QuantileEstimator.h>
 #include <folly/system/ThreadName.h>
 
 #include <atomic>
@@ -26,6 +28,8 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <thread>
 
 #include "cachelib/cachebench/cache/Cache.h"
@@ -129,6 +133,11 @@ class CacheStressor : public CacheStressorBase {
     }
   }
 
+  CacheStressor(const CacheStressor&) = delete;
+  CacheStressor& operator=(const CacheStressor&) = delete;
+  CacheStressor(CacheStressor&&) = delete;
+  CacheStressor& operator=(CacheStressor&&) = delete;
+
   // Start the stress test by spawning the worker threads and waiting for them
   // to finish the stress operations.
   void start() override {
@@ -136,6 +145,8 @@ class CacheStressor : public CacheStressorBase {
     std::cout << fmt::format("Total {:.2f}M ops to be run",
                              config_.numThreads * config_.numOps / 1e6)
               << std::endl;
+
+    startDramIteratorScheduler();
 
     stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
@@ -170,12 +181,21 @@ class CacheStressor : public CacheStressorBase {
   // Block until all stress workers are finished.
   void finish() override {
     CacheStressorBase::finish();
+    stopDramIteratorScheduler();
     cache_->clearCache(config_.maxInvalidDestructorCount);
+  }
+
+  void abort() override {
+    CacheStressorBase::abort();
+    requestDramIteratorSchedulerStop();
   }
 
   // obtain stats from the cache instance.
   std::unique_ptr<StatsBase> getCacheStats() const override {
-    return cache_->getStats();
+    auto stats = cache_->getStats();
+    auto* cacheStats = static_cast<Stats*>(stats.get());
+    cacheStats->dramIteratorStats = getDramIteratorStats();
+    return stats;
   }
 
  private:
@@ -253,7 +273,7 @@ class CacheStressor : public CacheStressorBase {
         // detect refcount leaks when run in  debug mode.
 #ifndef NDEBUG
         auto checkCnt = [useCombinedLockForIterators =
-                             config_.useCombinedLockForIterators](int cnt) {
+                             config_.useCombinedLockForIterators](int64_t cnt) {
           // if useCombinedLockForIterators is set handle count can be modified
           // by a different thread
           if (!useCombinedLockForIterators && cnt != 0) {
@@ -393,10 +413,10 @@ class CacheStressor : public CacheStressorBase {
           }
           break;
         }
+        case OpType::kSize:
         default:
           throw std::runtime_error(
               fmt::format("invalid operation generated: {}", (int)op));
-          break;
         }
 
         lastRequestId = req.requestId;
@@ -502,6 +522,132 @@ class CacheStressor : public CacheStressorBase {
     }
   }
 
+  void startDramIteratorScheduler() {
+    if (!config_.usesDramIterator()) {
+      return;
+    }
+    const auto interval =
+        std::chrono::milliseconds{config_.dramIteratorIntervalMs};
+    dramIteratorScheduler_.setThreadName("cb_dram_iter");
+    dramIteratorScheduler_.setSteady(true);
+    dramIteratorScheduler_.addFunction(
+        [this] { runDramIteratorSweep(config_.dramIteratorMode); },
+        interval,
+        "dram_iterator",
+        interval);
+    XCHECK(dramIteratorScheduler_.start());
+  }
+
+  void stopDramIteratorScheduler() {
+    requestDramIteratorSchedulerStop();
+    dramIteratorScheduler_.shutdown();
+  }
+
+  void requestDramIteratorSchedulerStop() {
+    dramIteratorScheduler_.cancelAllFunctions();
+  }
+
+  void runDramIteratorSweep(DramIteratorMode implementation) {
+    const auto begin = std::chrono::steady_clock::now();
+    try {
+      const auto throttlerConfig = getDramIteratorThrottlerConfig();
+      typename CacheT::DramIteratorSweepResult result;
+      switch (implementation) {
+      case DramIteratorMode::kRegular:
+        result = cache_->runRegularDramIteratorSweep(throttlerConfig);
+        break;
+      case DramIteratorMode::kLockGroup:
+        result = cache_->runLockGroupDramIteratorSweep(throttlerConfig);
+        break;
+      case DramIteratorMode::kDisabled:
+        throw std::invalid_argument(
+            "cannot run a disabled DRAM iterator sweep");
+      }
+      const auto elapsedNs =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::steady_clock::now() - begin)
+              .count();
+      recordDramIteratorSweep(implementation, result, elapsedNs);
+    } catch (const std::exception& ex) {
+      XLOGF(ERR,
+            "DRAM iterator sweep failed for {}: {}",
+            dramIteratorImplementationName(implementation),
+            ex.what());
+      recordDramIteratorSweepException(implementation);
+    }
+  }
+
+  std::optional<util::Throttler::Config> getDramIteratorThrottlerConfig()
+      const {
+    if (config_.dramIteratorSleepMs == 0) {
+      return std::nullopt;
+    }
+    return util::Throttler::Config{
+        .sleepMs = config_.dramIteratorSleepMs,
+        .workMs = config_.dramIteratorWorkMs,
+    };
+  }
+
+  void recordDramIteratorSweep(
+      DramIteratorMode implementation,
+      const typename CacheT::DramIteratorSweepResult& result,
+      uint64_t elapsedNs) {
+    std::lock_guard l{dramIteratorStatsMutex_};
+    dramIteratorStats_.mode = dramIteratorImplementationName(implementation);
+    auto& stats = dramIteratorStats_.stats;
+    ++stats.sweeps;
+    stats.totalItems += result.items;
+    stats.lastItems = result.items;
+    stats.totalKeyBytes += result.keyBytes;
+    stats.lastKeyBytes = result.keyBytes;
+    stats.totalValueBytes += result.valueBytes;
+    stats.lastValueBytes = result.valueBytes;
+    stats.totalElapsedNs += elapsedNs;
+    stats.lastElapsedNs = elapsedNs;
+    dramIteratorLatency_.addValue(static_cast<double>(elapsedNs));
+  }
+
+  void recordDramIteratorSweepException(DramIteratorMode implementation) {
+    std::lock_guard l{dramIteratorStatsMutex_};
+    dramIteratorStats_.mode = dramIteratorImplementationName(implementation);
+    ++dramIteratorStats_.stats.sweepExceptions;
+  }
+
+  static uint64_t estimatePercentileNs(const folly::TDigest& digest,
+                                       uint8_t percentile) {
+    XDCHECK_LE(percentile, 100);
+    return static_cast<uint64_t>(
+        percentile == 100
+            ? digest.max()
+            : digest.estimateQuantile(static_cast<double>(percentile) / 100));
+  }
+
+  DramIteratorStats getDramIteratorStats() const {
+    std::lock_guard l{dramIteratorStatsMutex_};
+    auto stats = dramIteratorStats_;
+    const auto latencyDigest = dramIteratorLatency_.getDigest();
+    if (!latencyDigest.empty()) {
+      stats.stats.latencyNs.p50 = estimatePercentileNs(latencyDigest, 50);
+      stats.stats.latencyNs.p99 = estimatePercentileNs(latencyDigest, 99);
+      stats.stats.latencyNs.p100 = estimatePercentileNs(latencyDigest, 100);
+    }
+    return stats;
+  }
+
+  static folly::StringPiece dramIteratorImplementationName(
+      DramIteratorMode implementation) {
+    switch (implementation) {
+    case DramIteratorMode::kDisabled:
+      return "disabled";
+    case DramIteratorMode::kRegular:
+      return "regular";
+    case DramIteratorMode::kLockGroup:
+      return "lock_group";
+    }
+    XDCHECK(false);
+    return "unknown";
+  }
+
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;
 
@@ -521,6 +667,14 @@ class CacheStressor : public CacheStressorBase {
 
   // Whether flash cache has been warmed up
   bool hasNvmCacheWarmedUp_{false};
+
+  mutable std::mutex dramIteratorStatsMutex_;
+  DramIteratorStats dramIteratorStats_;
+  mutable folly::SimpleQuantileEstimator<> dramIteratorLatency_;
+
+  // Keep the scheduler last so its callback is stopped before captured state
+  // is destroyed.
+  folly::FunctionScheduler dramIteratorScheduler_;
 };
 } // namespace cachebench
 } // namespace cachelib

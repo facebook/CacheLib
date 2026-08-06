@@ -17,6 +17,7 @@
 #pragma once
 
 #include <fmt/core.h>
+#include <folly/Benchmark.h>
 #include <folly/container/F14Map.h>
 #include <folly/hash/Hash.h>
 #include <folly/json/DynamicConverter.h>
@@ -27,7 +28,10 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <cstdint>
 #include <iostream>
+#include <optional>
+#include <stdexcept>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
@@ -44,6 +48,7 @@
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 #include "cachelib/common/EventTracker.h"
+#include "cachelib/common/Throttler.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 DECLARE_bool(report_api_latency);
@@ -103,6 +108,12 @@ class Cache {
 
   template <typename U>
   using TypedHandle = LruAllocator::TypedHandle<U>;
+
+  struct DramIteratorSweepResult {
+    uint64_t items{0};
+    uint64_t keyBytes{0};
+    uint64_t valueBytes{0};
+  };
 
   // instantiate a cachelib cache instance.
   //
@@ -329,6 +340,13 @@ class Cache {
   // Get number of bytes written to NVM.
   double getNvmBytesWritten() const;
 
+  DramIteratorSweepResult runRegularDramIteratorSweep(
+      const std::optional<util::Throttler::Config>& throttlerConfig =
+          std::nullopt);
+  DramIteratorSweepResult runLockGroupDramIteratorSweep(
+      const std::optional<util::Throttler::Config>& throttlerConfig =
+          std::nullopt);
+
   // return the stats for the pool.
   PoolStats getPoolStats(PoolId pid) const { return cache_->getPoolStats(pid); }
 
@@ -344,7 +362,7 @@ class Cache {
   uint64_t numPools() const noexcept { return config_.numPools; }
 
   // reports the number of handles held by the thread calling this api.
-  int getHandleCountForThread() const {
+  int64_t getHandleCountForThread() const {
     return cache_->getHandleCountForThread();
   }
 
@@ -400,6 +418,10 @@ class Cache {
 
   // get the nand writes for the SSD device if enabled.
   uint64_t fetchNandWrites() const;
+
+  template <typename Iterator>
+  DramIteratorSweepResult runDramIteratorSweep(Iterator iter,
+                                               const Iterator& end);
 
   // original input config for the cache used to derive the
   // CacheAllocatorConfig.
@@ -1148,6 +1170,41 @@ double Cache<Allocator>::getNvmBytesWritten() const {
   }
   XLOG(INFO) << "Bytes written not found";
   return 0;
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::DramIteratorSweepResult
+Cache<Allocator>::runRegularDramIteratorSweep(
+    const std::optional<util::Throttler::Config>& throttlerConfig) {
+  if (throttlerConfig) {
+    return runDramIteratorSweep(cache_->begin(*throttlerConfig), cache_->end());
+  }
+  return runDramIteratorSweep(cache_->begin(), cache_->end());
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::DramIteratorSweepResult
+Cache<Allocator>::runLockGroupDramIteratorSweep(
+    const std::optional<util::Throttler::Config>& throttlerConfig) {
+  if (throttlerConfig) {
+    return runDramIteratorSweep(cache_->beginLockGroup(*throttlerConfig),
+                                cache_->endLockGroup());
+  }
+  return runDramIteratorSweep(cache_->beginLockGroup(), cache_->endLockGroup());
+}
+
+template <typename Allocator>
+template <typename Iterator>
+typename Cache<Allocator>::DramIteratorSweepResult
+Cache<Allocator>::runDramIteratorSweep(Iterator iter, const Iterator& end) {
+  DramIteratorSweepResult result;
+  for (; iter != end; ++iter) {
+    const auto& item = *iter;
+    ++result.items;
+    result.keyBytes += item.getKey().size();
+    result.valueBytes += getSize(&item);
+  }
+  return result;
 }
 
 template <typename Allocator>

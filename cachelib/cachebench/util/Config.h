@@ -24,6 +24,12 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+enum class DramIteratorMode {
+  kDisabled,
+  kRegular,
+  kLockGroup,
+};
+
 struct DistributionConfig : public JSONConfig {
   explicit DistributionConfig(const folly::dynamic& configJson,
                               const std::string& configPath);
@@ -359,11 +365,23 @@ struct StressorConfig : public JSONConfig {
 
   bool useCombinedLockForIterators{false};
 
+  // If enabled, runs DRAM iterator sweeps in the background while the stressor
+  // workload is running.
+  DramIteratorMode dramIteratorMode{DramIteratorMode::kDisabled};
+  uint64_t dramIteratorIntervalMs{10000};
+  // A zero sleep duration disables throttling and requires workMs to be zero.
+  uint64_t dramIteratorSleepMs{0};
+  uint64_t dramIteratorWorkMs{0};
+
   // admission policy for cache.
   std::shared_ptr<StressorAdmPolicy> admPolicy{};
 
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);
+
+  bool usesDramIterator() const;
+  bool usesRegularDramIterator() const;
+  bool usesLockGroupDramIterator() const;
 
   // return true if the workload configuration uses chained items.
   bool usesChainedItems() const;

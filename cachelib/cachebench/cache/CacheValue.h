@@ -17,6 +17,8 @@
 #pragma once
 #include <algorithm>
 #include <cstdint>
+#include <limits>
+#include <stdexcept>
 
 #include "cachelib/common/CompilerUtils.h"
 
@@ -69,8 +71,12 @@ class CACHELIB_PACKED_ATTR CacheValue {
 
   // static function to make sure the item size is at least sizeof CacheValue
   // so we have enough space for fields used by sanity checks
-  static size_t getSize(size_t size) {
-    return std::max<size_t>(size, sizeof(CacheValue));
+  static uint32_t getSize(size_t size) {
+    const auto cacheValueSize = std::max<size_t>(size, sizeof(CacheValue));
+    if (cacheValueSize > std::numeric_limits<uint32_t>::max()) {
+      throw std::invalid_argument("Cache value size exceeds uint32_t");
+    }
+    return static_cast<uint32_t>(cacheValueSize);
   }
   // static function to help to initialize CacheValue with given item's data
   // pointer.

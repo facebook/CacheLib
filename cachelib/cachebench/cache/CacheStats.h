@@ -17,8 +17,11 @@
 #pragma once
 #include <fmt/core.h>
 #include <folly/Benchmark.h>
-#include <folly/Format.h>
+#include <folly/Range.h>
 #include <gflags/gflags.h>
+
+#include <limits>
+#include <string>
 
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"
 #include "cachelib/allocator/memory/Slab.h"
@@ -55,10 +58,40 @@ struct BackgroundPromotionStats {
   uint64_t nTraversals{0};
 };
 
+struct DramIteratorLatencyEstimates {
+  uint64_t p50{0};
+  uint64_t p99{0};
+  uint64_t p100{0};
+};
+
+struct DramIteratorImplementationStats {
+  uint64_t sweeps{0};
+  uint64_t sweepExceptions{0};
+  uint64_t totalItems{0};
+  uint64_t lastItems{0};
+  uint64_t totalKeyBytes{0};
+  uint64_t lastKeyBytes{0};
+  uint64_t totalValueBytes{0};
+  uint64_t lastValueBytes{0};
+  uint64_t totalElapsedNs{0};
+  uint64_t lastElapsedNs{0};
+  DramIteratorLatencyEstimates latencyNs;
+
+  bool empty() const { return sweeps == 0 && sweepExceptions == 0; }
+};
+
+struct DramIteratorStats {
+  std::string mode;
+  DramIteratorImplementationStats stats;
+
+  bool empty() const { return stats.empty(); }
+};
+
 class Stats : public StatsBase {
  public:
   BackgroundEvictionStats backgndEvicStats;
   BackgroundPromotionStats backgndPromoStats;
+  DramIteratorStats dramIteratorStats;
 
   uint64_t numEvictions{0};
   uint64_t numItems{0};
@@ -186,6 +219,7 @@ class Stats : public StatsBase {
     backgndEvicStats.evictionSize += other.backgndEvicStats.evictionSize;
     backgndPromoStats.nPromotedItems += other.backgndPromoStats.nPromotedItems;
     backgndPromoStats.nTraversals += other.backgndPromoStats.nTraversals;
+    accumulateDramIteratorStats(dramIteratorStats, other.dramIteratorStats);
 
     numEvictions += other.numEvictions;
     numItems += other.numItems;
@@ -255,15 +289,18 @@ class Stats : public StatsBase {
   std::string progress(const StatsBase& prevStatsBase) const override {
     const auto& prevStats = prevStatsBase.as<Stats>();
     auto hitRates = getHitRatios(prevStats);
+    const auto iteratorProgress =
+        renderDramIteratorProgress(prevStats.dramIteratorStats);
     return fmt::format(
         "{} items in cache. {} items in nvm cache. {} items evicted from nvm "
-        "cache. Hit Ratio {:6.2f}% (RAM {:6.2f}%, NVM {:6.2f}%).",
+        "cache. Hit Ratio {:6.2f}% (RAM {:6.2f}%, NVM {:6.2f}%).{}",
         numItems,
         numNvmItems,
         numNvmEvictions,
         hitRates["overall"],
         hitRates["ram"],
-        hitRates["nvm"]);
+        hitRates["nvm"],
+        iteratorProgress);
   }
 
   void render(std::ostream& out) const override {
@@ -421,6 +458,12 @@ class Stats : public StatsBase {
       out << fmt::format("Background Promoter Traversals : {}",
                          backgndPromoStats.nTraversals)
           << std::endl;
+    }
+
+    if (!dramIteratorStats.empty()) {
+      out << "== DRAM Iterator Stats ==" << std::endl;
+      renderDramIteratorStats(out, dramIteratorStats, !aggregated_,
+                              !aggregated_);
     }
 
     if (numNvmGets > 0 || numNvmDeletes > 0 || numNvmPuts > 0) {
@@ -652,6 +695,8 @@ class Stats : public StatsBase {
           "NVM Hit Ratio : {:6.2f}%\n",
           rates["ram"], rates["nvm"]);
     }
+
+    renderDramIteratorDeltaStats(prevStats.dramIteratorStats, out);
   }
 
   void render(folly::UserCounters& counters) const override {
@@ -690,6 +735,8 @@ class Stats : public StatsBase {
         static_cast<int64_t>(numNvmNandBytesWritten / MB);
     counters["nvm_app_write_amp"] = static_cast<int64_t>(appWriteAmp);
     counters["nvm_dev_write_amp"] = static_cast<int64_t>(devWriteAmp);
+
+    renderDramIteratorCounters(counters, dramIteratorStats);
   }
 
   bool renderIsTestPassed(std::ostream& out) const override {
@@ -718,6 +765,14 @@ class Stats : public StatsBase {
       pass = false;
     }
 
+    if (dramIteratorStats.stats.sweepExceptions > 0) {
+      out << "Found DRAM iterator sweep exceptions. mode: "
+          << dramIteratorStats.mode
+          << ", exceptions: " << dramIteratorStats.stats.sweepExceptions
+          << std::endl;
+      pass = false;
+    }
+
     for (const auto& kv : nvmErrors) {
       std::cout << "NVM error. " << kv.first << " : " << kv.second << std::endl;
       pass = false;
@@ -742,6 +797,151 @@ class Stats : public StatsBase {
 
   static double invertPctFn(uint64_t ops, uint64_t total) {
     return 100 - pctFn(ops, total);
+  }
+
+  static void accumulateDramIteratorStats(DramIteratorStats& stats,
+                                          const DramIteratorStats& other) {
+    if (!other.empty()) {
+      if (stats.mode.empty()) {
+        stats.mode = other.mode;
+      } else if (!other.mode.empty() && stats.mode != other.mode) {
+        stats.mode = "mixed";
+      }
+      stats.stats.sweeps += other.stats.sweeps;
+      stats.stats.sweepExceptions += other.stats.sweepExceptions;
+      stats.stats.totalItems += other.stats.totalItems;
+      stats.stats.totalKeyBytes += other.stats.totalKeyBytes;
+      stats.stats.totalValueBytes += other.stats.totalValueBytes;
+      stats.stats.totalElapsedNs += other.stats.totalElapsedNs;
+    }
+    // Last-sweep values have no single meaning across instances, and
+    // percentiles cannot be combined without their underlying samples. Clear
+    // both on every aggregation, even if the incoming instance has no iterator
+    // samples.
+    clearDramIteratorPerInstanceStats(stats);
+  }
+
+  static void clearDramIteratorPerInstanceStats(DramIteratorStats& stats) {
+    stats.stats.lastItems = 0;
+    stats.stats.lastKeyBytes = 0;
+    stats.stats.lastValueBytes = 0;
+    stats.stats.lastElapsedNs = 0;
+    stats.stats.latencyNs = {};
+  }
+
+  static double dramIteratorItemsPerSec(
+      const DramIteratorImplementationStats& stats) {
+    if (stats.totalElapsedNs == 0) {
+      return 0.0;
+    }
+    return static_cast<double>(stats.totalItems) * 1e9 /
+           static_cast<double>(stats.totalElapsedNs);
+  }
+
+  static uint64_t dramIteratorAverageElapsedNs(
+      const DramIteratorImplementationStats& stats) {
+    return stats.sweeps == 0 ? 0 : stats.totalElapsedNs / stats.sweeps;
+  }
+
+  static uint64_t dramIteratorCounterDelta(uint64_t current,
+                                           uint64_t previous) {
+    return current >= previous ? current - previous : 0;
+  }
+
+  std::string renderDramIteratorProgress(
+      const DramIteratorStats& prevStats) const {
+    const auto deltaSweeps = dramIteratorCounterDelta(
+        dramIteratorStats.stats.sweeps, prevStats.stats.sweeps);
+    const auto deltaSweepExceptions =
+        dramIteratorCounterDelta(dramIteratorStats.stats.sweepExceptions,
+                                 prevStats.stats.sweepExceptions);
+    if (deltaSweeps == 0 && deltaSweepExceptions == 0) {
+      return "";
+    }
+    const auto lastSweepProgress =
+        deltaSweeps == 0 ? ""
+                         : fmt::format(", most recent sweep: {} items",
+                                       dramIteratorStats.stats.lastItems);
+    return fmt::format(" DRAM iterator {}: +{} sweeps{}, {} sweep exceptions.",
+                       dramIteratorStats.mode,
+                       deltaSweeps,
+                       lastSweepProgress,
+                       deltaSweepExceptions);
+  }
+
+  static void renderDramIteratorStats(std::ostream& out,
+                                      const DramIteratorStats& iteratorStats,
+                                      bool renderLatency,
+                                      bool renderLastSweep) {
+    const auto& stats = iteratorStats.stats;
+    if (stats.empty()) {
+      return;
+    }
+    out << fmt::format("DRAM iterator {:10}: sweeps: {}, sweep exceptions: {}",
+                       iteratorStats.mode,
+                       stats.sweeps,
+                       stats.sweepExceptions);
+    if (renderLastSweep) {
+      out << fmt::format(", last items: {}, last bytes: {}",
+                         stats.lastItems,
+                         stats.lastKeyBytes + stats.lastValueBytes);
+    }
+    out << fmt::format(", avg sweep: {} ns, items/s: {:.2f}",
+                       dramIteratorAverageElapsedNs(stats),
+                       dramIteratorItemsPerSec(stats))
+        << std::endl;
+    if (renderLatency) {
+      out << fmt::format(
+                 "DRAM iterator {:10} latency p50: {} ns, p99: {} ns, "
+                 "p100: {} ns",
+                 iteratorStats.mode,
+                 stats.latencyNs.p50,
+                 stats.latencyNs.p99,
+                 stats.latencyNs.p100)
+          << std::endl;
+    }
+  }
+
+  void renderDramIteratorDeltaStats(const DramIteratorStats& prevStats,
+                                    std::ostream& out) const {
+    const auto deltaSweeps = dramIteratorCounterDelta(
+        dramIteratorStats.stats.sweeps, prevStats.stats.sweeps);
+    const auto deltaSweepExceptions =
+        dramIteratorCounterDelta(dramIteratorStats.stats.sweepExceptions,
+                                 prevStats.stats.sweepExceptions);
+    if (deltaSweeps == 0 && deltaSweepExceptions == 0) {
+      return;
+    }
+    out << fmt::format("DRAM iterator {:10}: sweeps: {}, sweep exceptions: {}",
+                       dramIteratorStats.mode,
+                       deltaSweeps,
+                       deltaSweepExceptions)
+        << std::endl;
+  }
+
+  static void renderDramIteratorCounters(folly::UserCounters& counters,
+                                         const DramIteratorStats& stats) {
+    counters["dram_iterator_sweeps"] =
+        toDramIteratorUserCounter(stats.stats.sweeps);
+    counters["dram_iterator_sweep_exceptions"] =
+        toDramIteratorUserCounter(stats.stats.sweepExceptions);
+    counters["dram_iterator_last_items"] =
+        toDramIteratorUserCounter(stats.stats.lastItems);
+    counters["dram_iterator_last_bytes"] = toDramIteratorUserCounter(
+        stats.stats.lastKeyBytes + stats.stats.lastValueBytes);
+    counters["dram_iterator_avg_elapsed_ns"] =
+        toDramIteratorUserCounter(dramIteratorAverageElapsedNs(stats.stats));
+    counters["dram_iterator_items_per_sec"] =
+        static_cast<int64_t>(dramIteratorItemsPerSec(stats.stats));
+    counters["dram_iterator_latency_p99_ns"] =
+        toDramIteratorUserCounter(stats.stats.latencyNs.p99);
+  }
+
+  static int64_t toDramIteratorUserCounter(uint64_t value) {
+    constexpr auto kMaxCounter = std::numeric_limits<int64_t>::max();
+    return value > static_cast<uint64_t>(kMaxCounter)
+               ? kMaxCounter
+               : static_cast<int64_t>(value);
   }
 };
 

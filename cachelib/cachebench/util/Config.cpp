@@ -23,6 +23,34 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+namespace {
+
+DramIteratorMode parseDramIteratorMode(const std::string& mode) {
+  if (mode == "disabled") {
+    return DramIteratorMode::kDisabled;
+  }
+  if (mode == "regular") {
+    return DramIteratorMode::kRegular;
+  }
+  if (mode == "lock_group") {
+    return DramIteratorMode::kLockGroup;
+  }
+  throw std::invalid_argument(
+      fmt::format("Unsupported dramIteratorMode: {}", mode));
+}
+
+uint64_t parseNonNegativeInteger(const folly::dynamic& value,
+                                 const char* fieldName) {
+  const auto parsed = value.asInt();
+  if (parsed < 0) {
+    throw std::invalid_argument(
+        fmt::format("{} must not be negative", fieldName));
+  }
+  return static_cast<uint64_t>(parsed);
+}
+
+} // namespace
+
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, generator);
 
@@ -69,6 +97,17 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, checkNvmCacheWarmUp);
 
   JSONSetVal(configJson, useCombinedLockForIterators);
+  JSONSetVal(configJson, dramIteratorIntervalMs);
+  if (const auto* mode = configJson.get_ptr("dramIteratorMode")) {
+    dramIteratorMode = parseDramIteratorMode(mode->asString());
+  }
+  if (const auto* sleepMs = configJson.get_ptr("dramIteratorSleepMs")) {
+    dramIteratorSleepMs =
+        parseNonNegativeInteger(*sleepMs, "dramIteratorSleepMs");
+  }
+  if (const auto* workMs = configJson.get_ptr("dramIteratorWorkMs")) {
+    dramIteratorWorkMs = parseNonNegativeInteger(*workMs, "dramIteratorWorkMs");
+  }
 
   if (configJson.count("poolDistributions")) {
     for (auto& it : configJson["poolDistributions"]) {
@@ -93,10 +132,32 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
         fmt::format("set only one of traceFileName or traceFileNames"));
   }
 
+  if (usesDramIterator() && dramIteratorIntervalMs == 0) {
+    throw std::invalid_argument(
+        "dramIteratorIntervalMs must be greater than 0 when dram iterator is "
+        "enabled");
+  }
+  if (dramIteratorSleepMs == 0 && dramIteratorWorkMs != 0) {
+    throw std::invalid_argument(
+        "dramIteratorWorkMs must be 0 when dramIteratorSleepMs is 0");
+  }
+
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 616>();
+  checkCorrectSize<StressorConfig, 640>();
+}
+
+bool StressorConfig::usesDramIterator() const {
+  return dramIteratorMode != DramIteratorMode::kDisabled;
+}
+
+bool StressorConfig::usesRegularDramIterator() const {
+  return dramIteratorMode == DramIteratorMode::kRegular;
+}
+
+bool StressorConfig::usesLockGroupDramIterator() const {
+  return dramIteratorMode == DramIteratorMode::kLockGroup;
 }
 
 bool StressorConfig::usesChainedItems() const {
