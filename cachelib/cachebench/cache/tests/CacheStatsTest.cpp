@@ -135,5 +135,61 @@ TEST(CacheStatsTest, DramIteratorCountersSaturateAtSignedMaximum) {
             counters.at("dram_iterator_sweeps"));
 }
 
+TEST(CacheStatsTest, ParsesBlockCacheLatencyCountersForMultipleArenas) {
+  const std::unordered_map<std::string, double> navyStats{
+      {"navy_bc_insert_latency_us_p50_0", 10.5},
+      {"navy_bc_insert_latency_us_max_0", 19.5},
+      {"navy_bc_insert_latency_us_p50_1", 20.5},
+      {"navy_bc_insert_latency_us_max_1", 29.5},
+      {"navy_bc_lookup_latency_us_p99_1", 25.5},
+      {"navy_bc_remove_latency_us_p999_0", 15.5},
+  };
+
+  const auto latencyStats = getBlockCacheLatencyStats(navyStats, 2);
+
+  ASSERT_EQ(2, latencyStats.size());
+  EXPECT_DOUBLE_EQ(10.5, latencyStats[0].insert.p50);
+  EXPECT_DOUBLE_EQ(19.5, latencyStats[0].insert.p100);
+  EXPECT_DOUBLE_EQ(20.5, latencyStats[1].insert.p50);
+  EXPECT_DOUBLE_EQ(29.5, latencyStats[1].insert.p100);
+  EXPECT_DOUBLE_EQ(25.5, latencyStats[1].lookup.p99);
+  EXPECT_DOUBLE_EQ(15.5, latencyStats[0].remove.p999);
+}
+
+TEST(CacheStatsTest, RendersBlockCacheLatencyForEachArena) {
+  Stats stats;
+  stats.numNvmGets = 1;
+  stats.blockCacheLatencyStats = {
+      {.insert = {.p50 = 10.5}},
+      {.insert = {.p50 = 20.5}},
+  };
+
+  std::ostringstream output;
+  stats.render(output);
+
+  EXPECT_NE(std::string::npos,
+            output.str().find("BlockCache[0] Insert Latency"));
+  EXPECT_NE(std::string::npos,
+            output.str().find("BlockCache[1] Insert Latency"));
+  EXPECT_NE(std::string::npos, output.str().find("10.50 us"));
+  EXPECT_NE(std::string::npos, output.str().find("20.50 us"));
+}
+
+TEST(CacheStatsTest, PreservesSingleArenaBlockCacheLatencyLabels) {
+  const std::unordered_map<std::string, double> navyStats{
+      {"navy_bc_lookup_latency_us_max", 42.5},
+  };
+  Stats stats;
+  stats.numNvmGets = 1;
+  stats.blockCacheLatencyStats = getBlockCacheLatencyStats(navyStats, 1);
+
+  std::ostringstream output;
+  stats.render(output);
+
+  EXPECT_NE(std::string::npos, output.str().find("BlockCache Lookup Latency"));
+  EXPECT_EQ(std::string::npos, output.str().find("BlockCache[0]"));
+  EXPECT_NE(std::string::npos, output.str().find("42.50 us"));
+}
+
 } // namespace
 } // namespace facebook::cachelib::cachebench

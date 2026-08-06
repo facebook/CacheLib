@@ -69,6 +69,21 @@ struct MemoryTierConfig : public JSONConfig {
   std::string memBindNodes;
 };
 
+struct NavyArenaConfig : public JSONConfig {
+  explicit NavyArenaConfig(const folly::dynamic& configJson);
+
+  // Convert the arena-relative BigHash percentage to the device-relative
+  // percentage required by NavyConfig.
+  unsigned int getBigHashDeviceSizePct(uint64_t arenaSize,
+                                       uint64_t deviceSize) const;
+
+  std::string name;
+  // Percentage of usable NVM capacity assigned to this arena.
+  uint64_t sizePct{0};
+  // Percentage of this arena assigned to BigHash. BlockCache uses the rest.
+  uint64_t bigHashPct{0};
+};
+
 struct CacheConfig : public JSONConfig {
   // by defaullt, lru allocator. can be set to LRU-2Q.
   std::string allocator{"LRU"};
@@ -150,6 +165,14 @@ struct CacheConfig : public JSONConfig {
   // Navy specific: region size in MB
   uint64_t navyRegionSizeMB{16};
 
+  // Independent Navy engine pairs sharing the NVM device. If empty, cachebench
+  // configures one arena using navyBigHashSizePct for backward compatibility.
+  std::vector<NavyArenaConfig> navyArenas;
+
+  size_t getNavyNumArenas() const {
+    return navyArenas.empty() ? 1 : navyArenas.size();
+  }
+
   // If non-empty, configures Navy to use FIFO instead of LRU. If there are
   // more than one values provided, it enables segmented fifo with the
   // appropriate ratios.
@@ -159,9 +182,7 @@ struct CacheConfig : public JSONConfig {
   // Navy. If 0, the default configuration of Navy(20) is used.
   uint64_t navyReqOrderShardsPower{21};
 
-  // percentage of the nvm cache size that is dedicated for objects that are
-  // smaller than @navySmallItemMaxSize. This size is dedicated for BigHash
-  // engine.
+  // Percentage of NVM dedicated to BigHash when navyArenas is empty.
   uint64_t navyBigHashSizePct = 50;
 
   // bucket size for BigHash. This controls the write amplification for small

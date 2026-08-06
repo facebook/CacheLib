@@ -17,12 +17,23 @@
 #pragma once
 #include <folly/json/dynamic.h>
 
+#include <cstdint>
+
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/common/Types.h"
 
 namespace facebook {
 namespace cachelib {
+struct NavyCacheSizes {
+  uint64_t deviceSize{};
+  uint64_t metadataSize{};
+};
+
+// Return the effective device and metadata sizes after applying Navy's
+// alignment requirements.
+NavyCacheSizes getNavyCacheSizes(const navy::NavyConfig& config);
+
 // return a navy cache which is created by CacheProto whose data is from
 // NavyConfig.
 std::unique_ptr<navy::AbstractCache> createNavyCache(

@@ -58,6 +58,37 @@ uint64_t getRegionSize(const navy::NavyConfig& config) {
   return regionSize;
 }
 
+uint64_t getDeviceFileSize(const navy::NavyConfig& config) {
+  const auto fileSize = config.getFileSize();
+  if (!config.usesRaidFiles()) {
+    return fileSize;
+  }
+
+  const auto regionSize = getRegionSize(config);
+  if (regionSize == 0) {
+    throw std::invalid_argument("Navy region size must be greater than zero");
+  }
+  return alignDown(fileSize, regionSize);
+}
+
+uint64_t getMetadataSize(const navy::NavyConfig& config,
+                         uint64_t deviceSize,
+                         uint64_t alignment) {
+  if (alignment == 0) {
+    throw std::invalid_argument("Navy block size must be greater than zero");
+  }
+
+  auto metadataSize = config.getDeviceMetadataSize();
+  if (metadataSize == 0) {
+    XDCHECK(folly::isPowTwo(alignment));
+    const auto mask = ~(alignment - 1);
+    metadataSize =
+        static_cast<uint64_t>(kDefaultMetadataPercent * deviceSize / 100) &
+        mask;
+  }
+  return alignUp(metadataSize, alignment);
+}
+
 // Create a bighash that ends at bigHashEndOffset.
 //
 // @param bigHashConfig bighash config
@@ -227,20 +258,11 @@ void setupCacheProtos(const navy::NavyConfig& config,
         "left on device");
   }
 
-  auto getDefaultMetadataSize = [](size_t size, size_t alignment) {
-    XDCHECK(folly::isPowTwo(alignment));
-    auto mask = ~(alignment - 1);
-    return (static_cast<size_t>(kDefaultMetadataPercent * size / 100) & mask);
-  };
-
   auto ioAlignSize = device.getIOAlignmentSize();
   const uint64_t totalCacheSize = device.getSize();
 
-  auto metadataSize = config.getDeviceMetadataSize();
-  if (metadataSize == 0) {
-    metadataSize = getDefaultMetadataSize(totalCacheSize, ioAlignSize);
-  }
-  metadataSize = alignUp(metadataSize, ioAlignSize);
+  const auto metadataSize =
+      getMetadataSize(config, totalCacheSize, ioAlignSize);
   if (metadataSize >= totalCacheSize) {
     throw std::invalid_argument{
         fmt::format("Invalid metadata size: {}. Cache size: {}",
@@ -347,6 +369,15 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 }
 } // namespace
 
+NavyCacheSizes getNavyCacheSizes(const navy::NavyConfig& config) {
+  const auto fileSize = getDeviceFileSize(config);
+  const auto deviceSize = config.usesRaidFiles()
+                              ? fileSize * config.getRaidPaths().size()
+                              : fileSize;
+  return {deviceSize,
+          getMetadataSize(config, deviceSize, config.getBlockSize())};
+}
+
 std::unique_ptr<navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
@@ -354,14 +385,13 @@ std::unique_ptr<navy::Device> createDevice(
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
   if (config.usesRaidFiles() || config.usesSimpleFile()) {
     auto stripeSize = 0;
-    auto fileSize = config.getFileSize();
+    const auto fileSize = getDeviceFileSize(config);
     std::vector<std::string> filePaths;
     if (config.usesSimpleFile()) {
       filePaths.emplace_back(config.getFileName());
     } else {
       stripeSize = getRegionSize(config);
       filePaths = config.getRaidPaths();
-      fileSize = alignDown(fileSize, stripeSize);
     }
 
     return navy::createFileDevice(

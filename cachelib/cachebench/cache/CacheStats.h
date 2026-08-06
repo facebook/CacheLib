@@ -22,6 +22,8 @@
 
 #include <limits>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"
 #include "cachelib/allocator/memory/Slab.h"
@@ -87,6 +89,62 @@ struct DramIteratorStats {
   bool empty() const { return stats.empty(); }
 };
 
+struct LatencyPercentiles {
+  double p50{0};
+  double p90{0};
+  double p99{0};
+  double p999{0};
+  double p9999{0};
+  double p99999{0};
+  double p999999{0};
+  double p100{0};
+};
+
+struct BlockCacheLatencyStats {
+  LatencyPercentiles insert;
+  LatencyPercentiles lookup;
+  LatencyPercentiles remove;
+};
+
+inline std::vector<BlockCacheLatencyStats> getBlockCacheLatencyStats(
+    const std::unordered_map<std::string, double>& navyStats,
+    size_t numArenas) {
+  std::vector<BlockCacheLatencyStats> result;
+  result.reserve(numArenas);
+
+  for (size_t arena = 0; arena < numArenas; ++arena) {
+    auto getLatencyPercentiles = [&](folly::StringPiece operation) {
+      auto lookup = [&](folly::StringPiece percentile) {
+        auto key =
+            fmt::format("navy_bc_{}_latency_us_{}", operation, percentile);
+        if (numArenas > 1) {
+          key = fmt::format("{}_{}", key, arena);
+        }
+        const auto it = navyStats.find(key);
+        return it == navyStats.end() ? 0 : it->second;
+      };
+
+      return LatencyPercentiles{
+          .p50 = lookup("p50"),
+          .p90 = lookup("p90"),
+          .p99 = lookup("p99"),
+          .p999 = lookup("p999"),
+          .p9999 = lookup("p9999"),
+          .p99999 = lookup("p99999"),
+          .p999999 = lookup("p999999"),
+          .p100 = lookup("max"),
+      };
+    };
+
+    result.push_back({
+        .insert = getLatencyPercentiles("insert"),
+        .lookup = getLatencyPercentiles("lookup"),
+        .remove = getLatencyPercentiles("remove"),
+    });
+  }
+  return result;
+}
+
 class Stats : public StatsBase {
  public:
   BackgroundEvictionStats backgndEvicStats;
@@ -147,30 +205,7 @@ class Stats : public StatsBase {
   double nvmWriteLatencyMicrosP999999{0};
   double nvmWriteLatencyMicrosP100{0};
 
-  double bcInsertLatencyMicrosP50{0};
-  double bcInsertLatencyMicrosP90{0};
-  double bcInsertLatencyMicrosP99{0};
-  double bcInsertLatencyMicrosP999{0};
-  double bcInsertLatencyMicrosP9999{0};
-  double bcInsertLatencyMicrosP99999{0};
-  double bcInsertLatencyMicrosP999999{0};
-  double bcInsertLatencyMicrosP100{0};
-  double bcLookupLatencyMicrosP50{0};
-  double bcLookupLatencyMicrosP90{0};
-  double bcLookupLatencyMicrosP99{0};
-  double bcLookupLatencyMicrosP999{0};
-  double bcLookupLatencyMicrosP9999{0};
-  double bcLookupLatencyMicrosP99999{0};
-  double bcLookupLatencyMicrosP999999{0};
-  double bcLookupLatencyMicrosP100{0};
-  double bcRemoveLatencyMicrosP50{0};
-  double bcRemoveLatencyMicrosP90{0};
-  double bcRemoveLatencyMicrosP99{0};
-  double bcRemoveLatencyMicrosP999{0};
-  double bcRemoveLatencyMicrosP9999{0};
-  double bcRemoveLatencyMicrosP99999{0};
-  double bcRemoveLatencyMicrosP999999{0};
-  double bcRemoveLatencyMicrosP100{0};
+  std::vector<BlockCacheLatencyStats> blockCacheLatencyStats;
 
   uint64_t numNvmExceededMaxRetry{0};
 
@@ -506,35 +541,30 @@ class Stats : public StatsBase {
         fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
         fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
 
-        folly::StringPiece insertCat = "BlockCache Insert Latency";
-        fmtLatency(insertCat, "p50", bcInsertLatencyMicrosP50);
-        fmtLatency(insertCat, "p90", bcInsertLatencyMicrosP90);
-        fmtLatency(insertCat, "p99", bcInsertLatencyMicrosP99);
-        fmtLatency(insertCat, "p999", bcInsertLatencyMicrosP999);
-        fmtLatency(insertCat, "p9999", bcInsertLatencyMicrosP9999);
-        fmtLatency(insertCat, "p99999", bcInsertLatencyMicrosP99999);
-        fmtLatency(insertCat, "p999999", bcInsertLatencyMicrosP999999);
-        fmtLatency(insertCat, "p100", bcInsertLatencyMicrosP100);
+        auto renderLatencyPercentiles = [&](folly::StringPiece category,
+                                            const auto& latency) {
+          fmtLatency(category, "p50", latency.p50);
+          fmtLatency(category, "p90", latency.p90);
+          fmtLatency(category, "p99", latency.p99);
+          fmtLatency(category, "p999", latency.p999);
+          fmtLatency(category, "p9999", latency.p9999);
+          fmtLatency(category, "p99999", latency.p99999);
+          fmtLatency(category, "p999999", latency.p999999);
+          fmtLatency(category, "p100", latency.p100);
+        };
 
-        folly::StringPiece lookupCat = "BlockCache Lookup Latency";
-        fmtLatency(lookupCat, "p50", bcLookupLatencyMicrosP50);
-        fmtLatency(lookupCat, "p90", bcLookupLatencyMicrosP90);
-        fmtLatency(lookupCat, "p99", bcLookupLatencyMicrosP99);
-        fmtLatency(lookupCat, "p999", bcLookupLatencyMicrosP999);
-        fmtLatency(lookupCat, "p9999", bcLookupLatencyMicrosP9999);
-        fmtLatency(lookupCat, "p99999", bcLookupLatencyMicrosP99999);
-        fmtLatency(lookupCat, "p999999", bcLookupLatencyMicrosP999999);
-        fmtLatency(lookupCat, "p100", bcLookupLatencyMicrosP100);
-
-        folly::StringPiece removeCat = "BlockCache Remove Latency";
-        fmtLatency(removeCat, "p50", bcRemoveLatencyMicrosP50);
-        fmtLatency(removeCat, "p90", bcRemoveLatencyMicrosP90);
-        fmtLatency(removeCat, "p99", bcRemoveLatencyMicrosP99);
-        fmtLatency(removeCat, "p999", bcRemoveLatencyMicrosP999);
-        fmtLatency(removeCat, "p9999", bcRemoveLatencyMicrosP9999);
-        fmtLatency(removeCat, "p99999", bcRemoveLatencyMicrosP99999);
-        fmtLatency(removeCat, "p999999", bcRemoveLatencyMicrosP999999);
-        fmtLatency(removeCat, "p100", bcRemoveLatencyMicrosP100);
+        for (size_t arena = 0; arena < blockCacheLatencyStats.size(); ++arena) {
+          const auto category = [&](folly::StringPiece operation) {
+            return blockCacheLatencyStats.size() == 1
+                       ? fmt::format("BlockCache {} Latency", operation)
+                       : fmt::format("BlockCache[{}] {} Latency", arena,
+                                     operation);
+          };
+          const auto& latency = blockCacheLatencyStats[arena];
+          renderLatencyPercentiles(category("Insert"), latency.insert);
+          renderLatencyPercentiles(category("Lookup"), latency.lookup);
+          renderLatencyPercentiles(category("Remove"), latency.remove);
+        }
       }
 
       constexpr double GB = 1024.0 * 1024 * 1024;

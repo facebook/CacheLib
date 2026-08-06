@@ -84,5 +84,86 @@ TEST(StressorConfigTest, RejectsDramIteratorWorkWithoutSleep) {
                std::invalid_argument);
 }
 
+TEST(CacheConfigTest, NavyArenasDefaultToLegacySingleArena) {
+  const CacheConfig config{folly::dynamic::object()};
+
+  EXPECT_TRUE(config.navyArenas.empty());
+  EXPECT_EQ(1, config.getNavyNumArenas());
+}
+
+TEST(CacheConfigTest, ParsesNavyArenas) {
+  const auto arenas = folly::dynamic::array(
+      folly::dynamic::object("name", "first")("sizePct", 40)("bigHashPct", 0),
+      folly::dynamic::object("name", "second")("sizePct", 60)("bigHashPct",
+                                                              50));
+  const CacheConfig config{folly::dynamic::object("navyArenas", arenas)};
+
+  ASSERT_EQ(2, config.navyArenas.size());
+  EXPECT_EQ("first", config.navyArenas[0].name);
+  EXPECT_EQ(40, config.navyArenas[0].sizePct);
+  EXPECT_EQ(0, config.navyArenas[0].bigHashPct);
+  EXPECT_EQ("second", config.navyArenas[1].name);
+  EXPECT_EQ(60, config.navyArenas[1].sizePct);
+  EXPECT_EQ(50, config.navyArenas[1].bigHashPct);
+}
+
+TEST(NavyArenaConfigTest, ConvertsBigHashSizeToRoundedDevicePercentage) {
+  const NavyArenaConfig config{folly::dynamic::object("name", "arena")(
+      "sizePct", 100)("bigHashPct", 50)};
+
+  EXPECT_EQ(15, config.getBigHashDeviceSizePct(298, 1000));
+  EXPECT_EQ(14, config.getBigHashDeviceSizePct(288, 1000));
+}
+
+TEST(CacheConfigTest, RejectsEmptyNavyArenas) {
+  EXPECT_THROW(CacheConfig{folly::dynamic::object("navyArenas",
+                                                  folly::dynamic::array())},
+               std::invalid_argument);
+}
+
+TEST(CacheConfigTest, RejectsSingleNavyArena) {
+  EXPECT_THROW(CacheConfig{folly::dynamic::object(
+                   "navyArenas",
+                   folly::dynamic::array(folly::dynamic::object("name", "only")(
+                       "sizePct", 100)("bigHashPct", 50)))},
+               std::invalid_argument);
+}
+
+TEST(CacheConfigTest, RejectsUnnamedNavyArena) {
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object(
+          "navyArenas",
+          folly::dynamic::array(folly::dynamic::object("sizePct", 100)))},
+      std::invalid_argument);
+}
+
+TEST(CacheConfigTest, RejectsDuplicateNavyArenaNames) {
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object(
+          "navyArenas",
+          folly::dynamic::array(
+              folly::dynamic::object("name", "duplicate")("sizePct", 50),
+              folly::dynamic::object("name", "duplicate")("sizePct", 50)))},
+      std::invalid_argument);
+}
+
+TEST(CacheConfigTest, RejectsNavyArenaSizesThatDoNotTotalOneHundred) {
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object(
+          "navyArenas",
+          folly::dynamic::array(
+              folly::dynamic::object("name", "first")("sizePct", 25),
+              folly::dynamic::object("name", "second")("sizePct", 50)))},
+      std::invalid_argument);
+}
+
+TEST(CacheConfigTest, RejectsNavyArenaWithoutBlockCache) {
+  EXPECT_THROW(CacheConfig{folly::dynamic::object(
+                   "navyArenas",
+                   folly::dynamic::array(folly::dynamic::object(
+                       "name", "arena")("sizePct", 100)("bigHashPct", 100)))},
+               std::invalid_argument);
+}
+
 } // namespace
 } // namespace facebook::cachelib::cachebench

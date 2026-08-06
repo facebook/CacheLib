@@ -63,6 +63,33 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
 
   JSONSetVal(configJson, navyBlockSize);
   JSONSetVal(configJson, navyRegionSizeMB);
+  if (const auto* arenas = configJson.get_ptr("navyArenas")) {
+    if (!arenas->isArray()) {
+      folly::throw_exception<folly::TypeError>("array", arenas->type());
+    }
+    if (arenas->size() < 2) {
+      throw std::invalid_argument(
+          "navyArenas must contain at least two arenas");
+    }
+    uint64_t totalSizePct = 0;
+    navyArenas.reserve(arenas->size());
+    for (const auto& arena : *arenas) {
+      NavyArenaConfig arenaConfig{arena};
+      for (const auto& configuredArena : navyArenas) {
+        if (configuredArena.name == arenaConfig.name) {
+          throw std::invalid_argument(fmt::format(
+              "Navy arena name '{}' is duplicated", arenaConfig.name));
+        }
+      }
+      totalSizePct += arenaConfig.sizePct;
+      navyArenas.push_back(arenaConfig);
+    }
+    if (totalSizePct != 100) {
+      throw std::invalid_argument(fmt::format(
+          "Navy arena size percentages must total 100, but total {}",
+          totalSizePct));
+    }
+  }
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
   JSONSetVal(configJson, navyReqOrderShardsPower);
   JSONSetVal(configJson, navyBigHashSizePct);
@@ -121,7 +148,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 864>();
+  checkCorrectSize<CacheConfig, 888>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(
@@ -129,6 +156,36 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
         "numPools: {}, poolSizes.size(): {}",
         numPools, poolSizes.size()));
   }
+}
+
+NavyArenaConfig::NavyArenaConfig(const folly::dynamic& configJson) {
+  JSONSetVal(configJson, name);
+  JSONSetVal(configJson, sizePct);
+  JSONSetVal(configJson, bigHashPct);
+
+  if (name.empty()) {
+    throw std::invalid_argument("Navy arena name must not be empty");
+  }
+  if (sizePct == 0 || sizePct > 100) {
+    throw std::invalid_argument(fmt::format(
+        "Navy arena '{}' size percentage must be in the range [1, 100]", name));
+  }
+  if (bigHashPct >= 100) {
+    throw std::invalid_argument(fmt::format(
+        "Navy arena '{}' BigHash percentage must be in the range [0, 100)",
+        name));
+  }
+}
+
+unsigned int NavyArenaConfig::getBigHashDeviceSizePct(
+    uint64_t arenaSize, uint64_t deviceSize) const {
+  if (deviceSize == 0) {
+    throw std::invalid_argument("NVM device size must be greater than zero");
+  }
+  const auto requestedSize = arenaSize * bigHashPct / 100;
+  // Add half the divisor so integer division rounds to the nearest percentage.
+  return static_cast<unsigned int>((requestedSize * 100 + deviceSize / 2) /
+                                   deviceSize);
 }
 
 std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {

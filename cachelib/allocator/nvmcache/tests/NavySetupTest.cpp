@@ -52,6 +52,31 @@ size_t getFileSize(std::string& fileName) {
 }
 
 } // namespace
+
+TEST(NavySetupTest, CacheSizes) {
+  constexpr uint64_t kMB = 1024 * 1024;
+  constexpr uint64_t kBlockSize = 4096;
+
+  navy::NavyConfig config;
+  config.setMemoryFile(100 * kMB);
+  config.setBlockSize(kBlockSize);
+
+  auto sizes = getNavyCacheSizes(config);
+  EXPECT_EQ(100 * kMB, sizes.deviceSize);
+  EXPECT_EQ(512 * 1024, sizes.metadataSize);
+
+  config.setDeviceMetadataSize(1);
+  sizes = getNavyCacheSizes(config);
+  EXPECT_EQ(kBlockSize, sizes.metadataSize);
+
+  config.setDeviceMetadataSize(0);
+  config.blockCache().setRegionSize(8 * kMB);
+  config.setRaidFiles({"one", "two", "three"}, 9 * kMB);
+  sizes = getNavyCacheSizes(config);
+  EXPECT_EQ(24 * kMB, sizes.deviceSize);
+  EXPECT_EQ(30 * kBlockSize, sizes.metadataSize);
+}
+
 TEST(NavySetupTest, RAID0DeviceSize) {
   // Verify size is reduced when we pass in a size that's not aligned to
   // stripeSize for RAID0Device
