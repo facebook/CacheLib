@@ -319,6 +319,13 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   template <typename T>
   std::shared_ptr<const T> find(folly::StringPiece key);
 
+  // Inspect an object in RAM without filtering expired items or updating
+  // access tracking such as LRU promotion, matching the RAM lookup semantics
+  // of CacheAllocator::inspectCache(). The item remains pinned until the
+  // returned shared pointer is released.
+  template <typename T>
+  std::shared_ptr<const T> inspectCache(folly::StringPiece key);
+
   // Return whether an object exists in cache without looking up the device.
   StorageMedium existFast(folly::StringPiece key);
 
@@ -750,6 +757,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   TLCounter evictions_{};
   TLCounter lookups_;
   TLCounter succL1Lookups_;
+  TLCounter inspections_;
+  TLCounter succL1Inspections_;
   TLCounter inserts_;
   TLCounter insertErrors_;
   TLCounter replaces_;
@@ -988,6 +997,24 @@ std::shared_ptr<const T> ObjectCache<AllocatorT>::find(folly::StringPiece key) {
 
   auto ptr = getAlignedItemPtr(found->getMemory())->objectPtr;
   // Use custom deleter
+  auto deleter = Deleter<const T>(std::move(found));
+  return std::shared_ptr<const T>(reinterpret_cast<const T*>(ptr),
+                                  std::move(deleter));
+}
+
+template <typename AllocatorT>
+template <typename T>
+std::shared_ptr<const T> ObjectCache<AllocatorT>::inspectCache(
+    folly::StringPiece key) {
+  inspections_.inc();
+  auto inspected = this->l1Cache_->inspectCache(key);
+  auto found = std::move(inspected.first);
+  if (!found) {
+    return nullptr;
+  }
+  succL1Inspections_.inc();
+
+  auto ptr = getAlignedItemPtr(found->getMemory())->objectPtr;
   auto deleter = Deleter<const T>(std::move(found));
   return std::shared_ptr<const T>(reinterpret_cast<const T*>(ptr),
                                   std::move(deleter));
@@ -1237,6 +1264,10 @@ void ObjectCache<AllocatorT>::getObjectCacheCounters(
   visitor("objcache.lookups", lookups_.get(),
           util::CounterVisitor::CounterType::RATE);
   visitor("objcache.lookups.l1_hits", succL1Lookups_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.inspections", inspections_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.inspections.l1_hits", succL1Inspections_.get(),
           util::CounterVisitor::CounterType::RATE);
   visitor("objcache.inserts", inserts_.get(),
           util::CounterVisitor::CounterType::RATE);

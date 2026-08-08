@@ -408,6 +408,45 @@ class ObjectCacheTest : public ::testing::Test {
     ASSERT_EQ(nullptr, found2);
   }
 
+  void testInspectCacheIncludingExpiredUntilReaped() {
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000)
+        .setDelayCacheWorkersStart()
+        .setItemReaperInterval(std::chrono::milliseconds{10})
+        .setItemDestructor(
+            [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    auto objcache = ObjectCache::create(config);
+
+    auto foo = std::make_unique<Foo>();
+    foo->a = 1;
+    auto [status, inserted, replaced] = objcache->insertOrReplace(
+        "Foo", std::move(foo), 0 /* objectSize */, 1000 /* ttlSecs */);
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+    ASSERT_EQ(nullptr, replaced);
+    ASSERT_TRUE(
+        objcache->updateExpiryTimeSec(inserted, util::getCurrentTimeSec() - 1));
+    inserted.reset();
+
+    EXPECT_EQ(nullptr, objcache->template find<Foo>("Foo"));
+    auto expired = objcache->template inspectCache<Foo>("Foo");
+    ASSERT_NE(nullptr, expired);
+    EXPECT_EQ(1, expired->a);
+
+    const auto traversalsBefore =
+        objcache->getL1Cache().getReaperStats().numTraversals;
+    objcache->startCacheWorkers();
+    ASSERT_EVENTUALLY_TRUE([&] {
+      return objcache->getL1Cache().getReaperStats().numTraversals >
+             traversalsBefore;
+    });
+    EXPECT_EQ(expired.get(), objcache->template inspectCache<Foo>("Foo").get());
+
+    expired.reset();
+    ASSERT_EVENTUALLY_TRUE(
+        [&] { return objcache->template inspectCache<Foo>("Foo") == nullptr; });
+  }
+
   void testSuccessfulReplacementFlag() {
     std::atomic<int> numReplaced{0};
     std::atomic<int> numNotReplaced{0};
@@ -2068,6 +2107,9 @@ TYPED_TEST(ObjectCacheTest, UserItemDestructor) {
   this->testUserItemDestructor();
 }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
+TYPED_TEST(ObjectCacheTest, InspectCacheIncludingExpiredUntilReaped) {
+  this->testInspectCacheIncludingExpiredUntilReaped();
+}
 TYPED_TEST(ObjectCacheTest, SuccessfulReplacementFlag) {
   this->testSuccessfulReplacementFlag();
 }
