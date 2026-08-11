@@ -242,11 +242,11 @@ class ChainedHashTable {
     // @param pageSize page size
     Config(unsigned int bucketsPower,
            unsigned int locksPower,
-           PageSizeT pageSize = PageSizeT::NORMAL)
+           PageSize pageSize = PageSize())
         : Config(bucketsPower,
                  locksPower,
                  std::make_shared<MurmurHash2>(),
-                 pageSize) {}
+                 std::move(pageSize)) {}
 
     // @param bucketsPower number of buckets in base 2 logarithm
     // @param locksPower number of locks in base 2 logarithm
@@ -255,10 +255,10 @@ class ChainedHashTable {
     Config(unsigned int bucketsPower,
            unsigned int locksPower,
            Hasher hasher,
-           PageSizeT pageSize = PageSizeT::NORMAL)
+           PageSize pageSize = PageSize())
         : bucketsPower_(bucketsPower),
           locksPower_(locksPower),
-          pageSize_(pageSize),
+          pageSize_(std::move(pageSize)),
           hasher_(std::move(hasher)) {
       if (bucketsPower_ > kMaxBucketPower || locksPower_ > kMaxLockPower ||
           locksPower_ > bucketsPower_) {
@@ -314,7 +314,7 @@ class ChainedHashTable {
       return configMap;
     }
 
-    PageSizeT getPageSize() const { return pageSize_; }
+    const PageSize& getPageSize() const { return pageSize_; }
 
    private:
     // 4 billion buckets should be good enough for everyone.
@@ -330,7 +330,7 @@ class ChainedHashTable {
     // total number of locks for the hashtable expressed as a power of two.
     unsigned int locksPower_{5};
 
-    PageSizeT pageSize_{PageSizeT::NORMAL};
+    PageSize pageSize_{};
 
     Hasher hasher_ = std::make_shared<MurmurHash2>();
   };
@@ -1058,10 +1058,8 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
 
   // Take page alignment into consideration when comparing the size of the
   // shared memory and the size of the hashtable.
-  size_t pageSize =
-      facebook::cachelib::detail::getPageSize(config_.getPageSize());
-
-  if (nBytes != util::getAlignedSize(ht_.size(), pageSize)) {
+  if (nBytes !=
+      util::getAlignedSize(ht_.size(), config_.getPageSize().getPageSize())) {
     throw std::invalid_argument(
         fmt::format("Hashtable size not compatible. old = {}, new = {}",
                     ht_.size(),

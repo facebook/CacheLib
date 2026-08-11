@@ -231,6 +231,17 @@ class CacheAllocatorConfig {
   // cachePersistence()
   CacheAllocatorConfig& usePosixForShm();
 
+  // Requests HugeTLB-backed pages for slab (main cache) memory and access
+  // container hash tables; persistence metadata stays on normal pages.
+  //
+  // pageSize is in bytes and must be a huge page size the kernel supports.
+  // mountDir is a mounted hugetlbfs backing POSIX huge-page segments; it is
+  // required for POSIX shm (cache creation throws if empty) and ignored for
+  // SysV. The HugeTLB pool must be provisioned out-of-band; CacheLib only draws
+  // from the already-reserved pool.
+  CacheAllocatorConfig& enableHugePages(PageSize pageSize,
+                                        std::string mountDir = "");
+
   // Configures cache memory tiers. Each tier represents a cache region inside
   // byte-addressable memory such as DRAM, Pmem, CXLmem.
   // Accepts vector of MemoryTierCacheConfig. Each vector element describes
@@ -512,6 +523,14 @@ class CacheAllocatorConfig {
 
   // if true, uses posix shm; if not, uses sys-v (default)
   bool usePosixShm{false};
+
+  // Huge-page size for the huge-page-backed shm segments (slab + hash tables);
+  // default => all segments use normal pages. Set via enableHugePages().
+  PageSize hugePageSize{};
+
+  // Mount dir of a hugetlbfs; required for POSIX huge-page segments, ignored
+  // for SysV segments. Set via enableHugePages().
+  std::string hugePageMountDir;
 
   // Attach shared memory to a fixed base address
   void* slabMemoryBaseAddr = nullptr;
@@ -1054,6 +1073,21 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::usePosixForShm() {
         "Posix shm can be set only when cache persistence is enabled");
   }
   usePosixShm = true;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableHugePages(
+    PageSize pageSize, std::string mountDir) {
+  if (!pageSize.isHugePage()) {
+    throw std::invalid_argument("user didn't specify an actual huge page");
+  } else if (!PageSize::supportedHugePageSizes().contains(
+                 pageSize.getPageSize())) {
+    throw std::invalid_argument(
+        fmt::format("unsupported huge page size {}", pageSize.getPageSize()));
+  }
+  hugePageSize = std::move(pageSize);
+  hugePageMountDir = std::move(mountDir);
   return *this;
 }
 

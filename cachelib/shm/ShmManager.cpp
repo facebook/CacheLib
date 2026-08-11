@@ -238,7 +238,7 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
 
 std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
     const std::string& dir, const std::string& name, bool posix, void* addr) {
-  ShmSegmentOpts opts{PageSizeT::NORMAL, true /* read only */};
+  ShmSegmentOpts opts{PageSize(), true /* read only */};
   std::unique_ptr<ShmSegment> shm;
   try {
     shm = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(name, dir),

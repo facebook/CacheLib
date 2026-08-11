@@ -23,7 +23,6 @@ using namespace facebook::cachelib::tests;
 using facebook::cachelib::ShmAttach;
 using facebook::cachelib::ShmNew;
 using facebook::cachelib::SysVShmSegment;
-using facebook::cachelib::detail::getPageSize;
 
 class SysVShmTest : public ShmTestBase {
  public:
@@ -70,7 +69,7 @@ TEST_F(SysVShmTest, Create) {
 
 TEST_F(SysVShmTest, CreateZeroSize) {
   SysVShmSegment s(ShmNew, getName(), 0);
-  ASSERT_EQ(getPageSize(), s.getSize());
+  ASSERT_EQ(facebook::cachelib::PageSize::systemPageSize(), s.getSize());
 }
 
 TEST_F(SysVShmTest, Attach) {

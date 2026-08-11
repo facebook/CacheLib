@@ -92,7 +92,7 @@ class ShmTest : public ShmTestBase {
   void testMapping(bool posix);
   void testMappingAlignment(bool posix);
   void testLifetime(bool posix);
-  void testPageSize(PageSizeT, bool posix);
+  void testPageSize(size_t, bool posix);
 };
 
 class ShmTestPosix : public ShmTest {

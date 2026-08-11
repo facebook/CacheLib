@@ -16,31 +16,27 @@
 
 #include <folly/Random.h>
 
-#include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/tests/common.h"
 
 using namespace facebook::cachelib::tests;
 
-using facebook::cachelib::detail::getPageSize;
-using facebook::cachelib::detail::getPageSizeInSMap;
-using facebook::cachelib::detail::isPageAlignedSize;
-
 void ShmTest::testCreateAttach(bool posix) {
+  PageSize ps;
   const unsigned char magicVal = 'd';
   {
     // create with 0 size should round up to page size
     ShmSegment s(ShmNew, segmentName, 0, posix);
-    ASSERT_EQ(getPageSize(), s.getSize());
+    ASSERT_EQ(ps.getPageSize(), s.getSize());
     s.markForRemoval();
   }
 
   {
     // create with unaligned size
-    ASSERT_TRUE(isPageAlignedSize(shmSize));
+    ASSERT_TRUE(ps.isPageAlignedSize(shmSize));
     ShmSegment s(ShmNew, segmentName, shmSize + 500, posix);
-    ASSERT_EQ(shmSize + getPageSize(), s.getSize());
+    ASSERT_EQ(shmSize + ps.getPageSize(), s.getSize());
     s.markForRemoval();
   }
   auto addr = getNewUnmappedAddr();
@@ -51,7 +47,7 @@ void ShmTest::testCreateAttach(bool posix) {
     ASSERT_FALSE(s.isMapped());
     ASSERT_TRUE(s.mapAddress(addr));
 
-    ASSERT_EQ(PageSizeT::NORMAL, getPageSizeInSMap(addr));
+    ASSERT_EQ(ps.getPageSize(), ps.getPageSizeInSMap(addr));
 
     ASSERT_TRUE(s.isMapped());
     checkMemory(addr, s.getSize(), 0);
@@ -126,8 +122,12 @@ void ShmTest::testMapping(bool posix) {
     ASSERT_FALSE(s.isMapped());
 
     // Map to an used address will replace it
-    void* ret = mmap(
-        addr, getPageSize(), PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void* ret = mmap(addr,
+                     PageSize::systemPageSize(),
+                     PROT_NONE,
+                     MAP_ANONYMOUS | MAP_PRIVATE,
+                     -1,
+                     0);
     ASSERT_NE(ret, MAP_FAILED);
     ASSERT_NO_THROW(s.mapAddress(addr));
     ASSERT_NO_THROW(s.mapAddress(nullptr));

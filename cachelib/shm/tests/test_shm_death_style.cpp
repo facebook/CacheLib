@@ -16,24 +16,21 @@
 
 #include <folly/Random.h>
 
-#include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/tests/common.h"
 
 using namespace facebook::cachelib::tests;
 
-using facebook::cachelib::detail::isPageAlignedSize;
-
 void ShmTest::testAttachReadOnly(bool posix) {
   unsigned char magicVal = 'd';
-  ShmSegmentOpts ropts{PageSizeT::NORMAL, true /* read Only */};
-  ShmSegmentOpts rwopts{PageSizeT::NORMAL, false /* read Only */};
+  ShmSegmentOpts ropts{PageSize(), true /* read Only */};
+  ShmSegmentOpts rwopts{PageSize(), false /* read Only */};
 
   {
     // attaching to something that does not exist should fail in read only
     // mode.
-    ASSERT_TRUE(isPageAlignedSize(shmSize));
+    ASSERT_TRUE(PageSize().isPageAlignedSize(shmSize));
     ASSERT_THROW(ShmSegment(ShmAttach, segmentName, posix, ropts),
                  std::system_error);
   }

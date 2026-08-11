@@ -14,35 +14,33 @@
  * limitations under the License.
  */
 
-#include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/tests/common.h"
-
-using facebook::cachelib::detail::getPageAlignedSize;
-using facebook::cachelib::detail::getPageSizeInSMap;
-using facebook::cachelib::detail::isPageAlignedSize;
 
 namespace facebook {
 namespace cachelib {
 namespace tests {
 
-void ShmTest::testPageSize(PageSizeT p, bool posix) {
-  ShmSegmentOpts opts{p};
-  size_t size = getPageAlignedSize(4096, p);
-  ASSERT_TRUE(isPageAlignedSize(size, p));
+void ShmTest::testPageSize(size_t p, bool posix) {
+  ShmSegmentOpts opts{PageSize(p)};
+  const auto& ps = opts.pageSize;
+  size_t size = ps.getPageAlignedSize(4096);
+  ASSERT_TRUE(ps.isPageAlignedSize(size));
 
   // create with unaligned size
   ASSERT_NO_THROW({
     ShmSegment s(ShmNew, segmentName, size, posix, opts);
     ASSERT_TRUE(s.mapAddress(nullptr));
-    ASSERT_EQ(p, getPageSizeInSMap(s.getCurrentMapping().addr));
+    ASSERT_EQ(ps.getPageSize(),
+              ps.getPageSizeInSMap(s.getCurrentMapping().addr));
   });
 
   ASSERT_NO_THROW({
     ShmSegment s2(ShmAttach, segmentName, posix, opts);
     ASSERT_TRUE(s2.mapAddress(nullptr));
-    ASSERT_EQ(p, getPageSizeInSMap(s2.getCurrentMapping().addr));
+    ASSERT_EQ(ps.getPageSize(),
+              ps.getPageSizeInSMap(s2.getCurrentMapping().addr));
   });
 }
 
@@ -51,13 +49,21 @@ void ShmTest::testPageSize(PageSizeT p, bool posix) {
 // complete yet. See https://fburl.com/f0umrcwq . We will re-enable these
 // tests on sandcastle when these get fixed.
 
-TEST_F(ShmTestPosix, PageSizesNormal) { testPageSize(PageSizeT::NORMAL, true); }
+TEST_F(ShmTestPosix, PageSizesNormal) {
+  testPageSize(PageSize::kNormalPageSize, true);
+}
 
-TEST_F(ShmTestPosix, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB, true); }
+TEST_F(ShmTestPosix, PageSizesTwoMB) {
+  testPageSize(PageSize::kHugePageSize2MB, true);
+}
 
-TEST_F(ShmTestSysV, PageSizesNormal) { testPageSize(PageSizeT::NORMAL, false); }
+TEST_F(ShmTestSysV, PageSizesNormal) {
+  testPageSize(PageSize::kNormalPageSize, false);
+}
 
-TEST_F(ShmTestSysV, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB, false); }
+TEST_F(ShmTestSysV, PageSizesTwoMB) {
+  testPageSize(PageSize::kHugePageSize2MB, false);
+}
 
 } // namespace tests
 } // namespace cachelib

@@ -22,42 +22,51 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 
-#include <system_error>
+#include <set>
+#include <string>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
+#include <folly/logging/xlog.h>
 
-/* On Mac OS / FreeBSD, mmap(2) syscall does not support these flags */
-#ifndef MAP_LOCKED
-#define MAP_LOCKED 0
+// On Linux, glibc's <bits/shm.h> provides SHM_HUGE_SHIFT only in >v2.36.  The
+// canonical shift is in kernel UAPI <asm-generic/hugetlb_encode.h>.  Include
+// only that header to avoid struct redefinition conflicts.
+#ifdef __linux__
+#include <asm-generic/hugetlb_encode.h>
 #endif
 
-#if !(defined MAP_HUGE_SHIFT) || !(defined MAP_HUGETLB)
-#define MAP_HUGE_SHIFT 0
+#ifndef MAP_HUGETLB
+#warning "MAP_HUGETLB not defined, disabling hugepage support"
 #define MAP_HUGETLB 0
-#define MAP_HUGE_2MB 0
-#define MAP_HUGE_1GB 0
+#define MAP_HUGE_SHIFT 0
+#else
+#ifndef MAP_HUGE_SHIFT
+#ifdef HUGETLB_FLAG_ENCODE_SHIFT
+#define MAP_HUGE_SHIFT HUGETLB_FLAG_ENCODE_SHIFT
+#else
+#warning "MAP_HUGE_SHIFT not defined, falling back to default huge page size"
+#define MAP_HUGE_SHIFT 0
+#endif
+#endif
 #endif
 
 #ifndef SHM_HUGETLB
-#define SHM_HUGE_2MB 0
-#define SHM_HUGE_1GB 0
+#warning "SHM_HUGETLB not defined, disabling hugepage support"
 #define SHM_HUGETLB 0
-#endif
-
+#define SHM_HUGE_SHIFT 0
+#else
 #ifndef SHM_HUGE_SHIFT
+#ifdef HUGETLB_FLAG_ENCODE_SHIFT
+#define SHM_HUGE_SHIFT HUGETLB_FLAG_ENCODE_SHIFT
+#else
+#warning "SHM_HUGE_SHIFT not defined, falling back to default huge page size"
 #define SHM_HUGE_SHIFT 0
 #endif
-
-#ifndef SHM_LOCK
-#define SHM_LOCK 0
 #endif
-
-#ifndef SHM_REMAP
-#define SHM_REMAP 0
 #endif
 
 namespace facebook {
@@ -66,10 +75,70 @@ namespace cachelib {
 enum ShmAttachT { ShmAttach };
 enum ShmNewT { ShmNew };
 
-enum PageSizeT {
-  NORMAL = 0,
-  TWO_MB,
-  ONE_GB,
+class PageSize {
+ public:
+  // Page size in bytes for a shm segment. kNormalPageSize selects the system
+  // default page size; passing a supported huge-page size requests
+  // HugeTLB-backed pages for the segment. The valid huge-page sizes depend on
+  // the CPU's base page granule; callers may pass any kernel-supported size
+  // These constants are just conveniences, it does NOT mean they're available.
+  static constexpr size_t kNormalPageSize = 0;
+  // 4 KiB base page granule (x86-64, aarch64-4k)
+  static constexpr size_t kHugePageSize2MB = 2ULL * 1024 * 1024;
+  static constexpr size_t kHugePageSize1GB = 1024ULL * 1024 * 1024;
+  // 16 KiB base page granule (aarch64-16k)
+  static constexpr size_t kHugePageSize32MB = 32ULL * 1024 * 1024;
+  static constexpr size_t kHugePageSize64GB = 64ULL * 1024 * 1024 * 1024;
+  // 64 KiB base page granule (aarch64-64k)
+  static constexpr size_t kHugePageSize512MB = 512ULL * 1024 * 1024;
+
+  explicit PageSize(size_t pageSize = kNormalPageSize) : pageSize_(pageSize) {
+    XDCHECK(pageSize == kNormalPageSize || folly::isPowTwo(pageSize_))
+        << "Invalid page size " << pageSize_ << ", must be power-of-two";
+  }
+
+  /* the system base page size in bytes */
+  static size_t systemPageSize();
+
+  /* Huge-page sizes (in bytes) the running kernel supports, read from
+   * /sys/kernel/mm/hugepages. Empty if none are available / not readable. */
+  static const std::set<size_t>& supportedHugePageSizes();
+
+  /* effective page size in bytes */
+  size_t getPageSize() const noexcept;
+
+  /* true if pageSize denotes a huge page (larger than the system base page) */
+  bool isHugePage() const noexcept;
+
+  /* mmap(2) huge-page flags for pageSize (0 if not huge or unsupported) */
+  int hugePageMmapFlags() const noexcept;
+
+  /* shmget(2) huge-page flags for pageSize (0 if not huge or unsupported) */
+  int hugePageShmgetFlags() const noexcept;
+
+  /* round up to the closest page size */
+  size_t getPageAlignedSize(size_t size) const noexcept;
+
+  /* returns page aligned size for the input that is atleast as big as the input
+   * size */
+  size_t pageAligned(size_t size) const noexcept;
+
+  /* true if the length is page aligned  */
+  bool isPageAlignedSize(size_t length) const noexcept;
+
+  /* true if the address is page aligned */
+  bool isPageAlignedAddr(void* addr) const noexcept;
+
+  // return the page size (in bytes) of the address mapping in this process.
+  //
+  // @throw  std::invalid_argument if the address mapping is not found.
+  static size_t getPageSizeInSMap(void* addr);
+
+ private:
+  size_t pageSize_;
+
+  /* log2(pageSize); used to encode the MAP_HUGE_* / SHM_HUGE_* flag bits */
+  unsigned hugePageSizeToShift() const noexcept;
 };
 
 class NumaBitMask {
@@ -83,7 +152,7 @@ class NumaBitMask {
     copy_bitmask_to_bitmask(other.nodesMask, nodesMask);
   }
 
-  NumaBitMask(NumaBitMask&& other) {
+  NumaBitMask(NumaBitMask&& other) noexcept {
     nodesMask = other.nodesMask;
     other.nodesMask = nullptr;
   }
@@ -124,14 +193,15 @@ class NumaBitMask {
 };
 
 struct ShmSegmentOpts {
-  PageSizeT pageSize{PageSizeT::NORMAL};
+  PageSize pageSize{};
   bool readOnly{false};
   size_t alignment{1}; // alignment for mapping.
   NumaBitMask memBindNumaNodes;
 
-  explicit ShmSegmentOpts(PageSizeT p) : pageSize(p) {}
-  explicit ShmSegmentOpts(PageSizeT p, bool ro) : pageSize(p), readOnly(ro) {}
-  ShmSegmentOpts() : pageSize(PageSizeT::NORMAL) {}
+  explicit ShmSegmentOpts(PageSize p) : pageSize(std::move(p)) {}
+  explicit ShmSegmentOpts(PageSize p, bool ro)
+      : pageSize(std::move(p)), readOnly(ro) {}
+  ShmSegmentOpts() = default;
 };
 
 // Represents a mapping on shm with and address and size
@@ -185,28 +255,5 @@ class ShmBase {
   std::string name_{};         // name of the segment
 };
 
-namespace detail {
-
-/* current page size of the system by the type */
-size_t getPageSize(PageSizeT p = PageSizeT::NORMAL);
-
-/* round up to the closest page size */
-size_t getPageAlignedSize(size_t size, PageSizeT p = PageSizeT::NORMAL);
-
-/* returns page aligned size for the input that is atleast as big as the input
- * size */
-size_t pageAligned(size_t size, PageSizeT p = PageSizeT::NORMAL);
-
-/* true if the length is page aligned  */
-bool isPageAlignedSize(size_t length, PageSizeT p = PageSizeT::NORMAL);
-
-/* true if the address is page aligned */
-bool isPageAlignedAddr(void* addr, PageSizeT p = PageSizeT::NORMAL);
-
-// return the page size of the address mapping in this process.
-//
-// @throw  std::invalid_argument if the address mapping is not found.
-PageSizeT getPageSizeInSMap(void* addr);
-} // namespace detail
 } // namespace cachelib
 } // namespace facebook

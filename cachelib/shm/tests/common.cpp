@@ -29,8 +29,7 @@ std::atomic<unsigned int> ShmTestBase::index_{0};
 /* static */
 size_t ShmTestBase::getRandomSize() {
   const size_t ret = folly::Random::rand32(kMemMin, kMemMax);
-  using facebook::cachelib::detail::getPageSize;
-  const size_t pg_sz = getPageSize();
+  const size_t pg_sz = PageSize::systemPageSize();
   assert(pg_sz > 0);
   return (ret == 0 || ret % pg_sz) ? ret + pg_sz - (ret % pg_sz) : ret;
 }

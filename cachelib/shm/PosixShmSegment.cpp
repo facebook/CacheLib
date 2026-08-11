@@ -29,6 +29,12 @@
 
 #include "cachelib/common/Utils.h"
 
+/* On Mac OS / FreeBSD, mmap(2) syscall does not support these flags */
+#ifndef MAP_LOCKED
+#warning "MAP_LOCKED not defined"
+#define MAP_LOCKED 0
+#endif
+
 namespace facebook {
 namespace cachelib {
 
@@ -293,7 +299,7 @@ size_t PosixShmSegment::getSize() const {
 }
 
 void PosixShmSegment::resize(size_t size) const {
-  size = detail::getPageAlignedSize(size, opts_.pageSize);
+  size = opts_.pageSize.getPageAlignedSize(size);
   XDCHECK(isActive() || isMarkedForRemoval());
   if (isActive() || isMarkedForRemoval()) {
     XDCHECK_NE(fd_, kInvalidFD);
@@ -307,25 +313,12 @@ void PosixShmSegment::resize(size_t size) const {
 
 void* PosixShmSegment::mapAddress(void* addr) const {
   size_t size = getSize();
-  if (!detail::isPageAlignedSize(size, opts_.pageSize) ||
-      !detail::isPageAlignedAddr(addr, opts_.pageSize)) {
+  if (!opts_.pageSize.isPageAlignedSize(size) ||
+      !opts_.pageSize.isPageAlignedAddr(addr)) {
     util::throwSystemError(EINVAL, "Address/size not aligned");
   }
 
-#ifndef MAP_HUGE_2MB
-#define MAP_HUGE_2MB (21 << MAP_HUGE_SHIFT)
-#endif
-
-#ifndef MAP_HUGE_1GB
-#define MAP_HUGE_1GB (30 << MAP_HUGE_SHIFT)
-#endif
-
-  int flags = MAP_SHARED;
-  if (opts_.pageSize == PageSizeT::TWO_MB) {
-    flags |= MAP_HUGETLB | MAP_HUGE_2MB;
-  } else if (opts_.pageSize == PageSizeT::ONE_GB) {
-    flags |= MAP_HUGETLB | MAP_HUGE_1GB;
-  }
+  int flags = MAP_SHARED | opts_.pageSize.hugePageMmapFlags();
   // If users pass in an address, they must make sure that address is unused.
   if (addr != nullptr) {
     flags |= MAP_FIXED;
@@ -379,7 +372,7 @@ void PosixShmSegment::memBind(void* addr) const {
   // Set memory bindings
   detail::setMempolicyImpl(MPOL_BIND, opts_.memBindNumaNodes);
 
-  forcePageAllocation(addr, getSize(), detail::getPageSize(opts_.pageSize));
+  forcePageAllocation(addr, getSize(), opts_.pageSize.getPageSize());
 
   // Restore memory policy for the thread
   detail::setMempolicyImpl(oldMode, oldMemBindNumaNodes);
@@ -399,7 +392,7 @@ std::string PosixShmSegment::createKeyForName(
 void PosixShmSegment::createReferenceMapping() {
   // create a mapping that lasts the life of this object. mprotect it to
   // ensure there are no actual accesses.
-  referenceMapping_ = detail::mmapImpl(nullptr, detail::getPageSize(),
+  referenceMapping_ = detail::mmapImpl(nullptr, PageSize::systemPageSize(),
                                        PROT_NONE, MAP_SHARED, fd_, 0);
 
   XDCHECK(referenceMapping_ != nullptr);
@@ -407,7 +400,7 @@ void PosixShmSegment::createReferenceMapping() {
 
 void PosixShmSegment::deleteReferenceMapping() const {
   if (referenceMapping_ != nullptr) {
-    detail::munmapImpl(referenceMapping_, detail::getPageSize());
+    detail::munmapImpl(referenceMapping_, PageSize::systemPageSize());
   }
 }
 } // namespace cachelib

@@ -17,32 +17,90 @@
 #include "cachelib/shm/ShmCommon.h"
 
 #include <fmt/core.h>
+#include <folly/Conv.h>
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
 #include <folly/Range.h>
 #include <folly/String.h>
+#include <folly/lang/Bits.h>
 #include <folly/logging/xlog.h>
 #include <sys/types.h>
+
+#include <filesystem>
+#include <system_error>
 
 namespace facebook {
 namespace cachelib {
 
-namespace detail {
-size_t getPageSize(PageSizeT pageSize) {
-  static size_t sizes[] = {static_cast<size_t>(sysconf(_SC_PAGESIZE)),
-                           2 * 1024 * 1024, 1024 * 1024 * 1024};
-  const long pagesize = sizes[pageSize];
-  XDCHECK_NE(pagesize, -1);
-  XDCHECK_GT(pagesize, 0);
-  return pagesize;
+/* static */ size_t PageSize::systemPageSize() {
+  static const size_t kPageSize = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+  return kPageSize;
 }
 
-bool isPageAlignedSize(size_t size, PageSizeT p) {
-  return ((size != 0) && (size % getPageSize(p) == 0));
+/* static */ const std::set<size_t>& PageSize::supportedHugePageSizes() {
+  auto getSizes = []() {
+    std::set<size_t> sizes;
+    constexpr folly::StringPiece kPrefix{"hugepages-"};
+    constexpr folly::StringPiece kSuffix{"kB"};
+    std::error_code ec;
+    try {
+      for (const auto& entry : std::filesystem::directory_iterator(
+               "/sys/kernel/mm/hugepages", ec)) {
+        const auto name = entry.path().filename().string();
+        const folly::StringPiece namePiece{name};
+        if (!namePiece.startsWith(kPrefix) || !namePiece.endsWith(kSuffix)) {
+          continue;
+        }
+        const auto mid = namePiece.subpiece(
+            kPrefix.size(), namePiece.size() - kPrefix.size() - kSuffix.size());
+        if (const auto kb = folly::tryTo<size_t>(mid); kb.hasValue()) {
+          sizes.insert(kb.value() * 1024);
+        }
+      }
+    } catch (const std::exception& e) {
+      XLOG(WARN) << "Failed to get all huge page sizes: " << e.what();
+    }
+    return sizes;
+  };
+  static const std::set<size_t> kSizes = getSizes();
+  return kSizes;
 }
 
-size_t getPageAlignedSize(size_t size, PageSizeT p) {
-  const auto pageSize = getPageSize(p);
+size_t PageSize::getPageSize() const noexcept {
+  return pageSize_ != kNormalPageSize ? pageSize_ : systemPageSize();
+}
+
+bool PageSize::isHugePage() const noexcept {
+  return pageSize_ > systemPageSize();
+}
+
+unsigned PageSize::hugePageSizeToShift() const noexcept {
+  XDCHECK(isHugePage() && pageSize_ != 0);
+  return folly::findLastSet(pageSize_) - 1;
+}
+
+int PageSize::hugePageMmapFlags() const noexcept {
+#if defined(MAP_HUGETLB) && MAP_HUGETLB != 0
+  if (isHugePage()) {
+    return MAP_HUGETLB |
+           static_cast<int>(hugePageSizeToShift() << MAP_HUGE_SHIFT);
+  }
+#endif
+  return 0;
+}
+
+int PageSize::hugePageShmgetFlags() const noexcept {
+#if defined(SHM_HUGETLB) && SHM_HUGETLB != 0
+  if (isHugePage()) {
+    return SHM_HUGETLB |
+           static_cast<int>(hugePageSizeToShift() << SHM_HUGE_SHIFT);
+  }
+#endif
+  return 0;
+}
+
+size_t PageSize::getPageAlignedSize(size_t size) const noexcept {
+  const auto pageSize = getPageSize();
   if (size == 0) {
     return pageSize;
   }
@@ -51,14 +109,18 @@ size_t getPageAlignedSize(size_t size, PageSizeT p) {
   return delta == 0 ? size : size + pageSize - delta;
 }
 
-bool isPageAlignedAddr(void* addr, PageSizeT p) {
-  return ((uintptr_t)addr) % getPageSize(p) == 0;
-}
-
-size_t pageAligned(size_t size, PageSizeT p) {
-  const auto pageSize = getPageSize(p);
+size_t PageSize::pageAligned(size_t size) const noexcept {
+  const auto pageSize = getPageSize();
   XDCHECK(!(pageSize & (pageSize - 1)));
   return 1 + ((size - 1) | (pageSize - 1));
+}
+
+bool PageSize::isPageAlignedSize(size_t size) const noexcept {
+  return ((size != 0) && (size % getPageSize() == 0));
+}
+
+bool PageSize::isPageAlignedAddr(void* addr) const noexcept {
+  return reinterpret_cast<uintptr_t>(addr) % getPageSize() == 0;
 }
 
 namespace {
@@ -107,10 +169,9 @@ bool isAddressLine(folly::StringPiece line) {
   folly::split(':', line, first, second);
   return first.find(' ') != std::string::npos;
 }
-
 } // namespace
 
-PageSizeT getPageSizeInSMap(void* addr) {
+/* static */ size_t PageSize::getPageSizeInSMap(void* addr) {
   std::string smapContent;
   folly::readFile("/proc/self/smaps", smapContent);
   const auto smapLines = getSmapLines(smapContent);
@@ -145,19 +206,10 @@ PageSizeT getPageSizeInSMap(void* addr) {
     folly::StringPiece unitVal;
     folly::split(' ', value, sizeVal, unitVal);
     XDCHECK_EQ(unitVal, "kB");
-    size_t size = folly::to<size_t>(sizeVal) * 1024;
-    if (size == getPageSize(PageSizeT::TWO_MB)) {
-      return PageSizeT::TWO_MB;
-    } else if (size == getPageSize(PageSizeT::ONE_GB)) {
-      return PageSizeT::ONE_GB;
-    } else {
-      XDCHECK_EQ(size, getPageSize());
-      return PageSizeT::NORMAL;
-    }
+    return folly::to<size_t>(sizeVal) * 1024;
   }
   throw std::invalid_argument("address mapping not found in /proc/self/smaps");
 }
 
-} // namespace detail
 } // namespace cachelib
 } // namespace facebook

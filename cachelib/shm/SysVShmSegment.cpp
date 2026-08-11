@@ -27,6 +27,16 @@
 
 #include "cachelib/common/Utils.h"
 
+#ifndef SHM_LOCK
+#warning "SHM_LOCK not defined"
+#define SHM_LOCK 0
+#endif
+
+#ifndef SHM_REMAP
+#warning "SHM_REMAP not defined"
+#define SHM_REMAP 0
+#endif
+
 namespace facebook {
 namespace cachelib {
 
@@ -207,26 +217,12 @@ void mbindImpl(void* addr,
 int SysVShmSegment::createNewSegment(key_t key,
                                      size_t size,
                                      const ShmSegmentOpts& opts) {
-  size = detail::getPageAlignedSize(size, opts.pageSize);
-  int extraFlags = 0;
+  size = opts.pageSize.getPageAlignedSize(size);
 
   // size is required and expected to be non zero, page aligned
-  XDCHECK(detail::isPageAlignedSize(size, opts.pageSize));
+  XDCHECK(opts.pageSize.isPageAlignedSize(size));
 
-#ifndef SHM_HUGE_2MB
-#define SHM_HUGE_2MB (21 << MAP_HUGE_SHIFT)
-#endif
-
-#ifndef SHM_HUGE_1GB
-#define SHM_HUGE_1GB (30 << MAP_HUGE_SHIFT)
-#endif
-
-  if (opts.pageSize == PageSizeT::TWO_MB) {
-    extraFlags |= SHM_HUGETLB | SHM_HUGE_2MB;
-  } else if (opts.pageSize == PageSizeT::ONE_GB) {
-    extraFlags |= SHM_HUGETLB | SHM_HUGE_1GB;
-  }
-
+  const int extraFlags = opts.pageSize.hugePageShmgetFlags();
   const int flags = IPC_CREAT | IPC_EXCL | kModeRWFlags | extraFlags;
   return detail::shmGetImpl(key, size, flags);
 }
@@ -266,7 +262,7 @@ void* SysVShmSegment::mapAddress(void* addr) const {
     util::throwSystemError(EINVAL, "Attaching to invalid segment");
   }
 
-  if (!detail::isPageAlignedAddr(addr, opts_.pageSize)) {
+  if (!opts_.pageSize.isPageAlignedAddr(addr)) {
     util::throwSystemError(EINVAL, "Unaligned address");
   }
 

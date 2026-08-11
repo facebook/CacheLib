@@ -102,8 +102,8 @@ TEST_F(PosixShmTest, ReCreate) {
 }
 
 TEST_F(PosixShmTest, MapAddress) {
-  using facebook::cachelib::detail::getPageSize;
-  const auto size = getRandomSize() + getPageSize();
+  const auto size =
+      getRandomSize() + facebook::cachelib::PageSize::systemPageSize();
   {
     // create a new segment
     PosixShmSegment tmp(ShmNew, segmentName, size);
@@ -133,9 +133,8 @@ TEST_F(PosixShmTest, AttachToInvalidSegment) {
 }
 
 TEST_F(PosixShmTest, RemoveWithMMap) {
-  using facebook::cachelib::detail::getPageSize;
   const size_t size = getRandomSize();
-  const size_t fullSize = size + getPageSize();
+  const size_t fullSize = size + facebook::cachelib::PageSize::systemPageSize();
   PosixShmSegment s(ShmNew, segmentName, size);
   const unsigned char magicVal = 'c';
   auto addr = getNewUnmappedAddr();
