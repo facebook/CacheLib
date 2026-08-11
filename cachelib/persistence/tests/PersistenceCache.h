@@ -177,7 +177,7 @@ class PersistenceCache {
             uint32_t numPools,
             uint32_t numChained,
             bool testNvm) {
-    PersistenceManager manager(config_);
+    persistence::PersistenceManager manager(config_);
     // setup cache, insert data
     auto evictedKeys = cacheSetup(items, numPools, numChained, testNvm);
     // don't allow too many evicted items

@@ -24,7 +24,8 @@
 
 namespace facebook::cachelib::tests {
 
-using namespace persistence;
+using persistence::PersistenceStreamReader;
+using persistence::PersistenceStreamWriter;
 
 using Cache = cachelib::LruAllocator; // or Lru2QAllocator, or TinyLFUAllocator
 using CacheConfig = typename Cache::Config;

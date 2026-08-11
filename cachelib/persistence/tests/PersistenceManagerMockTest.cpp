@@ -27,6 +27,8 @@
 
 namespace facebook::cachelib::tests {
 
+using namespace persistence;
+
 class PersistenceManagerMockTest : public ::testing::Test {
  public:
   PersistenceManagerMockTest()

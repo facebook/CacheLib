@@ -31,6 +31,8 @@ namespace cachelib {
 
 namespace tests {
 
+using namespace persistence;
+
 class PersistenceManagerTest : public ::testing::Test {
  public:
   PersistenceCache cache_;
