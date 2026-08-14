@@ -2255,6 +2255,14 @@ class CacheAllocator : public CacheBase {
                   std::chrono::seconds timeout = std::chrono::seconds{0});
 
   ShmSegmentOpts createShmCacheOpts();
+
+  // Builds the shm options for an access-container (hash table) segment,
+  ShmSegmentOpts createShmAccessOpts();
+
+  // Validates and applies a requested huge page size (bytes; 0 == normal) onto
+  // opts, throwing if the kernel does not support the size.
+  void applyHugePageOpts(ShmSegmentOpts& opts, const PageSize& pageSize) const;
+
   std::unique_ptr<MemoryAllocator> createNewMemoryAllocator();
   std::unique_ptr<MemoryAllocator> restoreMemoryAllocator();
   std::unique_ptr<CCacheManager> restoreCCacheManager();
@@ -2805,21 +2813,36 @@ ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
     throw std::invalid_argument("CacheLib only supports a single memory tier");
   }
   opts.memBindNumaNodes = config_.memoryTierConfigs[0].getMemBind();
-
-  if (config_.hugePageSize.isHugePage()) {
-    if (!PageSize::supportedHugePageSizes().contains(
-            config_.hugePageSize.getPageSize())) {
-      throw std::invalid_argument(fmt::format(
-          "Requested huge page size {} is not supported by the kernel",
-          config_.hugePageSize.getPageSize()));
-    } else if (config_.hugePageMountDir.empty() && config_.usePosixShm) {
-      throw std::invalid_argument(
-          "Requested huge pages for POSIX shared memory regions but didn't "
-          "supply a hugetlbfs mount");
-    }
-    opts.pageSize = config_.hugePageSize;
-  }
+  applyHugePageOpts(opts, config_.hugePageSize);
   return opts;
+}
+
+template <typename CacheTrait>
+ShmSegmentOpts CacheAllocator<CacheTrait>::createShmAccessOpts() {
+  ShmSegmentOpts opts;
+  applyHugePageOpts(opts, config_.hugePageSize);
+  return opts;
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::applyHugePageOpts(
+    ShmSegmentOpts& opts, const PageSize& pageSize) const {
+  if (!pageSize.isHugePage()) {
+    return;
+  } else if (!PageSize::supportedHugePageSizes().contains(
+                 pageSize.getPageSize())) {
+    throw std::invalid_argument(fmt::format(
+        "Requested huge page size {} is not supported by the kernel",
+        pageSize.getPageSize()));
+  } else if (config_.hugePageMountDir.empty() && config_.usePosixShm) {
+    throw std::invalid_argument(
+        "Requested huge pages for POSIX shared memory regions but didn't "
+        "supply a hugetlbfs mount");
+  }
+  opts.pageSize = pageSize;
+  // The segment is attached at a page-aligned address, so its alignment must be
+  // at least the huge page size or the kernel rejects the mapping
+  opts.alignment = std::max(opts.alignment, pageSize.getPageSize());
 }
 
 template <typename CacheTrait>
@@ -3029,7 +3052,7 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
                 name,
                 AccessContainer::getRequiredSize(config.getNumBuckets()),
                 nullptr,
-                ShmSegmentOpts(config.getPageSize()))
+                createShmAccessOpts())
             .addr,
         compressor_,
         [this](Item* it) -> WriteHandle { return acquire(it); });
@@ -3037,9 +3060,10 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
     return std::make_unique<AccessContainer>(
         deserializer_->deserialize<AccessSerializationType>(),
         config,
-        shmManager_->attachShm(name),
+        shmManager_->attachShm(name, nullptr, createShmAccessOpts()),
         compressor_,
-        [this](Item* it) -> WriteHandle { return acquire(it); });
+        [this](Item* it) -> WriteHandle { return acquire(it); },
+        config_.hugePageSize);
   }
 
   // Invalid type

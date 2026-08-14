@@ -16,7 +16,7 @@ shared infra, but this is not a persistent storage that serves like databases.
 1. Create a persistence cache with [Cache Persistence](Cache_persistence) user guide.
 2. Shutdown cache successfully.
 3. Only POSIX is supported.
-4. Only default PageSize is supported.
+4. Huge pages are not supported.
 
 ## Implement Stream Reader and Writer APIs
 
@@ -152,11 +152,10 @@ incompatible.
 5.  isNvmCacheEncryption
 6.  isNvmCacheTruncateAllocSize
 7.  accessConfig.numBuckets
-8.  accessConfig.pageSize
-9.  chainedItemAccessConfig.numBuckets
-10.  nvmConfig.navyConfig.getFileName
-11.  nvmConfig.navyConfig.getRaidPaths
-12.  nvmConfig.navyConfig.getFileSize
+8.  chainedItemAccessConfig.numBuckets
+9.  nvmConfig.navyConfig.getFileName
+10.  nvmConfig.navyConfig.getRaidPaths
+11.  nvmConfig.navyConfig.getFileSize
 
 ## Simple Example
 

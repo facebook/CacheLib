@@ -86,12 +86,11 @@ TEST_F(PersistenceManagerTest, testConfigChange) {
   {
     // change cache config
     auto config = cache_.config_;
-    // non-default page size is not allowed
-    config.setAccessConfig(
-        Cache::AccessConfig{10, 10, PageSize(PageSize::kHugePageSize2MB)});
+    // huge pages are not allowed
+    config.enableHugePages(PageSize(PageSize::kHugePageSize2MB));
     ASSERT_THROW_WITH_MSG(PersistenceManager manager(config),
                           std::invalid_argument,
-                          "Only default PageSize is supported to persist");
+                          "Huge pages are not supported to persist");
   }
 }
 

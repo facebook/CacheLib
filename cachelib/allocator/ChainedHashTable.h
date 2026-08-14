@@ -239,26 +239,15 @@ class ChainedHashTable {
 
     // @param bucketsPower number of buckets in base 2 logarithm
     // @param locksPower number of locks in base 2 logarithm
-    // @param pageSize page size
-    Config(unsigned int bucketsPower,
-           unsigned int locksPower,
-           PageSize pageSize = PageSize())
-        : Config(bucketsPower,
-                 locksPower,
-                 std::make_shared<MurmurHash2>(),
-                 std::move(pageSize)) {}
+    Config(unsigned int bucketsPower, unsigned int locksPower)
+        : Config(bucketsPower, locksPower, std::make_shared<MurmurHash2>()) {}
 
     // @param bucketsPower number of buckets in base 2 logarithm
     // @param locksPower number of locks in base 2 logarithm
     // @param hasher the key hash function
-    // @param pageSize page size
-    Config(unsigned int bucketsPower,
-           unsigned int locksPower,
-           Hasher hasher,
-           PageSize pageSize = PageSize())
+    Config(unsigned int bucketsPower, unsigned int locksPower, Hasher hasher)
         : bucketsPower_(bucketsPower),
           locksPower_(locksPower),
-          pageSize_(std::move(pageSize)),
           hasher_(std::move(hasher)) {
       if (bucketsPower_ > kMaxBucketPower || locksPower_ > kMaxLockPower ||
           locksPower_ > bucketsPower_) {
@@ -314,8 +303,6 @@ class ChainedHashTable {
       return configMap;
     }
 
-    const PageSize& getPageSize() const { return pageSize_; }
-
    private:
     // 4 billion buckets should be good enough for everyone.
     static constexpr unsigned int kMaxBucketPower = 32;
@@ -329,8 +316,6 @@ class ChainedHashTable {
 
     // total number of locks for the hashtable expressed as a power of two.
     unsigned int locksPower_{5};
-
-    PageSize pageSize_{};
 
     Hasher hasher_ = std::make_shared<MurmurHash2>();
   };
@@ -392,6 +377,8 @@ class ChainedHashTable {
     // @param memSegment  shared memory segment for the hash table
     // @param compressor  object used to compress/decompress node pointers
     // @param hm          the functor that creates a Handle from T*
+    // @param hugePageSize page size the segment was backed with (bytes), used
+    //        to validate the mapped segment size.
     //
     // @throw std::invalid argument if the bucket power in new config does not
     //        match the previous state or the size of the memSegment does not
@@ -400,7 +387,8 @@ class ChainedHashTable {
               const Config& newConfig,
               ShmAddr memSegment,
               const PtrCompressor& compressor,
-              HandleMaker hm = kDefaultHandleMaker);
+              HandleMaker hm = kDefaultHandleMaker,
+              PageSize hugePageSize = PageSize());
 
     // restore hash table from previous state. This only works when the
     // hash table memory is managed by the user.
@@ -411,6 +399,8 @@ class ChainedHashTable {
     // @param nBytes      size of memory allocation pointed to by memStart
     // @param compressor  object used to compress/decompress node pointers
     // @param hm          the functor that creates a Handle from T*
+    // @param hugePageSize page size the segment was backed with (bytes), used
+    //        to validate the mapped segment size.
     //
     // @throw std::invalid argument if the bucket power in new config does not
     //        match the previous state or the size of the memSegment does not
@@ -420,7 +410,8 @@ class ChainedHashTable {
               void* memStart,
               size_t nBytes,
               const PtrCompressor& compressor,
-              HandleMaker hm = kDefaultHandleMaker);
+              HandleMaker hm = kDefaultHandleMaker,
+              PageSize hugePageSize = PageSize());
 
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
@@ -1024,13 +1015,15 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
     const Config& config,
     ShmAddr memSegment,
     const PtrCompressor& compressor,
-    HandleMaker hm)
+    HandleMaker hm,
+    PageSize hugePageSize)
     : Container(object,
                 config,
                 memSegment.addr,
                 memSegment.size,
                 compressor,
-                std::move(hm)) {}
+                std::move(hm),
+                hugePageSize) {}
 
 template <typename T,
           typename ChainedHashTable::Hook<T> T::* HookPtr,
@@ -1041,7 +1034,8 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
     void* memStart,
     size_t nBytes,
     const PtrCompressor& compressor,
-    HandleMaker hm)
+    HandleMaker hm,
+    PageSize hugePageSize)
     : config_{config},
       handleMaker_(std::move(hm)),
       ht_{config_.getNumBuckets(), memStart, compressor, config_.getHasher(),
@@ -1058,8 +1052,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
 
   // Take page alignment into consideration when comparing the size of the
   // shared memory and the size of the hashtable.
-  if (nBytes !=
-      util::getAlignedSize(ht_.size(), config_.getPageSize().getPageSize())) {
+  if (nBytes != util::getAlignedSize(ht_.size(), hugePageSize.getPageSize())) {
     throw std::invalid_argument(
         fmt::format("Hashtable size not compatible. old = {}, new = {}",
                     ht_.size(),
