@@ -49,18 +49,24 @@ class PosixShmSegment : public ShmBase {
   //
   // @param name  Name of the segment
   // @param opts  the options for attaching to the segment.
+  // @param hugePageMountDir  hugetlbfs mount backing the segment when it uses
+  //        huge pages; empty for normal (tmpfs) segments.
   PosixShmSegment(ShmAttachT,
                   const std::string& name,
-                  ShmSegmentOpts opts = {});
+                  ShmSegmentOpts opts = {},
+                  const std::string& hugePageMountDir = "");
 
   // create a new segment
   // @param name  The name of the segment
   // @param size  The size of the segment. This will be rounded up to the
   //              nearest page size.
+  // @param hugePageMountDir  hugetlbfs mount to back the segment on when it
+  //        uses huge pages; empty for normal (tmpfs) segments.
   PosixShmSegment(ShmNewT,
                   const std::string& name,
                   size_t size,
-                  ShmSegmentOpts opts = {});
+                  ShmSegmentOpts opts = {},
+                  const std::string& hugePageMountDir = "");
 
   // destructor
   ~PosixShmSegment() override;
@@ -91,12 +97,20 @@ class PosixShmSegment : public ShmBase {
   void unMap(void* addr) const override;
 
   // useful for removing without attaching
+  // @param name  Name of the segment
+  // @param hugePageMountDir  hugetlbfs mount backing the segment if it uses
+  //        huge pages; empty for normal (tmpfs) segments.
   // @return true if the segment existed. false otherwise
-  static bool removeByName(const std::string& name);
+  static bool removeByName(const std::string& name,
+                           const std::string& hugePageMountDir = "");
 
  private:
-  static int createNewSegment(const std::string& name);
-  static int getExisting(const std::string& name, const ShmSegmentOpts& opts);
+  static int createNewSegment(const std::string& name,
+                              const ShmSegmentOpts& opts,
+                              const std::string& hugePageMountDir);
+  static int getExisting(const std::string& name,
+                         const ShmSegmentOpts& opts,
+                         const std::string& hugePageMountDir);
 
   // returns the key type corresponding to the given name.
   static std::string createKeyForName(const std::string& name) noexcept;
@@ -111,6 +125,10 @@ class PosixShmSegment : public ShmBase {
   void deleteReferenceMapping() const;
 
   void memBind(void* addr) const;
+
+  // hugetlbfs mount backing this segment when it uses huge pages ("" for
+  // normal/tmpfs segments). Needed to locate the file for removal.
+  const std::string hugePageMountDir_;
 
   // file descriptor associated with the shm. This has FD_CLOEXEC set
   // and once opened, we close this only on destruction of this object

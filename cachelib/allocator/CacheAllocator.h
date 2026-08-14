@@ -1423,7 +1423,9 @@ class CacheAllocator : public CacheBase {
   // returns true if there was no error in trying to cleanup the segment
   // because another process was attached. False if the user tried to clean up
   // and the cache was actually attached.
-  static bool cleanupStrayShmSegments(const std::string& cacheDir, bool posix);
+  static bool cleanupStrayShmSegments(const std::string& cacheDir,
+                                      bool posix,
+                                      const std::string& hugePageMountDir = "");
 
   // gives a relative offset to a pointer within the cache.
   uint64_t getItemPtrAsOffset(const void* ptr);
@@ -2744,7 +2746,8 @@ CacheAllocator<CacheTrait>::CacheAllocator(
                    : nullptr),
       shmManager_(type != InitMemType::kNone
                       ? std::make_unique<ShmManager>(config_.cacheDir,
-                                                     config_.isUsingPosixShm())
+                                                     config_.isUsingPosixShm(),
+                                                     config_.hugePageMountDir)
                       : nullptr),
       deserializer_(type == InitMemType::kMemAttach ? createDeserializer()
                                                     : nullptr),
@@ -2802,6 +2805,20 @@ ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
     throw std::invalid_argument("CacheLib only supports a single memory tier");
   }
   opts.memBindNumaNodes = config_.memoryTierConfigs[0].getMemBind();
+
+  if (config_.hugePageSize.isHugePage()) {
+    if (!PageSize::supportedHugePageSizes().contains(
+            config_.hugePageSize.getPageSize())) {
+      throw std::invalid_argument(fmt::format(
+          "Requested huge page size {} is not supported by the kernel",
+          config_.hugePageSize.getPageSize()));
+    } else if (config_.hugePageMountDir.empty() && config_.usePosixShm) {
+      throw std::invalid_argument(
+          "Requested huge pages for POSIX shared memory regions but didn't "
+          "supply a hugetlbfs mount");
+    }
+    opts.pageSize = config_.hugePageSize;
+  }
   return opts;
 }
 
@@ -6454,12 +6471,14 @@ bool CacheAllocator<CacheTrait>::stopBackgroundPromoter(
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::cleanupStrayShmSegments(
-    const std::string& cacheDir, bool posix) {
+    const std::string& cacheDir,
+    bool posix,
+    const std::string& hugePageMountDir) {
   if (util::getStatIfExists(cacheDir, nullptr) && util::isDir(cacheDir)) {
     try {
       // cache dir exists. clean up only if there are no other processes
       // attached. if another process was attached, the following would fail.
-      ShmManager::cleanup(cacheDir, posix);
+      ShmManager::cleanup(cacheDir, posix, hugePageMountDir);
     } catch (const std::exception& e) {
       XLOGF(ERR, "Error cleaning up {}. Exception: ", cacheDir, e.what());
       return false;
@@ -6468,11 +6487,14 @@ bool CacheAllocator<CacheTrait>::cleanupStrayShmSegments(
     // cache dir did not exist. Try to nuke the segments we know by name.
     // Any other concurrent process can not be attached to the segments or
     // even if it does, we want to mark it for destruction.
-    ShmManager::removeByName(cacheDir, detail::kShmInfoName, posix);
-    ShmManager::removeByName(cacheDir, detail::kShmCacheName, posix);
-    ShmManager::removeByName(cacheDir, detail::kShmHashTableName, posix);
+    ShmManager::removeByName(cacheDir, detail::kShmInfoName, posix,
+                             hugePageMountDir);
+    ShmManager::removeByName(cacheDir, detail::kShmCacheName, posix,
+                             hugePageMountDir);
+    ShmManager::removeByName(cacheDir, detail::kShmHashTableName, posix,
+                             hugePageMountDir);
     ShmManager::removeByName(cacheDir, detail::kShmChainedItemHashTableName,
-                             posix);
+                             posix, hugePageMountDir);
   }
   return true;
 }

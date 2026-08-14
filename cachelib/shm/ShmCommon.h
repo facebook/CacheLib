@@ -231,6 +231,7 @@ class ShmBase {
   }
 
   virtual size_t getSize() const = 0;
+  size_t getPageSize() const { return opts_.pageSize.getPageSize(); }
   virtual std::string getKeyStr() const = 0;
   virtual void* mapAddress(void* addr) const = 0;
   virtual void unMap(void* addr) const = 0;

@@ -51,7 +51,9 @@ namespace cachelib {
 // could be corrupted
 class ShmManager {
  public:
-  ShmManager(const std::string& dirName, bool usePosix);
+  ShmManager(const std::string& dirName,
+             bool usePosix,
+             const std::string& hugePageMountDir = "");
 
   ShmManager(const ShmManager&) = delete;
   ShmManager& operator=(const ShmManager&) = delete;
@@ -95,7 +97,7 @@ class ShmManager {
                     ShmSegmentOpts opts = {});
 
   // Remove a shared memory segment. If the memory segment is currently mapped,
-  // this will unmap the segment and then remove it. If the segement by name
+  // this will unmap the segment and then remove it. If the segment by name
   // exists, but is not attached, we remove it as well.
   //
   // @param shmName   name of the segment
@@ -130,7 +132,8 @@ class ShmManager {
   // cacheDir without instanciating.
   static void removeByName(const std::string& cacheDir,
                            const std::string& segName,
-                           bool posix);
+                           bool posix,
+                           const std::string& hugePageMountDir = "");
 
   // Useful for checking whether a segment exists by name associated with a
   // given cacheDir without instanciating. This should be ONLY used in tests.
@@ -139,7 +142,9 @@ class ShmManager {
                             bool posix);
 
   // free up and remove all the segments related to the cache directory.
-  static void cleanup(const std::string& cacheDir, bool posix);
+  static void cleanup(const std::string& cacheDir,
+                      bool posix,
+                      const std::string& hugePageMountDir = "");
 
   // expose a read only instance of the shm for use where we want to peek at a
   // particular segment without owning its lifetime or any guarantees.
@@ -253,6 +258,11 @@ class ShmManager {
   // name to key mapping used for reattaching. This is persisted to a
   // file and used for attaching to the segment.
   folly::F14FastMap<std::string, std::string> nameToKey_{};
+
+  // Single hugetlbfs mount backing this cache's huge-page POSIX segments (all
+  // huge segments of a cache share one mount). Used to locate segments for
+  // removal when no ShmSegmentOpts are available. Empty if none use huge pages.
+  const std::string hugePageMountDir_{};
 
   // file handle for the metadata file. It remains open throughout the lifetime
   // of the object.

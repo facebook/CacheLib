@@ -47,14 +47,17 @@ class ShmSegment {
   // @param name   name of the segment
   // @param size   size of the segment.
   // @param opts   the options for the segment.
+  // @param hugePageMountDir  hugetlbfs mount for a huge-page POSIX segment;
+  //        ignored for SysV and normal-page segments.
   ShmSegment(ShmNewT,
              std::string name,
              size_t size,
              bool usePosix,
-             ShmSegmentOpts opts = {}) {
+             const ShmSegmentOpts& opts = {},
+             const std::string& hugePageMountDir = "") {
     if (usePosix) {
-      segment_ = std::make_unique<PosixShmSegment>(ShmNew, std::move(name),
-                                                   size, opts);
+      segment_ = std::make_unique<PosixShmSegment>(
+          ShmNew, std::move(name), size, opts, hugePageMountDir);
     } else {
       segment_ =
           std::make_unique<SysVShmSegment>(ShmNew, std::move(name), size, opts);
@@ -64,13 +67,16 @@ class ShmSegment {
   // attach to an existing segment with the given key
   // @param name   name of the segment
   // @param opts   the options for the segment.
+  // @param hugePageMountDir  hugetlbfs mount for a huge-page POSIX segment;
+  //        ignored for SysV and normal-page segments.
   ShmSegment(ShmAttachT,
              std::string name,
              bool usePosix,
-             ShmSegmentOpts opts = {}) {
+             const ShmSegmentOpts& opts = {},
+             const std::string& hugePageMountDir = "") {
     if (usePosix) {
-      segment_ =
-          std::make_unique<PosixShmSegment>(ShmAttach, std::move(name), opts);
+      segment_ = std::make_unique<PosixShmSegment>(
+          ShmAttach, std::move(name), opts, hugePageMountDir);
     } else {
       segment_ =
           std::make_unique<SysVShmSegment>(ShmAttach, std::move(name), opts);
@@ -115,14 +121,16 @@ class ShmSegment {
         // if alignment is passed, it should be valid non-zero power of two
         // value and if address is also passed
         return false;
-      } else {
+      } else if (alignment > segment_->getPageSize()) {
         // address was not set and alignment args are sane.  We first mmap an
         // area of memory that is sufficiently larger and use that to get an
         // aligned address that we will later remap below.  The reason for mmap
         // such a large memory area upfront is because we need to ensure that
         // starting from the aligned address we will not have any overlaps with
         // other mappings. we map with PROT_NONE because we do not intend to
-        // read or write until after we remap it onto our shared memory
+        // read or write until after we remap it onto our shared memory. Note
+        // that we only need to do this if alignment > pageSize since the OS
+        // will page align by default in segment_->mapAddress() below.
         addr = cachelib::util::mmapAlignedZeroedMemory(
             alignment, segment_->getSize(), true /* need-access */);
         XDCHECK_EQ(reinterpret_cast<uint64_t>(addr) & (alignment - 1), 0ULL);
