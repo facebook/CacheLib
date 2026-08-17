@@ -55,6 +55,7 @@ class CacheAllocatorConfig {
  public:
   using AccessConfig = typename CacheT::AccessConfig;
   using ChainedItemMovingSync = typename CacheT::ChainedItemMovingSync;
+  using PreRemoveCb = typename CacheT::PreRemoveCb;
   using RemoveCb = typename CacheT::RemoveCb;
   using ItemDestructor = typename CacheT::ItemDestructor;
   using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
@@ -101,8 +102,13 @@ class CacheAllocatorConfig {
   // number of estimated cache entries.
   CacheAllocatorConfig& setAccessConfig(size_t numEntries);
 
-  // RemoveCallback is invoked for each item that is evicted or removed
-  // explicitly from RAM
+  // PreRemoveCallback is invoked immediately before an explicit removal,
+  // expiry, or eviction makes an item unfindable in RAM. It runs under the
+  // access-container bucket lock and must obey the PreRemoveCb contract.
+  CacheAllocatorConfig& setPreRemoveCallback(PreRemoveCb cb);
+
+  // RemoveCallback is invoked when an item is actually freed from RAM.
+  // Outstanding references can delay it after PreRemoveCallback has run.
   CacheAllocatorConfig& setRemoveCallback(RemoveCb cb);
 
   // ItemDestructor is invoked for each item that is evicted or removed
@@ -699,6 +705,9 @@ class CacheAllocatorConfig {
   // for all normal items
   AccessConfig accessConfig{};
 
+  // user defined callback invoked before an item is unlinked from RAM
+  PreRemoveCb preRemoveCb{};
+
   // user defined callback invoked when an item is being evicted or freed from
   // RAM
   RemoveCb removeCb{};
@@ -856,6 +865,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAccessConfig(
   AccessConfig config{};
   config.sizeBucketsPowerAndLocksPower(numEntries);
   accessConfig = std::move(config);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setPreRemoveCallback(
+    PreRemoveCb cb) {
+  preRemoveCb = std::move(cb);
   return *this;
 }
 
@@ -1448,6 +1464,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["thresholdForConvertingToIOBuf"] =
       std::to_string(thresholdForConvertingToIOBuf);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
+  configMap["preRemoveCb"] = preRemoveCb ? "set" : "empty";
   configMap["removeCb"] = removeCb ? "set" : "empty";
   configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
   configMap["nvmAPRejectFirst"] = rejectFirstAPNumEntries ? "set" : "empty";

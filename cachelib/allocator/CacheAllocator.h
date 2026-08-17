@@ -278,6 +278,16 @@ class CacheAllocator : public CacheBase {
     folly::Optional<PoolId> poolId{folly::none};      // Memory pool identifier
   };
 
+  // Called immediately before an item is unlinked from RAM by an explicit
+  // removal, expiry, or eviction. The item is valid only for the duration of
+  // the call. The callback runs while the access-container bucket is
+  // exclusively locked, so it must not throw, call cache APIs, or acquire a
+  // lock that may be held while calling cache APIs. Throwing terminates the
+  // process. A successful insertOrReplace() does not invoke this callback for
+  // the replaced item.
+  using PreRemoveCb =
+      std::function<void(RemoveContext context, const Item& item)>;
+
   // holds information about removal, used in RemoveCb
   struct RemoveCbData {
     // remove or eviction
@@ -4092,7 +4102,7 @@ template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::unlinkItemForEviction(Item& it) {
   XDCHECK(it.isMarkedForEviction());
   XDCHECK_EQ(0u, it.getRefCount());
-  accessContainer_->remove(it);
+  accessContainer_->remove(it, RemoveContext::kEviction, config_.preRemoveCb);
   removeFromMMContainer(it);
 
   // Since we managed to mark the item for eviction we must be the only
@@ -4485,7 +4495,8 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
         nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
                   : std::unique_lock<typename NvmCacheT::ItemDestructorMutex>();
 
-    success = accessContainer_->remove(item);
+    success = accessContainer_->remove(item, RemoveContext::kNormal,
+                                       config_.preRemoveCb);
 
     if (removeFromNvm && success && item.isNvmClean() && !item.isNvmEvicted()) {
       // item is to be removed and the destructor will be executed
@@ -5637,7 +5648,8 @@ bool CacheAllocator<CacheTrait>::removeIfExpired(const ReadHandle& handle) {
   // We remove the item from both access and mm containers.
   // We want to make sure the caller is the only one holding the handle.
   auto removedHandle =
-      accessContainer_->removeIf(*(handle.getInternal()), itemExpiryPredicate);
+      accessContainer_->removeIf(*(handle.getInternal()), itemExpiryPredicate,
+                                 RemoveContext::kExpired, config_.preRemoveCb);
   if (removedHandle) {
     removeFromMMContainer(*(handle.getInternal()));
     return true;

@@ -36,6 +36,7 @@ struct ObjectCacheConfig {
   using LegacyEventTrackerSharedPtr = std::shared_ptr<LegacyEventTracker>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
   using RemoveCb = typename ObjectCache::RemoveCb;
+  using PreRemoveCb = typename ObjectCache::PreRemoveCb;
   using SerializeCb = typename ObjectCache::SerializeCb;
   using DeserializeCb = typename ObjectCache::DeserializeCb;
   using EvictionPolicyConfig = typename ObjectCache::EvictionPolicyConfig;
@@ -131,6 +132,8 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setItemDestructor(ItemDestructor destructor);
 
   ObjectCacheConfig& setRemoveCb(RemoveCb cb);
+
+  ObjectCacheConfig& setPreRemoveCb(PreRemoveCb cb);
 
   // Run in a multi-thread mode, eviction order is not guaranteed to persist.
   // @param threadCount          number of threads to work on persistence
@@ -275,6 +278,8 @@ struct ObjectCacheConfig {
   ItemDestructor itemDestructor{};
 
   RemoveCb removeCb{};
+
+  PreRemoveCb preRemoveCb{};
 
   // time to sleep between each reaping period.
   std::chrono::milliseconds reaperInterval{5000};
@@ -473,6 +478,12 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemDestructor(
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRemoveCb(RemoveCb cb) {
   removeCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setPreRemoveCb(PreRemoveCb cb) {
+  preRemoveCb = std::move(cb);
   return *this;
 }
 

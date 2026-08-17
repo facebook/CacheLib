@@ -104,6 +104,30 @@ struct ObjectCacheDestructorData {
   bool removedBySuccessfulReplacement;
 };
 
+struct ObjectCachePreRemoveData {
+  ObjectCachePreRemoveData(RemoveContext ctx,
+                           uintptr_t ptr,
+                           KAllocation::Key k,
+                           uint32_t expiry,
+                           uint32_t creation,
+                           uint32_t lastAccess)
+      : context(ctx),
+        objectPtr(ptr),
+        key(k),
+        expiryTime(expiry),
+        creationTime(creation),
+        lastAccessTime(lastAccess) {}
+
+  // This data contains non-owning views into the item being removed. The data,
+  // key bytes, and object pointer are valid only during the callback.
+  RemoveContext context;
+  uintptr_t objectPtr;
+  KAllocation::Key key;
+  uint32_t expiryTime;
+  uint32_t creationTime;
+  uint32_t lastAccessTime;
+};
+
 // Information about cache memory capacity calculated from configuration
 // parameters. Use ObjectCache::calculateCacheCapacity() to compute this.
 struct CacheCapacityInfo {
@@ -168,6 +192,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   };
 
  public:
+  using PreRemoveCb = std::function<void(const ObjectCachePreRemoveData& data)>;
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
   using RemoveCb = std::function<void(ObjectCacheDestructorData)>;
   using Key = KAllocation::Key;
@@ -793,6 +818,17 @@ void ObjectCache<AllocatorT>::init() {
       .enableItemReaperInBackground(config_.reaperInterval)
       .setEventTracker(std::move(config_.legacyEventTracker))
       .setEvictionSearchLimit(config_.evictionSearchLimit);
+  if (config_.preRemoveCb) {
+    l1Config.setPreRemoveCallback(
+        [preRemoveCb = config_.preRemoveCb](
+            RemoveContext context,
+            const typename AllocatorT::Item& item) noexcept {
+          const auto* itemPtr = getAlignedItemPtr(item.getMemory());
+          preRemoveCb(ObjectCachePreRemoveData(
+              context, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+              item.getCreationTime(), item.getLastAccessTime()));
+        });
+  }
   if (config_.itemDestructor) {
     l1Config.setItemDestructor(
         [this](typename AllocatorT::DestructorData data) {

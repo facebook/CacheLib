@@ -983,6 +983,67 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testPreRemoveCb() {
+    using Event = std::pair<RemoveContext, std::string>;
+    std::vector<Event> events;
+    typename AllocatorT::Config config;
+    config.setPreRemoveCallback(
+        [&](RemoveContext context,
+            const typename AllocatorT::Item& item) noexcept {
+          EXPECT_TRUE(item.isAccessible());
+          events.emplace_back(context, item.getKey().str());
+        });
+    config.setCacheSize(10 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    const auto poolId = alloc.addPool("foobar", numBytes);
+
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "normal", 100);
+      ASSERT_NE(nullptr, handle);
+    }
+    ASSERT_EQ(AllocatorT::RemoveRes::kSuccess, alloc.remove("normal"));
+    const std::vector<Event> afterNormal{{RemoveContext::kNormal, "normal"}};
+    EXPECT_EQ(afterNormal, events);
+
+    auto expired = util::allocateAccessible(alloc, poolId, "expired", 100);
+    ASSERT_NE(nullptr, expired);
+    ASSERT_TRUE(expired->updateExpiryTime(util::getCurrentTimeSec() - 1));
+    ASSERT_TRUE(alloc.removeIfExpired(expired));
+    const std::vector<Event> afterExpired{
+        {RemoveContext::kNormal, "normal"},
+        {RemoveContext::kExpired, "expired"},
+    };
+    EXPECT_EQ(afterExpired, events);
+
+    {
+      auto original =
+          util::allocateAccessible(alloc, poolId, "replacement", 100);
+      ASSERT_NE(nullptr, original);
+    }
+    const auto eventsBeforeReplacement = events.size();
+    auto replacement = alloc.allocate(poolId, "replacement", 100);
+    ASSERT_NE(nullptr, replacement);
+    auto replaced = alloc.insertOrReplace(replacement);
+    ASSERT_NE(nullptr, replaced);
+    EXPECT_EQ(eventsBeforeReplacement, events.size());
+    replaced.reset();
+    replacement.reset();
+    ASSERT_EQ(AllocatorT::RemoveRes::kSuccess, alloc.remove("replacement"));
+
+    const auto eventsBeforeEvictions = events.size();
+    constexpr unsigned int kKeyLen = 16;
+    const auto sizes = this->getValidAllocSizes(alloc, poolId, 3, kKeyLen);
+    this->fillUpPoolUntilEvictions(alloc, poolId, sizes, kKeyLen);
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId, sizes, kKeyLen,
+                                        numBytes);
+    ASSERT_GT(events.size(), eventsBeforeEvictions);
+    for (auto i = eventsBeforeEvictions; i < events.size(); ++i) {
+      EXPECT_EQ(RemoveContext::kEviction, events[i].first);
+    }
+  }
+
   // trigger various scenarios for item being destroyed from cache and ensure
   // that destructor call back fires.
   void testItemDestructor() {

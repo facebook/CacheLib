@@ -22,6 +22,7 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
+#include <mutex>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/KAllocation.h"
@@ -487,6 +488,100 @@ class ObjectCacheTest : public ::testing::Test {
                               1 /*ttlSecs*/);
     ASSERT_EVENTUALLY_TRUE([&] { return numNotReplaced.load() == 2; });
     EXPECT_EQ(1, numReplaced.load());
+  }
+
+  void testPreRemoveCallbackOrdering() {
+    std::mutex eventsMutex;
+    std::vector<std::string> events;
+    auto recordEvent = [&](std::string event) {
+      std::lock_guard lock(eventsMutex);
+      events.push_back(std::move(event));
+    };
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(2)
+        .setDelayCacheWorkersStart()
+        .setItemReaperInterval(std::chrono::milliseconds{10})
+        .setPreRemoveCb([&](const ObjectCachePreRemoveData& data) {
+          const char* context = "unknown";
+          switch (data.context) {
+          case RemoveContext::kEviction:
+            context = "evicted";
+            break;
+          case RemoveContext::kNormal:
+            context = "removed";
+            break;
+          case RemoveContext::kExpired:
+            context = "expired";
+            break;
+          }
+          recordEvent(fmt::format("pre:{}:{}", data.key.str(), context));
+        })
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          recordEvent(fmt::format(
+              "destroy:{}{}",
+              data.key.str(),
+              data.removedBySuccessfulReplacement ? ":replacement" : ""));
+          data.deleteObject<Foo>();
+        });
+    auto objcache = ObjectCache::create(config);
+
+    auto [evictedStatus, evicted, evictedReplaced] =
+        objcache->insertOrReplace("evicted", std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, evictedStatus);
+    ASSERT_EQ(nullptr, evictedReplaced);
+    evicted.reset();
+
+    auto [explicitStatus, explicitItem, explicitReplaced] =
+        objcache->insertOrReplace("explicit", std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, explicitStatus);
+    ASSERT_EQ(nullptr, explicitReplaced);
+    explicitItem.reset();
+
+    auto [expiredStatus, expired, expiredReplaced] =
+        objcache->insertOrReplace("expired", std::make_unique<Foo>(),
+                                  0 /* objectSize */, 1000 /* ttlSecs */);
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, expiredStatus);
+    ASSERT_EQ(nullptr, expiredReplaced);
+    ASSERT_TRUE(
+        objcache->updateExpiryTimeSec(expired, util::getCurrentTimeSec() - 1));
+    expired.reset();
+    ASSERT_TRUE(objcache->remove("explicit"));
+    objcache->startCacheWorkers();
+    ASSERT_EVENTUALLY_TRUE([&] {
+      std::lock_guard lock(eventsMutex);
+      return events.size() >= 6;
+    });
+
+    auto [oldStatus, oldItem, oldReplaced] =
+        objcache->insertOrReplace("replacement", std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, oldStatus);
+    ASSERT_EQ(nullptr, oldReplaced);
+    oldItem.reset();
+    auto [newStatus, newItem, replacedItem] =
+        objcache->insertOrReplace("replacement", std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, newStatus);
+    ASSERT_NE(nullptr, replacedItem);
+    replacedItem.reset();
+
+    newItem.reset();
+    ASSERT_TRUE(objcache->remove("replacement"));
+    objcache->stopAllWorkers();
+
+    const std::vector<std::string> expected{
+        "pre:evicted:evicted",
+        "destroy:evicted",
+        "pre:explicit:removed",
+        "destroy:explicit",
+        "pre:expired:expired",
+        "destroy:expired",
+        "destroy:replacement:replacement",
+        "pre:replacement:removed",
+        "destroy:replacement",
+    };
+    std::lock_guard lock(eventsMutex);
+    EXPECT_EQ(expected, events);
   }
 
   void testExpirationWithCustomizedReaper() {
@@ -2112,6 +2207,13 @@ TYPED_TEST(ObjectCacheTest, InspectCacheIncludingExpiredUntilReaped) {
 }
 TYPED_TEST(ObjectCacheTest, SuccessfulReplacementFlag) {
   this->testSuccessfulReplacementFlag();
+}
+TYPED_TEST(ObjectCacheTest, PreRemoveCallbackOrdering) {
+  if constexpr (std::is_same_v<TypeParam, LruAllocator>) {
+    this->testPreRemoveCallbackOrdering();
+  } else {
+    GTEST_SKIP() << "eviction ordering is specific to LruAllocator";
+  }
 }
 TYPED_TEST(ObjectCacheTest, ExpirationWithCustomizedReaper) {
   this->testExpirationWithCustomizedReaper();

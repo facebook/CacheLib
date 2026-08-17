@@ -20,6 +20,7 @@
 #include <folly/Optional.h>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <stdexcept>
 #include <type_traits>
@@ -332,6 +333,7 @@ class ChainedHashTable {
     using Key = typename T::Key;
     using Handle = typename T::Handle;
     using HandleMaker = typename T::HandleMaker;
+    using PreRemoveCb = std::function<void(RemoveContext, const T&)>;
     using CompressedPtrType = typename T::CompressedPtrType;
     using PtrCompressor = typename T::PtrCompressor;
 
@@ -467,7 +469,9 @@ class ChainedHashTable {
     // @return  True if the node was in the hashtable and if it was
     //          successfully removed. False if the node was not in the
     //          hashtable.
-    bool remove(T& node) noexcept;
+    bool remove(T& node,
+                RemoveContext context = RemoveContext::kNormal,
+                const PreRemoveCb& preRemoveCb = {}) noexcept;
 
     // remove a node from the container if it exists for the key and the
     // predicate returns true for the node. This is intended to simplify the
@@ -480,7 +484,9 @@ class ChainedHashTable {
     // null handle if the node was either not in the container or the
     // predicate failed.
     Handle removeIf(T& node,
-                    const std::function<bool(const T& node)>& predicate);
+                    const std::function<bool(const T& node)>& predicate,
+                    RemoveContext context = RemoveContext::kNormal,
+                    const PreRemoveCb& preRemoveCb = {});
 
     // finds the node corresponding to the key in the hashtable and returns a
     // handle to that node.
@@ -770,6 +776,14 @@ class ChainedHashTable {
 
    private:
     using Hashtable = Impl<T, HookPtr>;
+
+    static void invokePreRemoveCb(const PreRemoveCb& preRemoveCb,
+                                  RemoveContext context,
+                                  const T& node) noexcept {
+      if (preRemoveCb) {
+        preRemoveCb(context, node);
+      }
+    }
 
     // Fetch a vector of handle to the items belonging to a given bucket. This
     // is for use by the iterator. 'handles' will be cleared and then populated
@@ -1213,7 +1227,8 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::replaceIf(T& oldNode,
 template <typename T,
           typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
-bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node) noexcept {
+bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(
+    T& node, RemoveContext context, const PreRemoveCb& preRemoveCb) noexcept {
   const auto bucket = ht_.getBucket(node.getKey());
   auto l = locks_.lockExclusive(bucket);
 
@@ -1222,6 +1237,7 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node) noexcept {
     return false;
   }
 
+  invokePreRemoveCb(preRemoveCb, context, node);
   ht_.removeFromBucket(node, bucket);
   node.unmarkAccessible();
 
@@ -1233,7 +1249,10 @@ template <typename T,
           typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::removeIf(
-    T& node, const std::function<bool(const T& node)>& predicate) {
+    T& node,
+    const std::function<bool(const T& node)>& predicate,
+    RemoveContext context,
+    const PreRemoveCb& preRemoveCb) {
   const auto bucket = ht_.getBucket(node.getKey());
   auto l = locks_.lockExclusive(bucket);
 
@@ -1243,6 +1262,7 @@ typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::removeIf(
     // if handle maker throws an exception, we leave the item in a consistent
     // state.
     auto handle = handleMaker_(&node);
+    invokePreRemoveCb(preRemoveCb, context, node);
     ht_.removeFromBucket(node, bucket);
     node.unmarkAccessible();
     numKeys_.fetch_sub(1, std::memory_order_relaxed);

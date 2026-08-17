@@ -50,9 +50,9 @@ struct SimplePoolOptimizeStrategy;
 // to differentiate between the access modes and do appropriate action.
 enum class AccessMode { kRead, kWrite };
 
-// used by RemoveCB, indicating if the removal from the MMContainer was an
-// eviction or not.
-enum class RemoveContext { kEviction, kNormal };
+// Identifies why an item is removed. kExpired is used by pre-remove callbacks;
+// remove callbacks continue to report expired items as kNormal.
+enum class RemoveContext { kEviction, kNormal, kExpired };
 
 // used by ItemDestructor, indicating how the item is destructed
 enum class DestructorContext {
