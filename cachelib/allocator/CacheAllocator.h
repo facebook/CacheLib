@@ -2247,8 +2247,11 @@ class CacheAllocator : public CacheBase {
                   config.minAllocationClassSize,
                   config.reduceFragmentationInAllocationClass)
             : config.defaultAllocSizes,
-        config.enableZeroedSlabAllocs, config.disableFullCoredump,
-        config.lockMemory, config.isSlabAsanPoisoningEnabled()};
+        config.enableZeroedSlabAllocs,
+        config.disableFullCoredump,
+        config.lockMemory,
+        config.isSlabAsanPoisoningEnabled(),
+        config.hugePageSize};
   }
 
   // starts one of the cache workers passing the current instance and the args
@@ -3054,7 +3057,8 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
   if (type == InitMemType::kNone) {
     return std::make_unique<AccessContainer>(
         config, compressor_,
-        [this](Item* it) -> WriteHandle { return acquire(it); });
+        [this](Item* it) -> WriteHandle { return acquire(it); },
+        config_.hugePageSize);
   } else if (type == InitMemType::kMemNew) {
     return std::make_unique<AccessContainer>(
         config,

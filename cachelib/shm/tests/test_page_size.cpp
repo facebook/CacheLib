@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-#include <folly/Conv.h>
-#include <folly/FileUtil.h>
-#include <folly/String.h>
-
 #include <cstdlib>
 
+#include "cachelib/shm/HugePageTestUtils.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/tests/common.h"
@@ -28,52 +25,15 @@ namespace facebook {
 namespace cachelib {
 namespace tests {
 
-namespace {
-// Cachelib requires an explicit hugetlbfs mount for POSIX huge pages. CI hosts
-// (sandcastle) have neither a reserved huge-page pool nor a mounted hugetlbfs
-// and can't create either (no root), so the POSIX huge-page end-to-end test
-// only runs on a host provisioned out-of-band with a pool + hugetlbfs mount
-// whose path is supplied here.
-constexpr const char* kHugetlbfsMountEnv = "CACHELIB_TEST_HUGETLBFS_MOUNT";
-
-std::string hugetlbfsMountFromEnv() {
-  const char* dir = std::getenv(kHugetlbfsMountEnv);
-  return dir != nullptr ? std::string{dir} : std::string{};
-}
-
-// Number of free huge pages of the given size, from sysfs.
-size_t freeHugePages(size_t pageSize) {
-  const auto path =
-      fmt::format("/sys/kernel/mm/hugepages/hugepages-{}kB/free_hugepages",
-                  pageSize / 1024);
-  std::string content;
-  if (!folly::readFile(path.c_str(), content)) {
-    return 0;
-  }
-  return folly::tryTo<size_t>(folly::trimWhitespace(content)).value_or(0);
-}
-
-// Huge pages of pageSize can actually be allocated on this host: the kernel
-// supports the size, there are free pages in the pool, and (for POSIX) a
-// hugetlbfs mount was supplied via kHugetlbfsMountEnv. Gates the HugeTLB
-// end-to-end tests so they skip on unprovisioned hosts instead of failing.
-bool hugePagesUsable(size_t pageSize, bool posix) {
-  if (!PageSize::supportedHugePageSizes().contains(pageSize) ||
-      freeHugePages(pageSize) == 0) {
-    return false;
-  }
-  return !posix || !hugetlbfsMountFromEnv().empty();
-}
-} // namespace
-
 void ShmTest::testPageSize(size_t p, bool posix) {
   ShmSegmentOpts opts{PageSize(p)};
   const auto& ps = opts.pageSize;
   size_t size = ps.getPageAlignedSize(4096);
   ASSERT_TRUE(ps.isPageAlignedSize(size));
   // POSIX huge-page segments need the hugetlbfs mount passed to the segment.
-  const std::string mountDir =
-      (posix && ps.isHugePage()) ? hugetlbfsMountFromEnv() : std::string{};
+  const std::string mountDir = (posix && ps.isHugePage())
+                                   ? detail::hugetlbfsMountFromEnv()
+                                   : std::string{};
 
   // create with unaligned size
   ASSERT_NO_THROW({

@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/ChainedHashTable.h"
 #include "cachelib/allocator/tests/AccessTypeTest.h"
+#include "cachelib/shm/HugePageTestUtils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -589,6 +590,33 @@ TEST_F(ChainedHashTest, LockGroupIteratorFilter) {
   }
 
   ASSERT_EQ(expectedKeys, filteredKeys);
+}
+
+TEST_F(ChainedHashTest, HeapHugePageBuckets) {
+  using HashConfig = ChainedHashTable::Config;
+  HashConfig config{5, 3};
+  PageSize huge{PageSize::kHugePageSize2MB};
+  size_t raw = config.getNumBuckets() * sizeof(Node*);
+  size_t aligned = huge.getPageAlignedSize(raw);
+
+  if (!canReserveHugePages(aligned, huge)) {
+    GTEST_SKIP() << "Not enough free 2MB huge pages for " << aligned
+                 << " bytes";
+  }
+
+  Container c{config, typename Node::PtrCompressor(),
+              Container::kDefaultHandleMaker, huge};
+
+  std::vector<std::unique_ptr<Node>> nodes;
+  for (int i = 0; i < 100; ++i) {
+    auto key = getRandomNewKey(c);
+    nodes.emplace_back(new Node(key));
+    ASSERT_TRUE(c.insert(*nodes.back()));
+  }
+  for (auto& n : nodes) {
+    EXPECT_NE(c.find(n->getKey()), nullptr);
+  }
+  EXPECT_EQ(c.getNumKeys(), nodes.size());
 }
 
 } // namespace tests

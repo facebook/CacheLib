@@ -167,19 +167,41 @@ void* align(size_t alignment, size_t size, void*& ptr, size_t& space) {
 
 void* mmapAlignedZeroedMemory(size_t alignment,
                               size_t numBytes,
-                              bool noAccess) {
-  // to enforce alignment, we try to make sure that the address we return is
-  // aligned to slab size.
-  size_t newBytes = numBytes + alignment;
+                              bool noAccess,
+                              int extraMmapFlags) {
+  // Over-map by `alignment` so the returned address can be shifted up to an
+  // aligned boundary.
+  const size_t mappedBytes = numBytes + alignment;
   const auto protFlag = noAccess ? PROT_NONE : PROT_READ | PROT_WRITE;
-  const auto mapFlag = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE;
-  void* memory = mmap(nullptr, newBytes, protFlag, mapFlag, -1, 0);
-  if (memory != MAP_FAILED) {
-    auto alignedMemory = align(alignment, numBytes, memory, newBytes);
-    XDCHECK_NE(alignedMemory, nullptr);
-    return alignedMemory;
+  const auto mapFlag =
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | extraMmapFlags;
+  void* base = mmap(nullptr, mappedBytes, protFlag, mapFlag, -1, 0);
+  if (base == MAP_FAILED) {
+    throw std::system_error(errno, std::system_category(), "Cannot mmap");
   }
-  throw std::system_error(errno, std::system_category(), "Cannot mmap");
+
+  void* memory = base;
+  size_t space = mappedBytes;
+  auto* alignedMemory = align(alignment, numBytes, memory, space);
+  XDCHECK_NE(alignedMemory, nullptr);
+
+  // For HugeTLB mappings release the alignment slack rather than stranding up
+  // to a full huge page. Callers pass a huge-page aligned numBytes, so the
+  // mapping becomes exactly [alignedMemory, alignedMemory + numBytes) and both
+  // trims fall on huge-page boundaries. The normal-page path keeps its
+  // historical over-mapping.
+  if (extraMmapFlags != 0) {
+    auto* alignedBytes = static_cast<uint8_t*>(alignedMemory);
+    const size_t head = alignedBytes - static_cast<uint8_t*>(base);
+    if (head != 0) {
+      munmap(base, head);
+    }
+    const size_t tail = mappedBytes - head - numBytes;
+    if (tail != 0) {
+      munmap(alignedBytes + numBytes, tail);
+    }
+  }
+  return alignedMemory;
 }
 
 void setMaxLockMemory(uint64_t bytes) {

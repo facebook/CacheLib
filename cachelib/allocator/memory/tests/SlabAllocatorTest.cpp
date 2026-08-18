@@ -27,6 +27,7 @@
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
+#include "cachelib/shm/HugePageTestUtils.h"
 #include "cachelib/shm/ShmManager.h"
 
 using namespace facebook::cachelib::tests;
@@ -1047,4 +1048,42 @@ TEST_F(SlabAllocatorTest, TestTunedAllocationClassesMaxAllocSize) {
   // Ensure that Slab::kSize is included in the list of allocation classes
   // Want to ensure that large items can be allocated
   EXPECT_EQ(*allocClasses.rbegin(), Slab::kSize);
+}
+
+TEST_F(SlabAllocatorTest, HeapHugePageOwningCtor) {
+  PageSize huge{PageSize::kHugePageSize2MB};
+  const size_t size = 10 * Slab::kSize;
+
+  if (!canReserveHugePages(size, huge)) {
+    GTEST_SKIP() << "Not enough free 2MB huge pages for " << size;
+  }
+
+  SlabAllocator::Config cfg{false, false, false, huge};
+  SlabAllocator alloc(size, cfg);
+  EXPECT_FALSE(alloc.isRestorable());
+  auto expectedUsable = SlabAllocator::getNumUsableSlabs(size) - 1;
+  EXPECT_LE(alloc.getNumUsableSlabs(), expectedUsable + 1);
+  EXPECT_GE(alloc.getNumUsableSlabs(), 1u);
+
+  auto* slab = alloc.makeNewSlab(0);
+  ASSERT_NE(slab, nullptr);
+  alloc.freeSlab(slab);
+}
+
+TEST_F(SlabAllocatorTest, HeapHugePageAccountingVsNormal) {
+  const size_t size = 7 * Slab::kSize + 12345;
+  PageSize normal{PageSize::kNormalPageSize};
+  PageSize huge{PageSize::kHugePageSize2MB};
+
+  if (!canReserveHugePages(size, huge)) {
+    GTEST_SKIP() << "Not enough free 2MB huge pages for " << size;
+  }
+
+  SlabAllocator::Config cfgNormal{false, false, false, normal};
+  SlabAllocator allocNormal(size, cfgNormal);
+  const auto usableNormal = allocNormal.getNumUsableSlabs();
+
+  SlabAllocator::Config cfgHuge{false, false, false, huge};
+  SlabAllocator allocHuge(size, cfgHuge);
+  EXPECT_EQ(allocHuge.getNumUsableSlabs(), usableNormal);
 }

@@ -23,6 +23,7 @@
 #include "cachelib/allocator/memory/MemoryPoolManager.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
+#include "cachelib/shm/ShmCommon.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -89,12 +90,14 @@ class MemoryAllocator {
            bool zeroOnRelease,
            bool disableCoredump,
            bool _lockMemory,
-           bool _enableAsanPoisoning)
+           bool _enableAsanPoisoning,
+           PageSize _hugePageSize = PageSize())
         : allocSizes(std::move(sizes)),
           enableZeroedSlabAllocs(zeroOnRelease),
           disableFullCoredump(disableCoredump),
           lockMemory(_lockMemory),
-          enableAsanPoisoning(_enableAsanPoisoning) {}
+          enableAsanPoisoning(_enableAsanPoisoning),
+          hugePageSize(_hugePageSize) {}
 
     // Hint to determine the allocation class sizes
     std::set<uint32_t> allocSizes;
@@ -116,6 +119,11 @@ class MemoryAllocator {
     // When true, slab memory is ASAN-poisoned on free and unpoisoned on
     // allocation so ASAN can detect use-after-free bugs.
     bool enableAsanPoisoning{false};
+
+    // huge-page size (bytes) to back self-allocated (non-shm) slab memory with;
+    // default => normal pages. Only applies when the allocator owns (mmaps) its
+    // memory, i.e. the heap path.
+    PageSize hugePageSize{0};
   };
 
   // Creates a memory allocator out of the caller allocated memory region. The

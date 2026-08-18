@@ -23,10 +23,12 @@
 #include <folly/synchronization/SanitizeThread.h>
 #include <sys/mman.h>
 
+#include <algorithm>
 #include <chrono>
 #include <stdexcept>
 
 #include "cachelib/common/Utils.h"
+#include "cachelib/shm/ShmCommon.h"
 
 /* Missing madvise(2) flags on MacOS */
 #ifndef MADV_REMOVE
@@ -41,6 +43,25 @@ using namespace facebook::cachelib;
 namespace {
 static inline size_t roundDownToSlabSize(size_t size) {
   return size - (size % sizeof(Slab));
+}
+
+// Length of the mmap backing a self-allocating SlabAllocator. Huge-page
+// mappings must be huge-page aligned, so the reservation is rounded up past the
+// requested size.
+size_t ownedMmapLength(size_t size, const PageSize& pageSize) {
+  return pageSize.isHugePage() ? pageSize.getPageAlignedSize(size) : size;
+}
+
+// Allocate the mmap-owned backing memory for a self-allocating SlabAllocator,
+// optionally backed by anonymous HugeTLB pages
+void* allocateOwnedSlabMemory(size_t size, const PageSize& pageSize) {
+  const size_t mapSize = ownedMmapLength(size, pageSize);
+  if (!pageSize.isHugePage()) {
+    return util::mmapAlignedZeroedMemory(sizeof(Slab), mapSize);
+  }
+  const size_t alignment = std::max(sizeof(Slab), pageSize.getPageSize());
+  return util::mmapAlignedZeroedMemory(alignment, mapSize, /*noAccess=*/false,
+                                       pageSize.hugePageMmapFlags());
 }
 
 FOLLY_DISABLE_ADDRESS_SANITIZER void touchAddr(const uint8_t* addr) {
@@ -95,7 +116,7 @@ SlabAllocator::~SlabAllocator() {
   stopMemoryLocker();
 
   if (ownsMemory_) {
-    munmap(memoryStart_, memorySize_);
+    munmap(memoryStart_, mmapLength_);
   }
 }
 
@@ -107,10 +128,11 @@ void SlabAllocator::stopMemoryLocker() {
 }
 
 SlabAllocator::SlabAllocator(size_t size, const Config& config)
-    : SlabAllocator(util::mmapAlignedZeroedMemory(sizeof(Slab), size),
+    : SlabAllocator(allocateOwnedSlabMemory(size, config.hugePageSize),
                     size,
                     true,
                     config) {
+  mmapLength_ = ownedMmapLength(size, config.hugePageSize);
   XDCHECK(!isRestorable());
 }
 

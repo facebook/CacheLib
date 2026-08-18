@@ -35,6 +35,7 @@
 
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/shm/ShmCommon.h"
 
 namespace facebook {
 namespace cachelib {
@@ -53,10 +54,12 @@ class SlabAllocator {
     Config() {}
     Config(bool _excludeFromCoreDump,
            bool _lockMemory,
-           bool _enableAsanPoisoning)
+           bool _enableAsanPoisoning,
+           PageSize _hugePageSize = PageSize())
         : excludeFromCoredump(_excludeFromCoreDump),
           lockMemory(_lockMemory),
-          enableAsanPoisoning(_enableAsanPoisoning) {}
+          enableAsanPoisoning(_enableAsanPoisoning),
+          hugePageSize(_hugePageSize) {}
 
     // exclude the memory region from core dumps
     bool excludeFromCoredump{false};
@@ -68,6 +71,10 @@ class SlabAllocator {
     // When true, slab memory is ASAN-poisoned on free and unpoisoned on
     // allocation so ASAN can detect use-after-free bugs.
     bool enableAsanPoisoning{false};
+
+    // huge-page size (bytes) to back self-allocated (non-shm) slab memory with;
+    // default => normal pages. Only used by the mmap-owning constructor.
+    PageSize hugePageSize{};
   };
 
   // initialize the slab allocator for the range of memory starting from
@@ -470,6 +477,11 @@ class SlabAllocator {
 
   // whether the memory this slab allocator manages is mmaped by the caller.
   const bool ownsMemory_{true};
+
+  // when ownsMemory_, the length of the mmap backing memoryStart_; used to
+  // munmap the full region. Exceeds memorySize_ for huge-page mappings, which
+  // round up to the huge-page size. Zero when the memory is caller-provided.
+  size_t mmapLength_{0};
 
 #if FOLLY_SANITIZE_ADDRESS
   // whether to poison free slab memory to detect use-after-free bugs

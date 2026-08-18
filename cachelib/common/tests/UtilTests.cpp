@@ -23,6 +23,8 @@
 
 #include "cachelib/common/FastStats.h"
 #include "cachelib/common/Utils.h"
+#include "cachelib/shm/HugePageTestUtils.h"
+#include "cachelib/shm/ShmCommon.h"
 
 using facebook::cachelib::util::FastStats;
 using facebook::cachelib::util::SysctlSetting;
@@ -214,6 +216,24 @@ TEST(Util, CounterVisitor) {
   util::CounterVisitor(
       [&ctrs](folly::StringPiece k, double v) { ctrs[k.str()] = v; });
 }
+
+TEST(Util, MmapAlignedZeroedMemoryHugeFlagThrowsWhenUnavailable) {
+  PageSize ps{PageSize::kHugePageSize2MB};
+  const size_t hugeAlign = ps.getPageSize();
+  const size_t hugeSize = ps.getPageSize();
+  int hugeFlag = ps.hugePageMmapFlags();
+
+  if (!canReserveHugePages(hugeSize, ps)) {
+    GTEST_SKIP() << "2MB huge pages not usable";
+  }
+
+  void* ptr =
+      util::mmapAlignedZeroedMemory(hugeAlign, hugeSize, false, hugeFlag);
+  ASSERT_NE(ptr, nullptr);
+  EXPECT_EQ(reinterpret_cast<uintptr_t>(ptr) % hugeAlign, 0u);
+  munmap(ptr, hugeSize);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

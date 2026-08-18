@@ -75,7 +75,7 @@ MemoryAllocator::MemoryAllocator(Config config, size_t memSize)
     : config_(std::move(config)),
       slabAllocator_(memSize,
                      {config_.disableFullCoredump, config_.lockMemory,
-                      config_.enableAsanPoisoning}),
+                      config_.enableAsanPoisoning, config_.hugePageSize}),
       memoryPoolManager_(slabAllocator_) {
   checkConfig(config_);
 }

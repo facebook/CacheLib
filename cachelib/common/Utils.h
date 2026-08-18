@@ -293,15 +293,20 @@ std::enable_if_t<std::is_arithmetic<T>::value, T> getDivCeiling(
 // creates a new mapping in the virtual address space of the calling process
 // aligned by the size of Slab.
 //
-// @param alignment   the desired alignment
-// @param numBytes    the length of the mapping
-// @param noAccess    whether or not this mapping is going to be accessed
-// @return    pointer to aligned memory or nullptr on error
+// NOTE: when huge pages are requested, alignment and numBytes must be huge-page
+// aligned.
+//
+// @param alignment       the desired alignment
+// @param numBytes        the length of the mapping
+// @param noAccess        whether or not this mapping is going to be accessed
+// @param extraMmapFlags  extra flags OR'd into the mmap() flags
+// @return                pointer to aligned memory or nullptr on error
 //
 // @throw std::system_error if unable to create mapping
 void* mmapAlignedZeroedMemory(size_t alignment,
                               size_t numBytes,
-                              bool noAccess = false);
+                              bool noAccess = false,
+                              int extraMmapFlags = 0);
 
 // get the number of pages in the range which are resident in the process.
 //
