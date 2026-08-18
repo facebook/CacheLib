@@ -1,0 +1,34 @@
+// @nolint
+// Huge-page combo test: persistent SysV shared memory (SHM_HUGETLB; mount dir ignored).
+{
+  "cache_config" : {
+    "cacheSizeMB" : 512,
+    "cacheDir" : "/tmp/cachebench_hp_sysv",
+    "hugePageSize" : 2097152,
+    "shmType" : "sysv",
+
+    "htBucketPower" : 22,
+    "poolRebalanceIntervalSec" : 0,
+    "moveOnSlabRelease" : false,
+
+    "numPools" : 1,
+    "poolSizes" : [1.0]
+  },
+  "test_config" : {
+    "numOps" : 2000000,
+    "numThreads" : 8,
+    "numKeys" : 2000000,
+
+    "keySizeRange" : [16, 64],
+    "keySizeRangeProbability" : [1.0],
+
+    "valSizeRange" : [512, 4096],
+    "valSizeRangeProbability" : [1.0],
+
+    "getRatio" : 0.8,
+    "setRatio" : 0.2,
+    "delRatio" : 0.0,
+    "keyPoolDistribution" : [1.0],
+    "opPoolDistribution" : [1.0]
+  }
+}

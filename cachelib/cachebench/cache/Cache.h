@@ -608,8 +608,54 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     });
   }
 
-  if (config_.usePosixShm) {
-    allocatorConfig_.usePosixForShm();
+  // Select the memory backing. When shmType is empty we keep the legacy
+  // behavior (shared memory iff a cacheDir is set, POSIX iff usePosixShm);
+  // otherwise shmType is authoritative and overrides usePosixShm.
+  const bool useTempShm = config_.shmType == "tmp";
+  if (config_.shmType.empty()) {
+    if (config_.usePosixShm) {
+      allocatorConfig_.usePosixForShm();
+    }
+  } else if (config_.shmType == "none" || useTempShm) {
+    // Both heap and temp shm require an empty cacheDir; temp shm is then
+    // distinguished by enabling memory monitoring below.
+    allocatorConfig_.cacheDir.clear();
+  } else if (config_.shmType == "sysv" || config_.shmType == "posix") {
+    if (allocatorConfig_.cacheDir.empty()) {
+      throw std::invalid_argument(fmt::format(
+          "shmType '{}' requires a non-empty cacheDir", config_.shmType));
+    }
+    if (config_.shmType == "posix") {
+      allocatorConfig_.usePosixForShm();
+    }
+  } else {
+    throw std::invalid_argument(
+        fmt::format("Unknown shmType '{}'", config_.shmType));
+  }
+
+  if (config_.hugePageSize != 0) {
+    if (allocatorConfig_.isUsingPosixShm() &&
+        config_.hugePageMountDir.empty()) {
+      throw std::invalid_argument(
+          "Using POSIX for shared memory & huge pages, but didn't specify a "
+          "hugetlbfs mount");
+    }
+    allocatorConfig_.enableHugePages(PageSize(config_.hugePageSize),
+                                     config_.hugePageMountDir);
+  }
+
+  if (useTempShm) {
+    // Temp shm is only allocated when memory monitoring is enabled (see
+    // CacheAllocator's isOnShm_). Configure a resident-memory monitor with an
+    // unreachable upper limit so it never advises away slabs -- its sole
+    // purpose is to route allocation through TempShmMapping.
+    MemoryMonitor::Config monitorConfig;
+    monitorConfig.mode = MemoryMonitor::ResidentMemory;
+    monitorConfig.maxAdvisePercent = 0;
+    monitorConfig.lowerLimitGB = 0;
+    monitorConfig.upperLimitGB = size_t{1} << 20;
+    allocatorConfig_.enableMemoryMonitor(std::chrono::seconds{1},
+                                         monitorConfig);
   }
 
   allocatorConfig_.setMemoryLocking(config_.lockMemory);
@@ -1008,7 +1054,8 @@ template <typename Allocator>
 void Cache<Allocator>::cleanupSharedMem() {
   if (!allocatorConfig_.cacheDir.empty()) {
     cache_->cleanupStrayShmSegments(allocatorConfig_.cacheDir,
-                                    allocatorConfig_.usePosixShm);
+                                    allocatorConfig_.usePosixShm,
+                                    allocatorConfig_.hugePageMountDir);
     util::removePath(allocatorConfig_.cacheDir);
   }
 }
