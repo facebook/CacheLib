@@ -19,16 +19,18 @@
 #include <folly/logging/xlog.h>
 #include <sys/mman.h>
 
+#include <algorithm>
+
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook::cachelib {
 
-TempShmMapping::TempShmMapping(size_t size)
-    : size_(size),
-      tempCacheDir_(util::getUniqueTempDir("cachedir")),
+TempShmMapping::TempShmMapping(size_t size, PageSize hugePageSize)
+    : tempCacheDir_(util::getUniqueTempDir("cachedir")),
       shmManager_(createShmManager(tempCacheDir_)),
-      addr_(createShmMapping(*shmManager_.get(), size, tempCacheDir_)) {}
+      addr_(createShmMapping(
+          *shmManager_.get(), size, tempCacheDir_, hugePageSize)) {}
 
 TempShmMapping::~TempShmMapping() {
   try {
@@ -61,14 +63,22 @@ std::unique_ptr<ShmManager> TempShmMapping::createShmManager(
 
 void* TempShmMapping::createShmMapping(ShmManager& shmManager,
                                        size_t size,
-                                       const std::string& cacheDir) {
+                                       const std::string& cacheDir,
+                                       const PageSize& hugePageSize) {
   void* addr = nullptr;
   void* shmAddr = nullptr;
   try {
-    addr =
-        util::mmapAlignedZeroedMemory(sizeof(Slab), size, true /* readOnly */);
+    PageSize ps(hugePageSize);
+    size = ps.getPageAlignedSize(size);
+    const size_t alignment = std::max(sizeof(Slab), hugePageSize.getPageSize());
+    addr = util::mmapAlignedZeroedMemory(alignment, size, true /* readOnly */);
+    ShmSegmentOpts opts;
+    opts.pageSize = PageSize(hugePageSize);
     shmAddr =
-        shmManager.createShm(detail::kTempShmCacheName.str(), size, addr).addr;
+        shmManager
+            .createShm(
+                detail::kTempShmCacheName.str(), size, addr, std::move(opts))
+            .addr;
     // Mark the shared memory segment to be removed on exit. This will ensure
     // that the segment is dropped on exit.
     auto& shm = shmManager.getShmByName(detail::kTempShmCacheName.str());

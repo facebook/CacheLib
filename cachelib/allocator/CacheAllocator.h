@@ -2760,7 +2760,8 @@ CacheAllocator<CacheTrait>::CacheAllocator(
                                           : config.memMonitoringEnabled()},
       config_(config.validate()),
       tempShm_(type == InitMemType::kNone && isOnShm_
-                   ? std::make_unique<TempShmMapping>(config_.getCacheSize())
+                   ? std::make_unique<TempShmMapping>(config_.getCacheSize(),
+                                                      config_.hugePageSize)
                    : nullptr),
       shmManager_(type != InitMemType::kNone
                       ? std::make_unique<ShmManager>(config_.cacheDir,

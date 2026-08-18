@@ -41,7 +41,7 @@ constexpr folly::StringPiece kTempShmCacheName = "temp_shm_cache";
 // the cache is on a shared memory segment.
 class TempShmMapping {
  public:
-  explicit TempShmMapping(size_t size);
+  explicit TempShmMapping(size_t size, PageSize hugePageSize = PageSize());
   ~TempShmMapping();
   // get the start of addrress.
   void* getAddr() const { return addr_; }
@@ -51,9 +51,9 @@ class TempShmMapping {
       const std::string& cacheDir);
   static void* createShmMapping(ShmManager& shmManager,
                                 size_t size,
-                                const std::string& cacheDir);
+                                const std::string& cacheDir,
+                                const PageSize& hugePageSize);
 
-  size_t size_{0};
   std::string tempCacheDir_;
   std::unique_ptr<ShmManager> shmManager_;
   void* addr_{nullptr};
