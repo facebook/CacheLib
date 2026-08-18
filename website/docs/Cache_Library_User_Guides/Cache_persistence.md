@@ -85,6 +85,30 @@ if (!attached) {
 ```
 
 
+## Back the cache with huge pages (HugeTLB)
+
+CacheLib can back the *slab memory (main cache)* and the *access-container hash tables* with [HugeTLB](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html) pages to lower TLB pressure. Enable huge pages with `enableHugePages`, passing a huge-page size that the kernel supports (see available sizes in the subdirectories of `/sys/kernel/mm/hugepages`):
+
+```cpp
+Cache::Config config;
+config.setCacheSize(/* size of cache in bytes */);
+config.enableCachePersistence(/* directory for shared memory related metadata */);
+// Back slabs and hash tables with 2MB huge pages.
+config.enableHugePages(cachelib::PageSize(2 * 1024 * 1024));
+```
+
+The HugeTLB pool must be provisioned out-of-band by reserving pages via `/proc/sys/vm/nr_hugepages`, `hugeadm` or [kernel command line args](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html). CacheLib only draws from the already-reserved pool and fails cache creation if there aren't enough huge pages available.
+
+Huge pages are supported for SysV shared memory (the default), POSIX shared memory, temporary shared memory (cache with memory monitoring enabled but no persistence), and plain (non-persistent) heap memory with no memory monitoring. For POSIX shared memory you must also pass a mounted `hugetlbfs` directory as the second argument; cache creation throws if it is empty:
+
+```cpp
+config.enableCachePersistence(/* cache directory */)
+    .usePosixForShm()
+    .enableHugePages(cachelib::PageSize(2 * 1024 * 1024), "/mnt/hugetlbfs");
+```
+
+Huge pages are not supported with cross-host cache persistence.  They're also not supported with memory monitoring when the huge page size is bigger than the slab size - for example, you can't punch a slab-sized hole in a 1GB huge page.
+
 ## Drop persistent cache
 
 Sometimes you would like your cache to be not persistent when you restart your process. There are two ways to accomplish this:
