@@ -30,9 +30,15 @@ NavyThread::NavyThread(folly::StringPiece name, Options options) {
   opts.stackSize =
       options.stackSize ? options.stackSize : Options::kDefaultStackSize;
   auto& eb = *th_->getEventBase();
-  fm_ = &folly::fibers::getFiberManager(eb, opts);
 
-  eb.runInEventBaseThreadAndWait([this]() { currentNavyThread_ = this; });
+  // Create the FiberManager on the EventBase thread. getFiberManager() lazily
+  // constructs the EventBase's default VirtualEventBase; doing so from this
+  // thread would race with the ScopedEventBaseThread loop starting up and can
+  // hang the keepAlive handshake.
+  eb.runInEventBaseThreadAndWait([this, &eb, &opts]() {
+    fm_ = &folly::fibers::getFiberManager(eb, opts);
+    currentNavyThread_ = this;
+  });
 }
 
 NavyThread::~NavyThread() { th_.reset(); }
