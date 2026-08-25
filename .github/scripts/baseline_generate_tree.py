@@ -6,6 +6,7 @@ from collections import defaultdict
 input_file = './falco-data/falco_events.json'
 baseline_file = './falco-data/baseline.json'
 hashes_file = './falco-data/hashes.txt'
+artifact_summary_file = './falco-data/security_summary.md'
 events = []
 
 try:
@@ -17,6 +18,13 @@ except FileNotFoundError:
     print(f"No {input_file} found. Skipping summary.")
     exit(0)
 
+# --- UTILITY FUNCTIONS FOR PARSING ---
+def sanitize_cmd(cmd_string):
+    if not cmd_string: return "unknown"
+    return cmd_string.strip().split()[0].split('/')[-1]
+
+INTERPRETERS = {"python", "python3", "node", "nodejs", "perl", "ruby", "php"}
+
 processes = {}
 children_map = defaultdict(list)
 parent_map = {}
@@ -26,6 +34,7 @@ privesc_pids = set()
 tty_pids = set()
 sensitive_reads = defaultdict(set) 
 env_reads = defaultdict(set)
+mem_reads = defaultdict(set)
 staging_pids = set()
 exfil_net_pids = set()
 lotl_pids = set()
@@ -65,11 +74,21 @@ for event in events:
     if rule_name in ('Detect Interactive or Reverse Shell', 'Detect True Reverse Shell (Behavioral Syscall)'): 
         tty_pids.add(pid)
     if rule_name == 'Detect Environment Variable Access' and filename: env_reads[pid].add(filename)
+    if rule_name == 'Detect Memory Access via Procfs' and filename: mem_reads[pid].add(filename)
     if rule_name in ('Detect Data Staging and Encryption', 'Detect Suspicious Dropper/Staging Activity'): 
         staging_pids.add(pid)
+        
+    # --- DYNAMIC CORRELATION LOGIC ---
     if rule_name in ('Detect Suspicious Network Exfiltration', 'Detect Outbound Network Activity', 'Detect Interpreter Network Connection'): 
         exfil_net_pids.add(pid)
-    if rule_name == 'Detect Suspicious Interpreter Inline Execution': lotl_pids.add(pid)
+        
+        # If the process establishing the connection is an interpreter, flag it as LotL Abuse automatically
+        binary_name = sanitize_cmd(cmdline)
+        if binary_name in INTERPRETERS:
+            lotl_pids.add(pid)
+            
+    if rule_name == 'Detect Suspicious Interpreter Inline Execution': 
+        lotl_pids.add(pid)
 
 
 # --- 1. EXTRACT HASHES FROM JSONL ARTIFACT ---
@@ -98,10 +117,6 @@ for ips in connection_map.values():
     for ip in ips: current_network_targets.add(ip)
 
 # --- 3. EXTRACT SANITIZED PROCESS LINEAGES ---
-def sanitize_cmd(cmd_string):
-    if not cmd_string: return "unknown"
-    return cmd_string.strip().split()[0].split('/')[-1]
-
 def get_network_target(cmd_string, pid):
     binary = sanitize_cmd(cmd_string)
     if pid in connection_map and connection_map[pid]:
@@ -131,6 +146,7 @@ current_alert_details = {
     "Privilege Escalation": {},
     "Interactive Shell / TTY": {},
     "Environment Variable Scraping": {},
+    "Memory Scraping via Procfs": {},
     "Sensitive File Reads": {},
     "Data Staging / Encryption": {},
     "Network Exfiltration": {},
@@ -148,6 +164,8 @@ for pid in exfil_net_pids: increment_freq("Network Exfiltration", get_network_ta
 
 for pid, files in env_reads.items():
     for f in files: increment_freq("Environment Variable Scraping", f)
+for pid, files in mem_reads.items():
+    for f in files: increment_freq("Memory Scraping via Procfs", f)
 for pid, files in sensitive_reads.items():
     for f in files: increment_freq("Sensitive File Reads", f)
 
@@ -237,10 +255,13 @@ if tty_pids:
     summary.append("\n---\n")
 
 if lotl_pids:
-    summary.append("### 🐍 CRITICAL: Interpreter Abuse (LotL) Detected 🐍")
-    summary.append("| PID | Command |")
-    summary.append("|---|---|")
-    for l_pid in lotl_pids: summary.append(f"| {l_pid} | `{format_for_display(processes.get(l_pid))}` |")
+    summary.append("### 🐍 CRITICAL: Interpreter Abuse (LotL) / Interpreter Network Connection 🐍")
+    summary.append("An interpreter process (Python, Node, etc.) exhibited highly suspicious behavior, such as establishing an unauthorized network connection.")
+    summary.append("| PID | Command | Target IPs (Resolved) |")
+    summary.append("|---|---|---|")
+    for l_pid in lotl_pids: 
+        targets = ", ".join(f"`{ip}`" for ip in connection_map.get(l_pid, ["Unknown (Check Logs)"]))
+        summary.append(f"| {l_pid} | `{format_for_display(processes.get(l_pid))}` | {targets} |")
     summary.append("\n---\n")
 
 if env_reads:
@@ -249,6 +270,14 @@ if env_reads:
     summary.append("|---|---|---|")
     for env_pid, files in env_reads.items():
         summary.append(f"| {env_pid} | `{format_for_display(processes.get(env_pid))}` | {', '.join(f'`{f}`' for f in files)} |")
+    summary.append("\n---\n")
+
+if mem_reads:
+    summary.append("### 🧠 DANGER: Memory Access via Procfs 🧠")
+    summary.append("| PID | Command | Target File |")
+    summary.append("|---|---|---|")
+    for mem_pid, files in mem_reads.items():
+        summary.append(f"| {mem_pid} | `{format_for_display(processes.get(mem_pid))}` | {', '.join(f'`{f}`' for f in files)} |")
     summary.append("\n---\n")
 
 if sensitive_reads:
@@ -260,7 +289,7 @@ if sensitive_reads:
     summary.append("\n---\n")
 
 if exfil_net_pids:
-    summary.append("### 🌐 CRITICAL: Network Data Transfer Established 🌐")
+    summary.append("### 🌐 WARNING: Unexpected Outbound Connection 🌐")
     summary.append("| PID | Command | Target IPs (Resolved) |")
     summary.append("|---|---|---|")
     for e_pid in exfil_net_pids: 
@@ -286,9 +315,10 @@ def build_tree(current_pid, depth, is_last):
     if current_pid in privesc_pids: alert_tags += "🚨[PRIVESC] "
     if current_pid in tty_pids: alert_tags += "💀[REVSHELL] "
     if current_pid in env_reads: alert_tags += "☢️[ENV_SCRAPING] "
-    if current_pid in sensitive_reads: alert_tags += "📂[EXFIL] "
+    if current_pid in mem_reads: alert_tags += "🧠[MEM_SCRAPING] "
+    if current_pid in sensitive_reads: alert_tags += "📂[SENSITIVE_READ] "
     if current_pid in staging_pids: alert_tags += "📦[STAGING] "
-    if current_pid in exfil_net_pids: alert_tags += "🌐[NETWORK_TRANSFER] "
+    if current_pid in exfil_net_pids: alert_tags += "🌐[OUTBOUND_CONN] "
     if current_pid in lotl_pids: alert_tags += "🐍[LOTL_ABUSE] "
     
     cmd = format_for_display(processes.get(current_pid), max_len=150)
@@ -304,8 +334,35 @@ for root_ppid in sorted(roots):
 
 summary.append("```\n")
 
+full_summary_text = '\n'.join(summary)
+
+# --- SAVE ARTIFACT LOCALLY ---
+try:
+    with open(artifact_summary_file, 'w') as f:
+        f.write(full_summary_text)
+    print(f"✅ Full unredacted summary saved to artifact file: {artifact_summary_file}")
+except Exception as e:
+    print(f"❌ Failed to save local summary artifact: {e}")
+
+# --- PUSH TO GITHUB STEP SUMMARY (WITH SAFEGUARDS) ---
 summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
 if summary_path:
-    with open(summary_path, 'a') as f: f.write('\n'.join(summary))
+    # GitHub limits step summaries to 1024 * 1024 bytes (1MB). We truncate at 950,000 characters to be safe.
+    MAX_UI_LENGTH = 950000 
+    
+    if len(full_summary_text) > MAX_UI_LENGTH:
+        truncated_text = full_summary_text[:MAX_UI_LENGTH]
+        warning_header = (
+            "### ⚠️ SUMMARY TRUNCATED ⚠️\n"
+            "**The process tree for this workflow exceeded GitHub's 1MB display limit.** "
+            "Please download the `security-baseline` artifact zip and open `security_summary.md` "
+            "to view the complete report.\n\n---\n"
+        )
+        final_ui_text = warning_header + truncated_text + "\n\n```\n\n*(...output truncated...)*"
+    else:
+        final_ui_text = full_summary_text
+        
+    with open(summary_path, 'a') as f: 
+        f.write(final_ui_text)
 else:
-    print('\n'.join(summary))
+    print(full_summary_text)
