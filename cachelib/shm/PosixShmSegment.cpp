@@ -18,6 +18,7 @@
 
 #include <fcntl.h>
 #include <fmt/core.h>
+#include <folly/Expected.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -90,24 +91,29 @@ int openFileImpl(const char* path, int flags, mode_t mode) {
   return fd;
 }
 
-void unlinkImpl(const char* const name) {
-  const int ret = shm_unlink(name);
-  if (ret == 0) {
-    return;
+template <bool isHugePage = false>
+folly::Expected<bool, std::system_error> unlinkImpl(const char* const name) {
+  if constexpr (isHugePage) {
+    if (::unlink(name) == 0) {
+      return true;
+    }
+  } else {
+    if (shm_unlink(name) == 0) {
+      return true;
+    }
   }
 
   switch (errno) {
   case ENOENT:
-  case EACCES:
-    util::throwSystemError(errno);
-    break;
+    return false;
   case ENAMETOOLONG:
+    [[fallthrough]];
   case EINVAL:
-    util::throwSystemError(errno, "Invalid segment name");
-    break;
+    return folly::makeUnexpected(std::system_error(
+        errno, std::system_category(), "Invalid segment name"));
   default:
-    XDCHECK(false);
-    util::throwSystemError(errno, "Invalid errno");
+    return folly::makeUnexpected(
+        std::system_error(errno, std::system_category()));
   }
 }
 
@@ -315,36 +321,29 @@ void PosixShmSegment::markForRemoval() {
 bool PosixShmSegment::removeByName(const std::string& segmentName,
                                    const std::string& hugePageMountDir) {
   const auto key = createKeyForName(segmentName);
+  bool removed = false;
 
-  // A segment is either a tmpfs entry (/dev/shm) or a huge-page file on the
-  // hugetlbfs mount, never both. Try the normal location first: if it was
-  // there, we are done.
-  try {
-    detail::unlinkImpl(key.c_str());
-    return true;
-  } catch (const std::system_error& e) {
-    // unlink is opaque unlike sys-V api where its through the shmid. Hence
-    // if someone has already unlinked it for us, we just let it pass.
-    if (e.code().value() != ENOENT) {
-      throw;
+  auto result = detail::unlinkImpl(key.c_str());
+  if (result.hasValue()) {
+    removed |= result.value();
+  }
+
+  if (!hugePageMountDir.empty()) {
+    const auto path = std::filesystem::path(hugePageMountDir) /
+                      std::filesystem::path(key).relative_path();
+    auto secondResult = detail::unlinkImpl</*isHugePage=*/true>(
+        path.lexically_normal().c_str());
+    if (secondResult.hasValue()) {
+      removed |= secondResult.value();
+    } else if (result.hasValue()) {
+      result = std::move(secondResult);
     }
   }
 
-  // Not in /dev/shm: it may be a huge-page file on the mount.
-  if (hugePageMountDir.empty()) {
-    return false;
+  if (result.hasError()) {
+    throw std::move(result).error();
   }
-  auto path = std::filesystem::path(hugePageMountDir) /
-              std::filesystem::path(key).relative_path();
-  if (::unlink(path.lexically_normal().c_str()) == 0) {
-    return true;
-  }
-  // Mirror the tmpfs path: a missing file is fine, but surface real failures
-  // (e.g. EACCES) instead of silently leaving the segment pinning huge pages.
-  if (errno != ENOENT) {
-    util::throwSystemError(errno);
-  }
-  return false;
+  return removed;
 }
 
 size_t PosixShmSegment::getSize() const {

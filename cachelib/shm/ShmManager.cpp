@@ -18,7 +18,10 @@
 
 #include <fmt/core.h>
 #include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
 #include <sys/stat.h>
+
+#include <exception>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -36,6 +39,13 @@ AtomicCounter ShmManager::numOldHashAttaches_{0};
 namespace {
 inline std::string pathName(const std::string& dir, const std::string& file) {
   return dir + '/' + file;
+}
+
+bool removeSegByName(bool posix,
+                     const std::string& uniqueName,
+                     const std::string& hugePageMountDir) {
+  return posix ? PosixShmSegment::removeByName(uniqueName, hugePageMountDir)
+               : SysVShmSegment::removeByName(uniqueName);
 }
 } // namespace
 
@@ -145,6 +155,45 @@ bool ShmManager::initFromFile() {
     nameToKey_.insert({kv.first, kv.second});
   }
 
+  const std::string persistedHugePageMountDir =
+      object.hugePageMountDir().value_or("");
+  if (usePosix_ && persistedHugePageMountDir != hugePageMountDir_) {
+    XLOGF(INFO,
+          "POSIX shared memory mount changed from '{}' to '{}'; removing "
+          "incompatible segments and starting fresh",
+          persistedHugePageMountDir.empty() ? "(n/a)"
+                                            : persistedHugePageMountDir.c_str(),
+          hugePageMountDir_.empty() ? "(n/a)" : hugePageMountDir_.c_str());
+
+    std::exception_ptr firstError;
+    const auto removeFromMount = [&](const std::string& mount) {
+      for (const auto& entry : nameToKey_) {
+        const auto& name = entry.first;
+        try {
+          removeSegByName(usePosix_, uniqueIdForName(name), mount);
+        } catch (...) {
+          if (!firstError) {
+            firstError = std::current_exception();
+          }
+        }
+        try {
+          removeSegByName(usePosix_, oldUniqueIdForName(name), mount);
+        } catch (...) {
+          if (!firstError) {
+            firstError = std::current_exception();
+          }
+        }
+      }
+    };
+
+    removeFromMount(persistedHugePageMountDir);
+    if (firstError) {
+      std::rethrow_exception(firstError);
+    }
+    nameToKey_.clear();
+    return false;
+  }
+
   return true;
 }
 
@@ -167,6 +216,10 @@ typename ShmManager::ShutDownRes ShmManager::writeActiveSegmentsToFile() {
 
   object.shmVal() = usePosix_ ? static_cast<int8_t>(ShmVal::SHM_POSIX)
                               : static_cast<int8_t>(ShmVal::SHM_SYS_V);
+
+  if (usePosix_ && !hugePageMountDir_.empty()) {
+    object.hugePageMountDir() = hugePageMountDir_;
+  }
 
   for (const auto& kv : nameToKey_) {
     const auto& name = kv.first;
@@ -205,17 +258,6 @@ typename ShmManager::ShutDownRes ShmManager::shutDown() {
   nameToKey_.clear();
   return ret;
 }
-
-namespace {
-
-bool removeSegByName(bool posix,
-                     const std::string& uniqueName,
-                     const std::string& hugePageMountDir) {
-  return posix ? PosixShmSegment::removeByName(uniqueName, hugePageMountDir)
-               : SysVShmSegment::removeByName(uniqueName);
-}
-
-} // namespace
 
 void ShmManager::removeByName(const std::string& dir,
                               const std::string& name,

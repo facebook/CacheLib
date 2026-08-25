@@ -107,6 +107,8 @@ config.enableCachePersistence(/* cache directory */)
     .enableHugePages(cachelib::PageSize(2 * 1024 * 1024), "/mnt/hugetlbfs");
 ```
 
+For a persistent POSIX cache, keep the `hugetlbfs` mount directory unchanged across restarts. Changing the directory, enabling huge pages after they were disabled, or disabling huge pages after they were enabled all force a cold roll: CacheLib removes the old shared-memory segments and starts with an empty cache.
+
 Huge pages are not supported with cross-host cache persistence.  They're also not supported with memory monitoring when the huge page size is bigger than the slab size - for example, you can't punch a slab-sized hole in a 1GB huge page.
 
 ## Drop persistent cache

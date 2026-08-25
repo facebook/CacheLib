@@ -89,6 +89,7 @@ class ShmManagerTest : public ShmTestBase {
   void testCleanup(bool posix);
   void testAttachReadOnly(bool posix);
   void testMetaFileDeletion(bool posix);
+  void testHugePageMountConfig(const std::string& configuredMount);
   void testHashMigrationWarmRoll(bool posix);
   void testHashMigrationColdStart(bool posix);
 
@@ -937,6 +938,109 @@ TEST_F(ShmManagerTestPosix, TestMappingAlignment) {
 
 TEST_F(ShmManagerTestSysV, TestMappingAlignment) {
   testMappingAlignment(false);
+}
+
+void ShmManagerTest::testHugePageMountConfig(
+    const std::string& configuredMount) {
+  const std::string segmentName = "mount-change";
+  const std::string persistedMount = cacheDir + "-persisted-mount";
+  const bool mountChanged = persistedMount != configuredMount;
+  const std::string newId = ShmManager::uniqueIdForName(segmentName, cacheDir);
+  const std::string oldId =
+      ShmManager::oldUniqueIdForName(segmentName, cacheDir);
+  const std::string persistedPath = persistedMount + "/" + newId;
+  const std::string configuredPath = configuredMount + "/" + oldId;
+
+  facebook::cachelib::util::makeDir(cacheDir);
+  facebook::cachelib::util::makeDir(persistedMount);
+  if (!configuredMount.empty() && configuredMount != persistedMount) {
+    facebook::cachelib::util::makeDir(configuredMount);
+  }
+
+  SCOPE_EXIT {
+    try {
+      facebook::cachelib::PosixShmSegment::removeByName(newId, persistedMount);
+      facebook::cachelib::PosixShmSegment::removeByName(oldId, configuredMount);
+      facebook::cachelib::util::removePath(persistedMount);
+      if (!configuredMount.empty() && configuredMount != persistedMount) {
+        facebook::cachelib::util::removePath(configuredMount);
+      }
+    } catch (...) {
+    }
+  };
+
+  {
+    std::ofstream file(persistedPath);
+    ASSERT_TRUE(file.good());
+  }
+  if (!configuredMount.empty()) {
+    std::ofstream file(configuredPath);
+    ASSERT_TRUE(file.good());
+  }
+
+  ShmSegment tmpfsSegment(ShmNew, newId, getRandomSize(), true);
+
+  facebook::cachelib::serialization::ShmManagerObject object;
+  *object.shmVal() = static_cast<int8_t>(ShmManager::ShmVal::SHM_POSIX);
+  (*object.nameToKeyMap())[segmentName] = tmpfsSegment.getKeyStr();
+  object.hugePageMountDir() = persistedMount;
+  std::string buf;
+  apache::thrift::BinarySerializer::serialize(object, &buf);
+  {
+    std::ofstream metadata(cacheDir + "/metadata", std::ios::trunc);
+    metadata << buf;
+    metadata.flush();
+    ASSERT_TRUE(metadata.good());
+  }
+
+  {
+    ShmManager manager(cacheDir, true, configuredMount);
+    if (mountChanged) {
+      EXPECT_FALSE(facebook::cachelib::util::pathExists(persistedPath));
+      if (!configuredMount.empty()) {
+        EXPECT_TRUE(facebook::cachelib::util::pathExists(configuredPath));
+      }
+      EXPECT_THROW(ShmSegment(ShmAttach, newId, true), std::system_error);
+      EXPECT_THROW(manager.attachShm(segmentName), std::invalid_argument);
+    } else {
+      EXPECT_TRUE(facebook::cachelib::util::pathExists(persistedPath));
+      EXPECT_TRUE(facebook::cachelib::util::pathExists(configuredPath));
+      EXPECT_NE(nullptr, manager.attachShm(segmentName).addr);
+    }
+    EXPECT_EQ(ShutDownRes::kSuccess, manager.shutDown());
+  }
+
+  std::ifstream metadata(cacheDir + "/metadata");
+  const std::string persistedMetadata{std::istreambuf_iterator<char>(metadata),
+                                      std::istreambuf_iterator<char>()};
+  facebook::cachelib::serialization::ShmManagerObject persistedObject;
+  apache::thrift::BinarySerializer::deserialize(persistedMetadata,
+                                                persistedObject);
+  if (mountChanged) {
+    EXPECT_TRUE(persistedObject.nameToKeyMap()->empty());
+  } else {
+    ASSERT_EQ(1, persistedObject.nameToKeyMap()->size());
+    EXPECT_EQ(tmpfsSegment.getKeyStr(),
+              persistedObject.nameToKeyMap()->at(segmentName));
+  }
+  if (configuredMount.empty()) {
+    EXPECT_FALSE(persistedObject.hugePageMountDir().has_value());
+  } else {
+    ASSERT_TRUE(persistedObject.hugePageMountDir().has_value());
+    EXPECT_EQ(configuredMount, *persistedObject.hugePageMountDir());
+  }
+}
+
+TEST_F(ShmManagerTestPosix, DisablingHugePagesDropsPersistedMount) {
+  testHugePageMountConfig("");
+}
+
+TEST_F(ShmManagerTestPosix, ChangingHugePageMountStartsFresh) {
+  testHugePageMountConfig(cacheDir + "-configured-mount");
+}
+
+TEST_F(ShmManagerTestPosix, UnchangedHugePageMountReattaches) {
+  testHugePageMountConfig(cacheDir + "-persisted-mount");
 }
 
 // Verify that ShmManager can attach to segments created with the old

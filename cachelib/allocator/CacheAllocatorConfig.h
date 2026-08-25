@@ -245,6 +245,11 @@ class CacheAllocatorConfig {
   // required for POSIX shm (cache creation throws if empty) and ignored for
   // SysV. The HugeTLB pool must be provisioned out-of-band; CacheLib only draws
   // from the already-reserved pool.
+  //
+  // For persistent POSIX caches, the configured mount path must remain
+  // unchanged across restarts. Changing it, enabling huge pages after they
+  // were disabled, or disabling huge pages after they were enabled forces a
+  // cold roll that removes the old shared-memory segments.
   CacheAllocatorConfig& enableHugePages(PageSize pageSize,
                                         std::string mountDir = "");
 

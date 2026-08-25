@@ -26,4 +26,9 @@ struct ShmManagerObject {
   1: required byte shmVal;
   @thrift.AllowUnsafeRequiredFieldQualifier
   3: required map<string, string> nameToKeyMap;
+  // hugetlbfs mount backing this cache's huge-page POSIX segments, persisted so
+  // out-of-band cleanup (stray-segment cleanup, the standalone cleanup tool) can
+  // recover it and unlink the segment files. Absent for caches not using
+  // huge-page POSIX segments.
+  4: optional string hugePageMountDir;
 }
