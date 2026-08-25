@@ -517,6 +517,9 @@ class CacheAllocatorConfig {
   // check that memory tier ratios are set properly
   const CacheAllocatorConfig& validateMemoryTiers() const;
 
+  // check that configured huge pages (if any) work with memory monitor
+  void validateMemMonitorAndHugePages() const;
+
   // @return a map representation of the configs
   std::map<std::string, std::string> serialize() const;
 
@@ -1360,6 +1363,10 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
         "It's not allowed to enable both RemoveCB and ItemDestructor.");
   }
 
+  if (memMonitoringEnabled()) {
+    validateMemMonitorAndHugePages();
+  }
+
   return validateMemoryTiers();
 }
 
@@ -1403,6 +1410,20 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validateMemoryTiers()
         "Sum of tier ratios must be less than total cache size.");
   }
   return *this;
+}
+
+template <typename T>
+void CacheAllocatorConfig<T>::validateMemMonitorAndHugePages() const {
+  // madvise() only frees physical memory when it covers whole pages, so huge
+  // pages that don't evenly divide slabs can't be released at slab granularity
+  if (hugePageSize.isHugePage() &&
+      Slab::kSize % hugePageSize.getPageSize() != 0) {
+    throw std::invalid_argument(
+        fmt::format("Memory monitor requires the huge page size ({}) to evenly "
+                    "divide the slab size ({})",
+                    hugePageSize.getPageSize(),
+                    Slab::kSize));
+  }
 }
 
 template <typename T>

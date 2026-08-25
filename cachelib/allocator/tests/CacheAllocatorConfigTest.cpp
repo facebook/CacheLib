@@ -72,6 +72,40 @@ TEST_F(CacheAllocatorConfigTest, TotalCacheSizeLessThanRatios) {
   EXPECT_THROW(config.validate(), std::invalid_argument);
 }
 
+namespace {
+MemoryMonitor::Config advisingMonitorConfig() {
+  MemoryMonitor::Config memConfig;
+  memConfig.mode = MemoryMonitor::ResidentMemory;
+  memConfig.maxAdvisePercent = 10;
+  memConfig.lowerLimitGB = 1;
+  memConfig.upperLimitGB = 10;
+  return memConfig;
+}
+} // namespace
+
+TEST_F(CacheAllocatorConfigTest, HugePageLargerThanSlabWithMemoryMonitor) {
+  AllocatorT::Config config;
+  config.setCacheSize(defaultTotalSize)
+      .enableHugePages(PageSize(Slab::kSize * 256))
+      .enableMemoryMonitor(std::chrono::seconds{2}, advisingMonitorConfig());
+  EXPECT_THROW(config.validate(), std::invalid_argument);
+}
+
+TEST_F(CacheAllocatorConfigTest, HugePageDividingSlabWithMemoryMonitor) {
+  AllocatorT::Config config;
+  config.setCacheSize(defaultTotalSize)
+      .enableHugePages(PageSize(Slab::kSize / 2))
+      .enableMemoryMonitor(std::chrono::seconds{2}, advisingMonitorConfig());
+  EXPECT_NO_THROW(config.validate());
+}
+
+TEST_F(CacheAllocatorConfigTest, HugePageLargerThanSlabWithoutMonitor) {
+  AllocatorT::Config config;
+  config.setCacheSize(defaultTotalSize)
+      .enableHugePages(PageSize(Slab::kSize * 256));
+  EXPECT_NO_THROW(config.validate());
+}
+
 TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyLru) {
   LruAllocator::Config config;
   auto serialized = config.serialize();

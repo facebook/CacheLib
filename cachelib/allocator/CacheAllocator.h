@@ -2990,12 +2990,6 @@ void CacheAllocator<CacheTrait>::initWorkers() {
   }
 
   if (config_.memMonitoringEnabled() && !memMonitor_) {
-    if (!isOnShm_) {
-      throw std::invalid_argument(
-          "Memory monitoring is not supported for cache on heap. It is "
-          "supported "
-          "for cache on a shared memory segment only.");
-    }
     startNewMemMonitor(config_.memMonitorInterval,
                        config_.memMonitorConfig,
                        config_.poolAdviseStrategy);
@@ -6352,6 +6346,13 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     std::chrono::milliseconds interval,
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
+  if (!isOnShm_) {
+    throw std::invalid_argument(
+        "Memory monitoring is not supported for cache on heap. It is "
+        "supported for cache on a shared memory segment only.");
+  }
+  config_.validateMemMonitorAndHugePages();
+
   if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
                       strategy, allocator_->getNumSlabsAdvised())) {
     return false;
