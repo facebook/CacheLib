@@ -120,9 +120,9 @@ class MemoryAllocator {
     // allocation so ASAN can detect use-after-free bugs.
     bool enableAsanPoisoning{false};
 
-    // huge-page size (bytes) to back self-allocated (non-shm) slab memory with;
-    // default => normal pages. Only applies when the allocator owns (mmaps) its
-    // memory, i.e. the heap path.
+    // Page size backing slab memory; default => normal pages. Used when the
+    // allocator mmaps its memory and when excluding slab memory from core
+    // dumps.
     PageSize hugePageSize{0};
   };
 
@@ -162,11 +162,13 @@ class MemoryAllocator {
   //                        used to create this memory allocator
   // @param disableCoredump exclude mapped region from core dumps
   // @param enableAsanPoisoning When true, slab memory is ASAN-poisoned
+  // @param hugePageSize    Page size backing the restored memory region
   MemoryAllocator(const serialization::MemoryAllocatorObject& object,
                   void* memoryStart,
                   size_t memSize,
                   bool disableCoredump,
-                  bool enableAsanPoisoning);
+                  bool enableAsanPoisoning,
+                  PageSize hugePageSize = PageSize());
 
   MemoryAllocator(const MemoryAllocator&) = delete;
   MemoryAllocator& operator=(const MemoryAllocator&) = delete;

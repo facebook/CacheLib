@@ -2881,7 +2881,7 @@ CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
                       createShmCacheOpts())
           .addr,
       config_.getCacheSize(), config_.disableFullCoredump,
-      config_.isSlabAsanPoisoningEnabled());
+      config_.isSlabAsanPoisoningEnabled(), config_.hugePageSize);
 }
 
 template <typename CacheTrait>

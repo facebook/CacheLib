@@ -66,7 +66,7 @@ MemoryAllocator::MemoryAllocator(Config config,
       slabAllocator_(memoryStart,
                      memSize,
                      {config_.disableFullCoredump, config_.lockMemory,
-                      config_.enableAsanPoisoning}),
+                      config_.enableAsanPoisoning, config_.hugePageSize}),
       memoryPoolManager_(slabAllocator_) {
   checkConfig(config_);
 }
@@ -85,18 +85,20 @@ MemoryAllocator::MemoryAllocator(
     void* memoryStart,
     size_t memSize,
     bool disableCoredump,
-    bool enableAsanPoisoning)
+    bool enableAsanPoisoning,
+    PageSize hugePageSize)
     : config_(std::set<uint32_t>{object.allocSizes()->begin(),
                                  object.allocSizes()->end()},
               *object.enableZeroedSlabAllocs(),
               disableCoredump,
               *object.lockMemory(),
-              enableAsanPoisoning),
+              enableAsanPoisoning,
+              hugePageSize),
       slabAllocator_(*object.slabAllocator(),
                      memoryStart,
                      memSize,
                      {config_.disableFullCoredump, config_.lockMemory,
-                      config_.enableAsanPoisoning}),
+                      config_.enableAsanPoisoning, config_.hugePageSize}),
       memoryPoolManager_(*object.memoryPoolManager(), slabAllocator_) {
   checkConfig(config_);
 }
