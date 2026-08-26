@@ -154,13 +154,18 @@ class ShmManager {
   // @param addr       starting address that this segment should be mapped to
   //                   if nullptr, the segment will be mapped to a random
   //                   address chosen by the kernel
+  // @param pageSize   page size backing the segment
+  // @param hugePageMountDir hugetlbfs mount containing a POSIX huge-page
+  //                         segment
   //
   // @return a unique_ptr to the shm if one is present with the name.
   static std::unique_ptr<ShmSegment> attachShmReadOnly(
       const std::string& cacheDir,
       const std::string& segName,
       bool posix,
-      void* addr = nullptr);
+      void* addr = nullptr,
+      const PageSize& pageSize = PageSize(),
+      const std::string& hugePageMountDir = "");
 
   // Returns the number of segments attached using the old (fnv64_BROKEN) hash.
   // This is used to track migration progress from fnv64_BROKEN to xxhash3.

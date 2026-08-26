@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
+#include <folly/Conv.h>
+#include <folly/FileUtil.h>
+#include <folly/String.h>
+#include <folly/testing/TestUtil.h>
+
 #include <cstdlib>
 
+#include "cachelib/allocator/ReadOnlySharedCacheView.h"
 #include "cachelib/shm/HugePageTestUtils.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
+#include "cachelib/shm/ShmManager.h"
 #include "cachelib/shm/tests/common.h"
 
 namespace facebook {
@@ -83,6 +90,28 @@ TEST_F(ShmTestSysV, PageSizesTwoMB) {
     GTEST_SKIP() << "2MB HugeTLB pool not available";
   }
   testPageSize(PageSize::kHugePageSize2MB, false);
+}
+
+TEST(ReadOnlySharedCacheView, PosixTwoMBPages) {
+  if (!hugePagesUsable(PageSize::kHugePageSize2MB, true)) {
+    GTEST_SKIP() << "2MB HugeTLB pool / hugetlbfs mount not available";
+  }
+
+  folly::test::TemporaryDirectory tmpDir;
+  const auto cacheDir = tmpDir.path().string();
+
+  const auto pageSize = PageSize(PageSize::kHugePageSize2MB);
+  ShmManager manager(cacheDir, true, detail::hugetlbfsMountFromEnv());
+  const auto mapping =
+      manager.createShm(cachelib::detail::kShmCacheName, pageSize.getPageSize(),
+                        nullptr, ShmSegmentOpts(pageSize));
+  *static_cast<char*>(mapping.addr) = 'x';
+
+  ReadOnlySharedCacheView view(cacheDir, true, nullptr, pageSize,
+                               detail::hugetlbfsMountFromEnv());
+  auto* viewAddr = reinterpret_cast<void*>(view.getShmMappingAddress());
+  EXPECT_EQ(pageSize.getPageSize(), PageSize::getPageSizeInSMap(viewAddr));
+  EXPECT_EQ('x', *static_cast<const char*>(view.getItemPtrFromOffset(0)));
 }
 
 } // namespace tests

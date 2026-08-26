@@ -64,7 +64,11 @@ class BaseAllocatorTestDeathStyle : public AllocatorTest<AllocatorT> {
 
     auto offset = alloc.getItemPtrAsOffset(hdl->getMemory());
 
-    auto roCache = ReadOnlySharedCacheView(config.cacheDir, config.usePosixShm);
+    auto roCache = ReadOnlySharedCacheView(config.cacheDir,
+                                           config.usePosixShm,
+                                           nullptr,
+                                           config.hugePageSize,
+                                           config.hugePageMountDir);
 
     auto ptr = roCache.getItemPtrFromOffset(offset);
     ASSERT_NE(reinterpret_cast<uintptr_t>(ptr),

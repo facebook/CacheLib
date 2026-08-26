@@ -285,15 +285,20 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
 }
 
 std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
-    const std::string& dir, const std::string& name, bool posix, void* addr) {
-  ShmSegmentOpts opts{PageSize(), true /* read only */};
+    const std::string& dir,
+    const std::string& name,
+    bool posix,
+    void* addr,
+    const PageSize& pageSize,
+    const std::string& hugePageMountDir) {
+  ShmSegmentOpts opts{pageSize, true /* read only */};
   std::unique_ptr<ShmSegment> shm;
   try {
     shm = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(name, dir),
-                                       posix, opts);
+                                       posix, opts, hugePageMountDir);
   } catch (const std::exception&) {
     shm = std::make_unique<ShmSegment>(ShmAttach, oldUniqueIdForName(name, dir),
-                                       posix, opts);
+                                       posix, opts, hugePageMountDir);
     numOldHashAttaches_.inc();
   }
   if (!shm->mapAddress(addr)) {

@@ -46,11 +46,19 @@ class ReadOnlySharedCacheView {
   //                     given address)
   //                    if nullptr, the segment will be mapped to a random
   //                    address chosen by the kernel
+  // @param pageSize    page size backing the cache's main segment
+  // @param hugePageMountDir hugetlbfs mount containing a POSIX huge-page cache
   explicit ReadOnlySharedCacheView(const std::string& cacheDir,
                                    bool usePosixShm,
-                                   void* addr = nullptr)
-      : shm_(ShmManager::attachShmReadOnly(
-            cacheDir, detail::kShmCacheName, usePosixShm, addr)) {}
+                                   void* addr = nullptr,
+                                   const PageSize& pageSize = PageSize(),
+                                   const std::string& hugePageMountDir = "")
+      : shm_(ShmManager::attachShmReadOnly(cacheDir,
+                                           detail::kShmCacheName,
+                                           usePosixShm,
+                                           addr,
+                                           pageSize,
+                                           hugePageMountDir)) {}
 
   // returns the absolute address at which the shared memory mapping is mounted.
   // The caller can add a relative offset obtained from
