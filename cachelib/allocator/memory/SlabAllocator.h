@@ -72,8 +72,8 @@ class SlabAllocator {
     // allocation so ASAN can detect use-after-free bugs.
     bool enableAsanPoisoning{false};
 
-    // huge-page size (bytes) to back self-allocated (non-shm) slab memory with;
-    // default => normal pages. Only used by the mmap-owning constructor.
+    // Page size backing the slab memory; default => normal pages. Used to
+    // allocate mmap-owned memory.
     PageSize hugePageSize{};
   };
 
@@ -431,7 +431,7 @@ class SlabAllocator {
   // exclude associated slab memory from core dump
   //
   // @throw std::system_error on any failure to advise
-  void excludeMemoryFromCoredump() const;
+  void excludeMemoryFromCoredump(const PageSize& pageSize) const;
 
   // used by the memory locker to get pages allocated and locked into the
   // binary. With a cache size of 256GB, this will have about 60 million page

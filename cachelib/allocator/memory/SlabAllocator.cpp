@@ -163,7 +163,7 @@ SlabAllocator::SlabAllocator(void* memoryStart,
                 "slab size must be power of two");
 
   if (config.excludeFromCoredump) {
-    excludeMemoryFromCoredump();
+    excludeMemoryFromCoredump(config.hugePageSize);
   }
 
   if (config.lockMemory) {
@@ -229,7 +229,7 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
   }
 
   if (config.excludeFromCoredump) {
-    excludeMemoryFromCoredump();
+    excludeMemoryFromCoredump(config.hugePageSize);
   }
 
   for (const auto& pair : *object.memoryPoolSize()) {
@@ -654,15 +654,32 @@ void* SlabAllocator::unCompressAlt(const CompressedPtr4B cPtr) const {
   return slab->memoryAtOffset(slabOffset);
 }
 
-void SlabAllocator::excludeMemoryFromCoredump() const {
+void SlabAllocator::excludeMemoryFromCoredump(const PageSize& pageSize) const {
   // dump the headers always. Very useful for debugging when we have
   // pointers and need to find information. slab headers are only few slabs
-  // and in the order of 4-8MB
-  auto slabMemStartPtr = reinterpret_cast<uint8_t*>(slabMemoryStart_);
+  // and in the order of 4-8MB.
+  const auto* memStartPtr = reinterpret_cast<const uint8_t*>(memoryStart_);
+  void* slabMemStartPtr = slabMemoryStart_;
   const size_t headerBytes =
-      slabMemStartPtr - reinterpret_cast<uint8_t*>(memoryStart_);
-  const size_t slabBytes = memorySize_ - headerBytes;
-  XDCHECK_LT(slabBytes, memorySize_);
+      reinterpret_cast<const uint8_t*>(slabMemoryStart_) - memStartPtr;
+  size_t slabBytes = memorySize_ - headerBytes;
+
+  if (pageSize.isHugePage()) {
+    // MADV_DONTDUMP changes VMA flags, and HugeTLB VMAs can only be split on
+    // huge-page boundaries. Keep only the complete huge pages in the range.
+    const size_t hugePageSize = pageSize.getPageSize();
+    if (!util::align(hugePageSize, 0, slabMemStartPtr, slabBytes)) {
+      return;
+    }
+    slabBytes = util::getAlignedSizeDown(slabBytes, hugePageSize);
+  } else {
+    // Linux requires an aligned address but rounds the length up internally.
+    XDCHECK(pageSize.isPageAlignedAddr(slabMemStartPtr));
+  }
+
+  if (slabBytes == 0) {
+    return;
+  }
 
   if (madvise(slabMemStartPtr, slabBytes, MADV_DONTDUMP)) {
     throw std::system_error(errno, std::system_category(),

@@ -79,6 +79,32 @@ TEST_F(SlabAllocatorTest, SmallMemory) {
                std::invalid_argument);
 }
 
+TEST_F(SlabAllocatorTest, ExcludeFromCoredumpWithLargeBackingPage) {
+  const size_t size = 2 * Slab::kSize;
+  void* memory = allocate(size);
+  auto config = getDefaultConfig();
+  config.hugePageSize = PageSize(PageSize::kHugePageSize1GB);
+  // page size > allocation, should exclude nothing
+  EXPECT_NO_THROW(SlabAllocator(memory, size, config));
+}
+
+TEST_F(SlabAllocatorTest, ExcludeFromCoredumpAlignsCallerMemory) {
+  constexpr size_t pageSize = 2 * Slab::kSize;
+  const size_t size = 4 * Slab::kSize;
+  auto* memory = reinterpret_cast<uint8_t*>(allocate(size + Slab::kSize));
+  if (reinterpret_cast<uintptr_t>(memory) % pageSize == 0) {
+    memory += Slab::kSize;
+  }
+  ASSERT_EQ(0, reinterpret_cast<uintptr_t>(memory) % Slab::kSize);
+  ASSERT_NE(0, reinterpret_cast<uintptr_t>(memory) % pageSize);
+
+  auto config = getDefaultConfig();
+  config.hugePageSize = PageSize(pageSize);
+  // The caller-owned range is slab-aligned but not huge-page-aligned.
+  // Excluding it from the core dump should retain only complete huge pages.
+  EXPECT_NO_THROW(SlabAllocator(memory, size, config));
+}
+
 TEST_F(SlabAllocatorTest, MakeSlabs) {
   // allocator enough for 100 slabs
   const unsigned int numSlabs = 100;
