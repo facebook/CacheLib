@@ -380,6 +380,12 @@ using CgroupMemAvailableFn = size_t (*)();
 // Set a provider for cgroup memory.
 void setCgroupMemoryAdvising(CgroupMemAvailableFn provider);
 
+// Function signature to return process RSS memory.
+using RSSMemoryFn = size_t (*)();
+
+// Set a provider for process RSS memory.
+void setRSSMemoryAdvising(RSSMemoryFn provider);
+
 // Print stack trace for the current exception thrown
 void printExceptionStackTraces();
 

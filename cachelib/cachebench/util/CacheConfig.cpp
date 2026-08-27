@@ -125,6 +125,40 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, hugePageSize);
   JSONSetVal(configJson, hugePageMountDir);
   JSONSetVal(configJson, lockMemory);
+  JSONSetVal(configJson, memoryMonitorMode);
+  JSONSetVal(configJson, memoryMonitorIntervalMs);
+  JSONSetVal(configJson, memoryMonitorLowerLimitGB);
+  JSONSetVal(configJson, memoryMonitorUpperLimitGB);
+  JSONSetVal(configJson, memoryMonitorMaxAdvisePercentPerIter);
+  JSONSetVal(configJson, memoryMonitorMaxReclaimPercentPerIter);
+  JSONSetVal(configJson, memoryMonitorMaxAdvisePercent);
+  JSONSetVal(configJson, memoryMonitorReclaimRateLimitWindowSecs);
+  JSONSetVal(configJson, memoryMonitorScriptRepeat);
+  if (const auto* script = configJson.get_ptr("memoryMonitorScript")) {
+    if (!script->isArray()) {
+      folly::throw_exception<folly::TypeError>("array", script->type());
+    }
+    for (const auto& phase : *script) {
+      if (!phase.isObject()) {
+        folly::throw_exception<folly::TypeError>("object", phase.type());
+      }
+      const auto* value = phase.get_ptr("valueGB");
+      const auto* duration = phase.get_ptr("durationMs");
+      if (value == nullptr || duration == nullptr) {
+        throw std::invalid_argument(
+            "each memoryMonitorScript phase requires valueGB and durationMs");
+      }
+      const auto valueGB = value->getInt();
+      const auto durationMs = duration->getInt();
+      if (valueGB <= 0 || durationMs <= 0) {
+        throw std::invalid_argument(
+            "memoryMonitorScript valueGB and durationMs "
+            "must be greater than zero");
+      }
+      memoryMonitorScript.push_back(MemoryMonitorScriptPhase{
+          static_cast<uint64_t>(valueGB), static_cast<uint64_t>(durationMs)});
+    }
+  }
   if (configJson.count("memoryTiers")) {
     for (auto& it : configJson["memoryTiers"]) {
       memoryTierConfigs.push_back(
@@ -151,13 +185,49 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 968>();
+  checkCorrectSize<CacheConfig, 1088>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(
         "number of pools must be the same as the pool size distribution. "
         "numPools: {}, poolSizes.size(): {}",
         numPools, poolSizes.size()));
+  }
+  if (memoryMonitorMode != "disabled" && memoryMonitorMode != "resident" &&
+      memoryMonitorMode != "free") {
+    throw std::invalid_argument(
+        fmt::format("unsupported memoryMonitorMode: {}", memoryMonitorMode));
+  }
+  if (memoryMonitorEnabled() && memoryMonitorIntervalMs == 0) {
+    throw std::invalid_argument(
+        "memoryMonitorIntervalMs must be greater than zero when enabled");
+  }
+  if (!memoryMonitorEnabled() && !memoryMonitorScript.empty()) {
+    throw std::invalid_argument(
+        "memoryMonitorScript requires memory monitoring to be enabled");
+  }
+  if (memoryMonitorScriptRepeat && memoryMonitorScript.empty()) {
+    throw std::invalid_argument(
+        "memoryMonitorScriptRepeat requires a non-empty script");
+  }
+  if (memoryMonitorEnabled() &&
+      memoryMonitorLowerLimitGB >= memoryMonitorUpperLimitGB) {
+    throw std::invalid_argument(
+        "memoryMonitorLowerLimitGB must be less than "
+        "memoryMonitorUpperLimitGB");
+  }
+  for (const auto& phase : memoryMonitorScript) {
+    if (phase.durationMs < memoryMonitorIntervalMs) {
+      throw std::invalid_argument(
+          "memoryMonitorScript durationMs must be at least "
+          "memoryMonitorIntervalMs");
+    }
+  }
+  if (memoryMonitorMaxAdvisePercentPerIter > 100 ||
+      memoryMonitorMaxReclaimPercentPerIter > 100 ||
+      memoryMonitorMaxAdvisePercent > 100) {
+    throw std::invalid_argument(
+        "memory monitor percentage values must not exceed 100");
   }
 }
 
@@ -209,6 +279,27 @@ std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {
     return std::make_shared<RandomStrategy>(
         RandomStrategy::Config{static_cast<unsigned int>(rebalanceMinSlabs)});
   }
+}
+
+bool CacheConfig::memoryMonitorEnabled() const {
+  return memoryMonitorMode != "disabled";
+}
+
+MemoryMonitor::Config CacheConfig::getMemoryMonitorConfig() const {
+  MemoryMonitor::Config config;
+  if (memoryMonitorMode == "resident") {
+    config.mode = MemoryMonitor::ResidentMemory;
+  } else if (memoryMonitorMode == "free") {
+    config.mode = MemoryMonitor::FreeMemory;
+  }
+  config.lowerLimitGB = memoryMonitorLowerLimitGB;
+  config.upperLimitGB = memoryMonitorUpperLimitGB;
+  config.maxAdvisePercentPerIter = memoryMonitorMaxAdvisePercentPerIter;
+  config.maxReclaimPercentPerIter = memoryMonitorMaxReclaimPercentPerIter;
+  config.maxAdvisePercent = memoryMonitorMaxAdvisePercent;
+  config.reclaimRateLimitWindowSecs =
+      std::chrono::seconds{memoryMonitorReclaimRateLimitWindowSecs};
+  return config;
 }
 
 MemoryTierConfig::MemoryTierConfig(const folly::dynamic& configJson) {

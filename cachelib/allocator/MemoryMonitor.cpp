@@ -19,6 +19,8 @@
 #include <fmt/core.h>
 #include <folly/logging/xlog.h>
 
+#include <algorithm>
+
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/common/Exceptions.h"
 
@@ -61,9 +63,16 @@ MemoryMonitor::~MemoryMonitor() {
 
 void MemoryMonitor::work() {
   // Poll interval can change. Keep rate limiter window size updated.
-  rateLimiter_.setWindowSize(
-      reclaimRateLimitWindowSecs_.count() /
-      std::chrono::duration_cast<std::chrono::seconds>(getInterval()).count());
+  const auto reclaimWindowMs =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          reclaimRateLimitWindowSecs_)
+          .count();
+  const auto intervalMs = getInterval().count();
+  XDCHECK_GT(intervalMs, 0);
+  const auto windowSize =
+      reclaimWindowMs == 0 ? 0
+                           : std::max<int64_t>(1, reclaimWindowMs / intervalMs);
+  rateLimiter_.setWindowSize(static_cast<size_t>(windowSize));
   switch (mode_) {
   case FreeMemory:
     checkFreeMemory();
@@ -95,7 +104,7 @@ void MemoryMonitor::updateNumSlabsToAdvise(int32_t numSlabs) {
 }
 
 void MemoryMonitor::checkFreeMemory() {
-  auto memFree = facebook::cachelib::util::getMemAvailable();
+  auto memFree = util::getMemAvailable();
   memAvailableSize_ = memFree;
   rateLimiter_.addValue(memFree);
   const auto stats = cache_.getCacheMemoryStats();
@@ -116,7 +125,7 @@ void MemoryMonitor::checkFreeMemory() {
 }
 
 void MemoryMonitor::checkResidentMemory() {
-  auto rss = static_cast<size_t>(facebook::cachelib::util::getRSSBytes());
+  auto rss = util::getRSSBytes();
   memRssSize_ = rss;
   rateLimiter_.addValue(rss);
   const auto stats = cache_.getCacheMemoryStats();

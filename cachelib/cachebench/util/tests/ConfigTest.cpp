@@ -165,5 +165,102 @@ TEST(CacheConfigTest, RejectsNavyArenaWithoutBlockCache) {
                std::invalid_argument);
 }
 
+TEST(CacheConfigTest, ParsesScriptedResidentMemoryMonitor) {
+  const CacheConfig config{folly::dynamic::object(
+      "memoryMonitorMode", "resident")("memoryMonitorIntervalMs", 25)(
+      "memoryMonitorLowerLimitGB", 1)("memoryMonitorUpperLimitGB", 2)(
+      "memoryMonitorMaxAdvisePercentPerIter",
+      10)("memoryMonitorMaxReclaimPercentPerIter",
+          15)("memoryMonitorMaxAdvisePercent",
+              30)("memoryMonitorReclaimRateLimitWindowSecs",
+                  4)("memoryMonitorScriptRepeat", true)(
+      "memoryMonitorScript",
+      folly::dynamic::array(
+          folly::dynamic::object("valueGB", 1)("durationMs", 75),
+          folly::dynamic::object("valueGB", 3)("durationMs", 125)))};
+
+  const auto monitorConfig = config.getMemoryMonitorConfig();
+  EXPECT_TRUE(config.memoryMonitorEnabled());
+  EXPECT_EQ(MemoryMonitor::ResidentMemory, monitorConfig.mode);
+  EXPECT_EQ(25, config.memoryMonitorIntervalMs);
+  EXPECT_EQ(1, monitorConfig.lowerLimitGB);
+  EXPECT_EQ(2, monitorConfig.upperLimitGB);
+  EXPECT_EQ(10, monitorConfig.maxAdvisePercentPerIter);
+  EXPECT_EQ(15, monitorConfig.maxReclaimPercentPerIter);
+  EXPECT_EQ(30, monitorConfig.maxAdvisePercent);
+  EXPECT_EQ(std::chrono::seconds{4}, monitorConfig.reclaimRateLimitWindowSecs);
+  EXPECT_TRUE(config.memoryMonitorScriptRepeat);
+  const std::vector<MemoryMonitorScriptPhase> expectedPhases{{1, 75}, {3, 125}};
+  EXPECT_EQ(expectedPhases, config.memoryMonitorScript);
+}
+
+TEST(CacheConfigTest, ParsesFreeMemoryMonitorWithSystemReadings) {
+  const CacheConfig config{folly::dynamic::object("memoryMonitorMode", "free")(
+      "memoryMonitorIntervalMs", 100)};
+
+  EXPECT_EQ(MemoryMonitor::FreeMemory, config.getMemoryMonitorConfig().mode);
+  EXPECT_TRUE(config.memoryMonitorScript.empty());
+}
+
+TEST(CacheConfigTest, RejectsInvalidMemoryMonitorConfigurations) {
+  EXPECT_THROW(CacheConfig{folly::dynamic::object("memoryMonitorMode", "bad")},
+               std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs", 0)},
+      std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs", 1)("memoryMonitorLowerLimitGB",
+                                        2)("memoryMonitorUpperLimitGB", 2)},
+      std::invalid_argument);
+  EXPECT_THROW(CacheConfig{folly::dynamic::object(
+                   "memoryMonitorScript",
+                   folly::dynamic::array(
+                       folly::dynamic::object("valueGB", 1)("durationMs", 1)))},
+               std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs",
+          1)("memoryMonitorScript",
+             folly::dynamic::array(
+                 folly::dynamic::object("valueGB", 0)("durationMs", 1)))},
+      std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs",
+          1)("memoryMonitorScript",
+             folly::dynamic::array(
+                 folly::dynamic::object("valueGB", 1)("durationMs", 0)))},
+      std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs",
+          2)("memoryMonitorScript",
+             folly::dynamic::array(
+                 folly::dynamic::object("valueGB", 1)("durationMs", 1)))},
+      std::invalid_argument);
+  EXPECT_THROW(
+      CacheConfig{folly::dynamic::object("memoryMonitorScriptRepeat", true)},
+      std::invalid_argument);
+  EXPECT_THROW(CacheConfig{folly::dynamic::object("memoryMonitorScript",
+                                                  folly::dynamic::array(1))},
+               folly::TypeError);
+  EXPECT_THROW(CacheConfig{folly::dynamic::object(
+                   "memoryMonitorScript",
+                   folly::dynamic::array(folly::dynamic::object("valueGB", 1.5)(
+                       "durationMs", 1)))},
+               folly::TypeError);
+}
+
+TEST(CacheConfigTest, AllowsMemoryMonitorWithTemporarySharedMemory) {
+  const CacheConfig config{
+      folly::dynamic::object("memoryMonitorMode", "resident")(
+          "memoryMonitorIntervalMs", 1)("shmType", "tmp")};
+
+  EXPECT_TRUE(config.memoryMonitorEnabled());
+  EXPECT_EQ("tmp", config.shmType);
+}
+
 } // namespace
 } // namespace facebook::cachelib::cachebench

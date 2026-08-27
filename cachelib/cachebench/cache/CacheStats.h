@@ -213,6 +213,8 @@ class Stats : public StatsBase {
   uint64_t numNvmSkippedDeletes{0};
 
   uint64_t slabsReleased{0};
+  uint64_t slabsReleasedForAdvise{0};
+  uint64_t advisedSlabs{0};
   uint64_t numAbortedSlabReleases{0};
   uint64_t numReaperSkippedSlabs{0};
   uint64_t moveAttemptsForSlabRelease{0};
@@ -291,6 +293,8 @@ class Stats : public StatsBase {
     numNvmSkippedDeletes += other.numNvmSkippedDeletes;
 
     slabsReleased += other.slabsReleased;
+    slabsReleasedForAdvise += other.slabsReleasedForAdvise;
+    advisedSlabs += other.advisedSlabs;
     numAbortedSlabReleases += other.numAbortedSlabReleases;
     numReaperSkippedSlabs += other.numReaperSkippedSlabs;
     moveAttemptsForSlabRelease += other.moveAttemptsForSlabRelease;
@@ -649,6 +653,15 @@ class Stats : public StatsBase {
           << std::endl;
     }
 
+    if (slabsReleasedForAdvise > 0 || advisedSlabs > 0) {
+      out << fmt::format(
+                 "Memory monitor: {} slabs released for advising, {} "
+                 "currently advised",
+                 slabsReleasedForAdvise,
+                 advisedSlabs)
+          << std::endl;
+    }
+
     if (!nvmCounters.empty()) {
       out << "== NVM Counters Map ==" << std::endl;
       for (const auto& it : nvmCounters) {
@@ -765,6 +778,9 @@ class Stats : public StatsBase {
         static_cast<int64_t>(numNvmNandBytesWritten / MB);
     counters["nvm_app_write_amp"] = static_cast<int64_t>(appWriteAmp);
     counters["nvm_dev_write_amp"] = static_cast<int64_t>(devWriteAmp);
+    counters["memory_monitor_slabs_released_for_advise"] =
+        slabsReleasedForAdvise;
+    counters["memory_monitor_advised_slabs"] = advisedSlabs;
 
     renderDramIteratorCounters(counters, dramIteratorStats);
   }

@@ -181,6 +181,10 @@ size_t mockCgroupMemProviderZero() { return 0; }
 size_t mockCgroupMemProviderFixed() {
   return 1024ULL * 1024 * 1024; // 1 GB
 }
+
+size_t mockRSSProviderFixed() {
+  return 2ULL * 1024 * 1024 * 1024; // 2 GB
+}
 } // namespace
 
 TEST(Util, CgroupMemoryAdvising) {
@@ -205,6 +209,14 @@ TEST(Util, CgroupMemoryAdvisingWithProvider) {
   util::setCgroupMemoryAdvising(nullptr);
   auto memHost = util::getMemAvailable();
   EXPECT_GT(memHost, 0);
+}
+
+TEST(Util, RSSMemoryAdvisingWithProvider) {
+  util::setRSSMemoryAdvising(mockRSSProviderFixed);
+  EXPECT_EQ(util::getRSSBytes(), 2ULL * 1024 * 1024 * 1024);
+
+  util::setRSSMemoryAdvising(nullptr);
+  EXPECT_GT(util::getRSSBytes(), 0);
 }
 
 TEST(Util, CounterVisitor) {

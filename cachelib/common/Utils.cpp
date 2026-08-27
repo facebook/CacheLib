@@ -396,10 +396,20 @@ bool isDigit(char c) { return std::isdigit(c); }
 
 // NOLINTNEXTLINE(facebook-avoid-non-const-global-variables)
 std::atomic<size_t (*)()> getCgroupMemAvailableFn{nullptr};
+// NOLINTNEXTLINE(facebook-avoid-non-const-global-variables)
+std::atomic<size_t (*)()> getRSSBytesFn{nullptr};
 
 } // namespace
 
 size_t getRSSBytes() {
+  auto fn = getRSSBytesFn.load();
+  if (fn != nullptr) {
+    size_t rss = fn();
+    if (rss > 0) {
+      return rss;
+    }
+  }
+
   // read field 2 from /proc/self/statm according to
   // http://man7.org/linux/man-pages/man5/proc.5.html
   std::string memInfoStr;
@@ -461,6 +471,10 @@ size_t getMemAvailable() {
 
 void setCgroupMemoryAdvising(CgroupMemAvailableFn provider) {
   getCgroupMemAvailableFn.store(provider);
+}
+
+void setRSSMemoryAdvising(RSSMemoryFn provider) {
+  getRSSBytesFn.store(provider);
 }
 
 void printExceptionStackTraces() {

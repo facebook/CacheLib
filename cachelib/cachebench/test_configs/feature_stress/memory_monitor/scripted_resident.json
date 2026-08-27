@@ -1,0 +1,36 @@
+// @nolint exercises memory advising and reclaim with deterministic RSS values.
+{
+  "cache_config": {
+    "cacheSizeMB": 128,
+    "htBucketPower": 14,
+    "htLockPower": 10,
+    "memoryMonitorMode": "resident",
+    "memoryMonitorIntervalMs": 100,
+    "memoryMonitorLowerLimitGB": 2,
+    "memoryMonitorUpperLimitGB": 3,
+    "memoryMonitorMaxAdvisePercentPerIter": 1,
+    "memoryMonitorMaxReclaimPercentPerIter": 5,
+    "memoryMonitorMaxAdvisePercent": 20,
+    "memoryMonitorScriptRepeat": true,
+    "memoryMonitorScript": [
+      {"valueGB": 2, "durationMs": 3000},
+      {"valueGB": 4, "durationMs": 300},
+      {"valueGB": 1, "durationMs": 1500}
+    ]
+  },
+  "test_config": {
+    "preallocateCache": true,
+    "numOps": 250000,
+    "numThreads": 4,
+    "opRatePerSec": 100000,
+    "opRateBurstSize": 1000,
+    "numKeys": 100000,
+    "keySizeRange": [16, 64],
+    "keySizeRangeProbability": [1.0],
+    "valSizeRange": [512, 4096, 65536],
+    "valSizeRangeProbability": [0.7, 0.3],
+    "getRatio": 0.7,
+    "setRatio": 0.25,
+    "delRatio": 0.05
+  }
+}

@@ -22,6 +22,7 @@
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
+#include "cachelib/cachebench/util/MemoryMonitorScript.h"
 #include "cachelib/common/Ticker.h"
 #include "cachelib/navy/common/Device.h"
 
@@ -301,6 +302,18 @@ struct CacheConfig : public JSONConfig {
   // Lock memory in the RAM
   bool lockMemory{false};
 
+  // Memory monitor configuration. An empty script uses system memory values.
+  std::string memoryMonitorMode{"disabled"};
+  uint64_t memoryMonitorIntervalMs{0};
+  uint64_t memoryMonitorLowerLimitGB{10};
+  uint64_t memoryMonitorUpperLimitGB{15};
+  uint64_t memoryMonitorMaxAdvisePercentPerIter{5};
+  uint64_t memoryMonitorMaxReclaimPercentPerIter{5};
+  uint64_t memoryMonitorMaxAdvisePercent{20};
+  uint64_t memoryMonitorReclaimRateLimitWindowSecs{0};
+  bool memoryMonitorScriptRepeat{false};
+  std::vector<MemoryMonitorScriptPhase> memoryMonitorScript;
+
   // Memory tiers configs
   std::vector<MemoryTierCacheConfig> memoryTierConfigs{};
 
@@ -387,6 +400,9 @@ struct CacheConfig : public JSONConfig {
   CacheConfig() {}
 
   std::shared_ptr<RebalanceStrategy> getRebalanceStrategy() const;
+
+  bool memoryMonitorEnabled() const;
+  MemoryMonitor::Config getMemoryMonitorConfig() const;
 };
 } // namespace cachebench
 } // namespace cachelib

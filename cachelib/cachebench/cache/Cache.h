@@ -48,6 +48,7 @@
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
+#include "cachelib/cachebench/util/MemoryMonitorScript.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 #include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Throttler.h"
@@ -445,6 +446,9 @@ class Cache {
   // instance of the cache.
   std::unique_ptr<Allocator> cache_;
 
+  // Process-wide memory-reading override used by scripted monitor runs.
+  std::unique_ptr<MemoryMonitorScript> memoryMonitorScript_;
+
   // the monitor for the cache. This is a facebook specific functionality to
   // pull stats from the cachebench directly into facebook monitoring systems.
   std::unique_ptr<CacheMonitor> monitor_;
@@ -582,6 +586,16 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
   allocatorConfig_.setCacheSize(config_.cacheSizeMB * (MB));
 
+  if (config_.memoryMonitorEnabled()) {
+    auto memoryMonitorConfig = config_.getMemoryMonitorConfig();
+    if (!config_.memoryMonitorScript.empty()) {
+      allocatorConfig_.setDelayCacheWorkersStart();
+    }
+    allocatorConfig_.enableMemoryMonitor(
+        std::chrono::milliseconds{config_.memoryMonitorIntervalMs},
+        std::move(memoryMonitorConfig));
+  }
+
   if (!cacheDir.empty()) {
     allocatorConfig_.cacheDir = cacheDir;
   }
@@ -644,7 +658,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
                                      config_.hugePageMountDir);
   }
 
-  if (useTempShm) {
+  if (useTempShm && !config_.memoryMonitorEnabled()) {
     // Temp shm is only allocated when memory monitoring is enabled (see
     // CacheAllocator's isOnShm_). Configure a resident-memory monitor with an
     // unreachable upper limit so it never advises away slabs -- its sole
@@ -1006,6 +1020,18 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     }
   }
 
+  if (!config_.memoryMonitorScript.empty()) {
+    memoryMonitorScript_ = std::make_unique<MemoryMonitorScript>(
+        config_.memoryMonitorScript,
+        std::chrono::milliseconds{config_.memoryMonitorIntervalMs},
+        config_.memoryMonitorScriptRepeat);
+    memoryMonitorScript_->install(
+        config_.memoryMonitorMode == "resident"
+            ? MemoryMonitorScript::Target::RSS
+            : MemoryMonitorScript::Target::MemAvailable);
+    cache_->startCacheWorkers();
+  }
+
   if (config_.cacheMonitorFactory) {
     monitor_ = config_.cacheMonitorFactory->create(*cache_);
   }
@@ -1042,6 +1068,11 @@ template <typename Allocator>
 void Cache<Allocator>::reAttach() {
   cache_ =
       std::make_unique<Allocator>(Allocator::SharedMemAttach, allocatorConfig_);
+  if (!config_.memoryMonitorScript.empty()) {
+    // Preserve script progress across reattach because the script models
+    // external memory pressure, which continues across cache restarts.
+    cache_->startCacheWorkers();
+  }
 }
 
 template <typename Allocator>
@@ -1405,6 +1436,7 @@ std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
   }
 
   const auto cacheStats = cache_->getGlobalCacheStats();
+  const auto memoryStats = cache_->getCacheMemoryStats();
   const auto rebalanceStats = cache_->getSlabReleaseStats();
   const auto navyStats = cache_->getNvmCacheStatsMap().toMap();
   for (const auto& [name, value] : cache_->getEventTrackerStatsMap()) {
@@ -1452,6 +1484,8 @@ std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
   ret.numNvmSkippedDeletes = cacheStats.numNvmSkippedDeletes;
 
   ret.slabsReleased = rebalanceStats.numSlabReleaseForRebalance;
+  ret.slabsReleasedForAdvise = rebalanceStats.numSlabReleaseForAdvise;
+  ret.advisedSlabs = memoryStats.numAdvisedSlabs();
   ret.numAbortedSlabReleases = cacheStats.numAbortedSlabReleases;
   ret.numReaperSkippedSlabs = cacheStats.numReaperSkippedSlabs;
   ret.moveAttemptsForSlabRelease = rebalanceStats.numMoveAttempts;
