@@ -1,0 +1,33 @@
+// @nolint
+// Stresses asynchronous BlockCache region flushes with multiple allocators
+// for each segmented FIFO priority.
+{
+  "cache_config" : {
+    "cacheSizeMB" : 128,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : false,
+
+    "nvmCacheSizeMB" : 256,
+    "navyRegionSizeMB" : 4,
+    "navyBigHashSizePct" : 0,
+    "navySegmentedFifoSegmentRatio" : [1, 1, 1],
+    "navyAllocatorsPerPriority" : 2,
+    "navyCleanRegions" : 4,
+    "navyCleanRegionThreads" : 2,
+    "navyRegionManagerFlushAsync" : true
+  },
+  "test_config" : {
+    "numOps" : 100000,
+    "numThreads" : 8,
+    "numKeys" : 100000,
+
+    "keySizeRange" : [16, 64],
+    "keySizeRangeProbability" : [1.0],
+
+    "valSizeRange" : [4096, 16384],
+    "valSizeRangeProbability" : [1.0],
+
+    "getRatio" : 0.2,
+    "setRatio" : 0.8
+  }
+}

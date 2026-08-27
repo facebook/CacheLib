@@ -188,6 +188,19 @@ TEST(CacheConfigTest, ExpandsNavyAllocatorsAcrossPriorities) {
   EXPECT_EQ((std::vector<uint32_t>{3, 3, 3}), config.getNavyAllocatorCounts());
 }
 
+TEST(CacheConfigTest, ParsesNavyRegionManagerFlushAsync) {
+  const CacheConfig config{
+      folly::dynamic::object("navyRegionManagerFlushAsync", true)};
+
+  EXPECT_TRUE(config.navyRegionManagerFlushAsync);
+}
+
+TEST(CacheConfigTest, NavyRegionManagerFlushAsyncDefaultsDisabled) {
+  const CacheConfig config{folly::dynamic::object()};
+
+  EXPECT_FALSE(config.navyRegionManagerFlushAsync);
+}
+
 TEST(CacheConfigTest, ParsesScriptedResidentMemoryMonitor) {
   const CacheConfig config{folly::dynamic::object(
       "memoryMonitorMode", "resident")("memoryMonitorIntervalMs", 25)(

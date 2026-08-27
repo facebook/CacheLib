@@ -248,6 +248,9 @@ struct CacheConfig : public JSONConfig {
   // The number of RegionManager threads for reclaim and flush
   uint32_t navyCleanRegionThreads{1};
 
+  // Whether RegionManager workers flush regions asynchronously.
+  bool navyRegionManagerFlushAsync{false};
+
   // disabled when value is 0
   uint32_t navyAdmissionWriteRateMB{0};
 

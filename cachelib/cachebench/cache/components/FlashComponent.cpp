@@ -132,6 +132,7 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   bcConfig.regionSize = config.navyRegionSizeMB * MB;
   bcConfig.cleanRegionsPool = config.navyCleanRegions;
   bcConfig.cleanRegionThreads = config.navyCleanRegionThreads;
+  bcConfig.regionManagerFlushAsync = config.navyRegionManagerFlushAsync;
   bcConfig.stackSize = config.navyStackSizeKB * KB;
   // Use heuristic based on clean region count similarly to
   // BlockCacheConfig::setCleanRegions() in NavyConfig.cpp
@@ -173,7 +174,6 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   //  eventTracker
   //  inMemBufFlushRetryLimit
   //  preciseRemove
-  //  regionManagerFlushAsync
   //  indexConfig
 
   utils::CoroFiberAdapter::Config executorConfig{

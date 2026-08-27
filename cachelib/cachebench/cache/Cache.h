@@ -760,11 +760,13 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     nvmConfig.navyConfig.setEnableFDP(config_.deviceEnableFDP);
 
     // configure BlockCache
-    auto& bcConfig = nvmConfig.navyConfig.blockCache()
-                         .setDataChecksum(config_.navyDataChecksum)
-                         .setCleanRegions(config_.navyCleanRegions,
-                                          config_.navyCleanRegionThreads)
-                         .setRegionSize(config_.navyRegionSizeMB * MB);
+    auto& bcConfig =
+        nvmConfig.navyConfig.blockCache()
+            .setDataChecksum(config_.navyDataChecksum)
+            .setCleanRegions(config_.navyCleanRegions,
+                             config_.navyCleanRegionThreads)
+            .setRegionSize(config_.navyRegionSizeMB * MB)
+            .setRegionManagerFlushAsync(config_.navyRegionManagerFlushAsync);
 
     // by default lru. if more than one fifo ratio is present, we use
     // segmented fifo. otherwise, simple fifo.
