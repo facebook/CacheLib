@@ -26,8 +26,8 @@ constexpr std::array<double, 14> PercentileStats::kQuantiles{
 PercentileStats::Estimates PercentileStats::estimate() {
   estimator_.flush();
 
-  auto result = estimator_.estimateQuantiles(
-      folly::Range<const double*>{kQuantiles.begin(), kQuantiles.end()});
+  auto result = estimator_.estimateQuantiles(folly::Range<const double*>{
+      kQuantiles.data(), kQuantiles.data() + kQuantiles.size()});
   XDCHECK_EQ(kQuantiles.size(), result.quantiles.size());
   if (result.count == 0) {
     return {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
