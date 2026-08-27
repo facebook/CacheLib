@@ -15,6 +15,7 @@
 add_library (cachelib_interface
   CacheItem.cpp
   Handle.cpp
+  MemcpyConnector.cpp
   Stats.cpp
   components/FlashCacheComponent.cpp
   components/RAMCacheComponent.cpp
@@ -65,6 +66,7 @@ if (BUILD_TESTS)
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_source_test (tests/InterfaceTest.cpp)
     add_source_test (tests/DescriptorTest.cpp)
+    add_source_test (tests/MemcpyConnectorTest.cpp)
     add_source_test (components/tests/CacheComponentTest.cpp)
     add_source_test (components/tests/FlashCacheComponentTest.cpp)
   endif()
