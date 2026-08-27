@@ -674,6 +674,14 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
   allocatorConfig_.setMemoryLocking(config_.lockMemory);
 
+#if !FOLLY_SANITIZE_ADDRESS
+  if (config_.enableSlabAsanPoisoning) {
+    throw std::invalid_argument(
+        "enableSlabAsanPoisoning requires an ASAN build");
+  }
+#endif
+  allocatorConfig_.setSlabAsanPoisoning(config_.enableSlabAsanPoisoning);
+
   if (!config_.memoryTierConfigs.empty()) {
     allocatorConfig_.configureMemoryTiers(config_.memoryTierConfigs);
   }

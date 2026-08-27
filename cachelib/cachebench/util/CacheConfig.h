@@ -308,6 +308,9 @@ struct CacheConfig : public JSONConfig {
   // Lock memory in the RAM
   bool lockMemory{false};
 
+  // Poison freed slab memory so ASAN can detect use-after-free bugs.
+  bool enableSlabAsanPoisoning{false};
+
   // Memory monitor configuration. An empty script uses system memory values.
   std::string memoryMonitorMode{"disabled"};
   uint64_t memoryMonitorIntervalMs{0};

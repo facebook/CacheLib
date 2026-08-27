@@ -129,6 +129,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, hugePageSize);
   JSONSetVal(configJson, hugePageMountDir);
   JSONSetVal(configJson, lockMemory);
+  JSONSetVal(configJson, enableSlabAsanPoisoning);
   JSONSetVal(configJson, memoryMonitorMode);
   JSONSetVal(configJson, memoryMonitorIntervalMs);
   JSONSetVal(configJson, memoryMonitorLowerLimitGB);

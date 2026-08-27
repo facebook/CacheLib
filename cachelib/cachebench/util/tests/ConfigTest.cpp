@@ -201,6 +201,19 @@ TEST(CacheConfigTest, NavyRegionManagerFlushAsyncDefaultsDisabled) {
   EXPECT_FALSE(config.navyRegionManagerFlushAsync);
 }
 
+TEST(CacheConfigTest, SlabAsanPoisoningDefaultsDisabled) {
+  const CacheConfig config{folly::dynamic::object()};
+
+  EXPECT_FALSE(config.enableSlabAsanPoisoning);
+}
+
+TEST(CacheConfigTest, ParsesSlabAsanPoisoning) {
+  const CacheConfig config{
+      folly::dynamic::object("enableSlabAsanPoisoning", true)};
+
+  EXPECT_TRUE(config.enableSlabAsanPoisoning);
+}
+
 TEST(CacheConfigTest, ParsesScriptedResidentMemoryMonitor) {
   const CacheConfig config{folly::dynamic::object(
       "memoryMonitorMode", "resident")("memoryMonitorIntervalMs", 25)(
