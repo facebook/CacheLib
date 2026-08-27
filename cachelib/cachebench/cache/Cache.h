@@ -768,12 +768,17 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
     // by default lru. if more than one fifo ratio is present, we use
     // segmented fifo. otherwise, simple fifo.
+    const auto navyAllocatorCounts = config_.getNavyAllocatorCounts();
     if (!config_.navySegmentedFifoSegmentRatio.empty()) {
       if (config.navySegmentedFifoSegmentRatio.size() == 1) {
         bcConfig.enableFifo();
       } else {
-        bcConfig.enableSegmentedFifo(config_.navySegmentedFifoSegmentRatio);
+        bcConfig.enableSegmentedFifo(config_.navySegmentedFifoSegmentRatio,
+                                     navyAllocatorCounts);
       }
+    }
+    if (navyAllocatorCounts.size() == 1) {
+      bcConfig.setAllocatorCount(navyAllocatorCounts.front());
     }
 
     if (config_.navyEnableItemHistoryTracking) {

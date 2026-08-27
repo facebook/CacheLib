@@ -179,6 +179,9 @@ struct CacheConfig : public JSONConfig {
   // appropriate ratios.
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
+  // Number of BlockCache allocators for each priority. 0 uses Navy's default.
+  uint32_t navyAllocatorsPerPriority{0};
+
   // Number of shards expressed as power of two for request ordering in
   // Navy. If 0, the default configuration of Navy(20) is used.
   uint64_t navyReqOrderShardsPower{21};
@@ -400,6 +403,7 @@ struct CacheConfig : public JSONConfig {
   CacheConfig() {}
 
   std::shared_ptr<RebalanceStrategy> getRebalanceStrategy() const;
+  std::vector<uint32_t> getNavyAllocatorCounts() const;
 
   bool memoryMonitorEnabled() const;
   MemoryMonitor::Config getMemoryMonitorConfig() const;

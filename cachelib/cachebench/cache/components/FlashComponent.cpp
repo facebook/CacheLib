@@ -145,6 +145,10 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
     bcConfig.evictionPolicy = std::make_unique<navy::SegmentedFifoPolicy>(
         config.navySegmentedFifoSegmentRatio);
   }
+  auto navyAllocatorCounts = config.getNavyAllocatorCounts();
+  if (!navyAllocatorCounts.empty()) {
+    bcConfig.allocatorsPerPriority = std::move(navyAllocatorCounts);
+  }
   // Note: enableItemDestructorCheck is not yet supported
   if (config.enableItemDestructor) {
     bcConfig.itemDestructorEnabled = true;
@@ -168,7 +172,6 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   //  legacyEventTracker
   //  eventTracker
   //  inMemBufFlushRetryLimit
-  //  allocatorsPerPriority
   //  preciseRemove
   //  regionManagerFlushAsync
   //  indexConfig

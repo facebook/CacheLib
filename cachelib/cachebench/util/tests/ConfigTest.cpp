@@ -165,6 +165,29 @@ TEST(CacheConfigTest, RejectsNavyArenaWithoutBlockCache) {
                std::invalid_argument);
 }
 
+TEST(CacheConfigTest, ParsesNavyAllocatorsPerPriority) {
+  const CacheConfig config{
+      folly::dynamic::object("navyAllocatorsPerPriority", 3)};
+
+  EXPECT_EQ(3, config.navyAllocatorsPerPriority);
+  EXPECT_EQ((std::vector<uint32_t>{3}), config.getNavyAllocatorCounts());
+}
+
+TEST(CacheConfigTest, NavyAllocatorsPerPriorityDefaultsDisabled) {
+  const CacheConfig config{folly::dynamic::object()};
+
+  EXPECT_EQ(0, config.navyAllocatorsPerPriority);
+  EXPECT_TRUE(config.getNavyAllocatorCounts().empty());
+}
+
+TEST(CacheConfigTest, ExpandsNavyAllocatorsAcrossPriorities) {
+  const CacheConfig config{
+      folly::dynamic::object("navyAllocatorsPerPriority", 3)(
+          "navySegmentedFifoSegmentRatio", folly::dynamic::array(1, 2, 3))};
+
+  EXPECT_EQ((std::vector<uint32_t>{3, 3, 3}), config.getNavyAllocatorCounts());
+}
+
 TEST(CacheConfigTest, ParsesScriptedResidentMemoryMonitor) {
   const CacheConfig config{folly::dynamic::object(
       "memoryMonitorMode", "resident")("memoryMonitorIntervalMs", 25)(

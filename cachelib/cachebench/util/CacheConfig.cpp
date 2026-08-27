@@ -16,6 +16,8 @@
 
 #include "cachelib/cachebench/util/CacheConfig.h"
 
+#include <algorithm>
+
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/RandomStrategy.h"
@@ -91,6 +93,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
     }
   }
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
+  JSONSetVal(configJson, navyAllocatorsPerPriority);
   JSONSetVal(configJson, navyReqOrderShardsPower);
   JSONSetVal(configJson, navyBigHashSizePct);
   JSONSetVal(configJson, navyBigHashBucketSize);
@@ -185,7 +188,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 1088>();
+  checkCorrectSize<CacheConfig, 1096>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(
@@ -279,6 +282,16 @@ std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {
     return std::make_shared<RandomStrategy>(
         RandomStrategy::Config{static_cast<unsigned int>(rebalanceMinSlabs)});
   }
+}
+
+std::vector<uint32_t> CacheConfig::getNavyAllocatorCounts() const {
+  if (navyAllocatorsPerPriority == 0) {
+    return {};
+  }
+
+  const auto numPriorities =
+      std::max<size_t>(1, navySegmentedFifoSegmentRatio.size());
+  return std::vector<uint32_t>(numPriorities, navyAllocatorsPerPriority);
 }
 
 bool CacheConfig::memoryMonitorEnabled() const {
