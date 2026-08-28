@@ -25,6 +25,7 @@
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/tests/AllocatorTestUtils.h"
 #include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/common/TestUtils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -233,6 +234,44 @@ class RebalanceStrategyTest : public testing::Test {
     doWork(config, false);
     initAllocatorConfigForStrategy(config, FreeMem);
     doWork(config, false);
+  }
+
+  void testChainedAllocFailureWakesPoolRebalancer() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(4 * Slab::kSize);
+    config.enablePoolRebalancing(std::make_shared<RebalanceStrategy>(),
+                                 std::chrono::minutes{20});
+
+    auto cache = std::make_unique<AllocatorT>(config);
+    const auto smallSize = 1024 * 1024;
+    const auto largeSize = 3 * 1024 * 1024;
+    const auto pid = cache->addPool("default",
+                                    cache->getCacheMemoryStats().ramCacheSize,
+                                    {1024, smallSize + 100, largeSize + 100});
+
+    auto parent = util::allocateAccessible(*cache, pid, "parent", 100);
+    ASSERT_TRUE(parent);
+
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    for (uint32_t i = 0;; ++i) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, fmt::format("small_{}", i), smallSize);
+      if (!handle) {
+        break;
+      }
+      handles.push_back(std::move(handle));
+    }
+    handles.clear();
+
+    EXPECT_FALSE(cache->allocateChainedItem(parent, largeSize));
+
+    typename AllocatorT::WriteHandle chained;
+    ASSERT_EVENTUALLY_TRUE(
+        [&] {
+          chained = cache->allocateChainedItem(parent, largeSize);
+          return static_cast<bool>(chained);
+        },
+        10);
   }
 
   /**
@@ -677,6 +716,10 @@ TYPED_TEST(RebalanceStrategyTest, DeltaAllocFailures) {
 
 TYPED_TEST(RebalanceStrategyTest, DeltaAllocFailuresNoSlabs) {
   this->testDeltaAllocFailuresWithOneSlabs();
+}
+
+TYPED_TEST(RebalanceStrategyTest, ChainedAllocFailureWakesPoolRebalancer) {
+  this->testChainedAllocFailureWakesPoolRebalancer();
 }
 
 TYPED_TEST(RebalanceStrategyTest, FreeAllocsPoolRebalancer) {

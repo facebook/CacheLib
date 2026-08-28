@@ -2599,6 +2599,14 @@ class CacheAllocator : public CacheBase {
   // nvmCache
   std::unique_ptr<NvmCacheT> nvmCache_;
 
+  // Wake the pool rebalancer after an allocation failure, unless forced
+  // wake-ups are disabled or no rebalancer is running.
+  void wakeUpPoolRebalancerOnAllocFailure() {
+    if (!config_.poolRebalancerDisableForcedWakeUp && poolRebalancer_) {
+      poolRebalancer_->wakeUpOnAllocationFailure();
+    }
+  }
+
   // rebalancer for the pools
   std::unique_ptr<PoolRebalancer> poolRebalancer_;
 
@@ -3166,9 +3174,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
   } else { // failed to allocate memory.
     (*stats_.allocFailures)[pid][cid].inc();
     // wake up rebalancer
-    if (!config_.poolRebalancerDisableForcedWakeUp && poolRebalancer_) {
-      poolRebalancer_->wakeUp();
-    }
+    wakeUpPoolRebalancerOnAllocFailure();
   }
 
   if (shouldRecordEvent(key)) {
@@ -3230,6 +3236,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(const Item& parent,
   }
   if (memory == nullptr) {
     (*stats_.allocFailures)[pid][cid].inc();
+    wakeUpPoolRebalancerOnAllocFailure();
     return WriteHandle{};
   }
 

@@ -18,6 +18,8 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <atomic>
+
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -54,6 +56,16 @@ class PoolRebalancer : public PeriodicWorker {
   }
 
   RebalancerStats getStats() const noexcept;
+
+  void wakeUpOnAllocationFailure() noexcept {
+    // Skip the atomic RMW when a wake is already pending; only the first
+    // caller that flips the flag needs to issue the wakeUp().
+    if (!allocationFailureWakeUpPending_.load(std::memory_order_relaxed) &&
+        !allocationFailureWakeUpPending_.exchange(true,
+                                                  std::memory_order_relaxed)) {
+      wakeUp();
+    }
+  }
 
  private:
   struct LoopStats {
@@ -113,6 +125,11 @@ class PoolRebalancer : public PeriodicWorker {
   LoopStats rebalanceStats_;
   LoopStats releaseStats_;
   LoopStats pickVictimStats_;
+
+  // Allocation failures can arrive concurrently at a much higher rate than
+  // the rebalancer can run. One pending wake is sufficient because each pass
+  // observes the aggregate allocation-failure counters for every pool.
+  std::atomic<bool> allocationFailureWakeUpPending_{false};
 
   // implements the actual logic of running tryRebalancing and
   // updating the stats

@@ -16,6 +16,7 @@
 
 #include "cachelib/allocator/PoolRebalancer.h"
 
+#include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 
 #include <stdexcept>
@@ -37,6 +38,12 @@ PoolRebalancer::PoolRebalancer(CacheBase& cache,
 PoolRebalancer::~PoolRebalancer() { stop(std::chrono::seconds(0)); }
 
 void PoolRebalancer::work() {
+  // Clear the pending flag only after this pass completes, so allocation
+  // failures observed while it runs coalesce into the next wake instead of
+  // triggering a spurious one mid-pass.
+  SCOPE_EXIT {
+    allocationFailureWakeUpPending_.store(false, std::memory_order_relaxed);
+  };
   try {
     for (const auto pid : cache_.getRegularPoolIds()) {
       auto strategy = cache_.getRebalanceStrategy(pid);
