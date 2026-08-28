@@ -94,7 +94,8 @@ class FlashCacheComponent : public CacheComponentWithStats {
   folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) override;
   folly::coro::Task<Result<std::optional<AllocatedHandle>>> insertOrReplace(
       AllocatedHandle&& handle) override;
-  folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override;
+  folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
+      Key key) override;
   folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
       Key key) override;
   folly::coro::AsyncGenerator<ReadHandle> iterator() override;
@@ -182,7 +183,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
  * Coro A holding on to the lock prevents Coro B from grabbing it and launching
  * the allocation fiber (and creating the deadlock cycle).
  *
- * NOTE: ReadHandles returned from find() *do not* hold on to a region
+ * NOTE: ReadDescriptors returned from find() *do not* hold on to a region
  * descriptor and therefore do not need to hold on to the lock.
  */
 class ConsistentFlashCacheComponent : public FlashCacheComponent {
@@ -232,9 +233,10 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
 
   /**
    * Same as FlashCacheComponent::find() but runs while holding a shared lock.
-   * The returned handle *does not* hold on to the lock after returning.
+   * The returned descriptor *does not* hold on to the lock after returning.
    */
-  folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override;
+  folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
+      Key key) override;
 
   /**
    * Same as FlashCacheComponent::findToWrite() but runs while holding an

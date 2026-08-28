@@ -20,6 +20,7 @@
 #include <folly/coro/Task.h>
 
 #include "cachelib/interface/CacheItem.h"
+#include "cachelib/interface/Descriptor.h"
 #include "cachelib/interface/Handle.h"
 #include "cachelib/interface/Result.h"
 #include "cachelib/interface/Stats.h"
@@ -100,18 +101,23 @@ class CacheComponent {
   insertOrReplace(AllocatedHandle&& handle) = 0;
 
   /**
-   * Find an item in cache. Returns a handle if found, std::nullopt otherwise.
-   * find() is for read-only access, findToWrite() is for write access.
+   * Find an item in cache. Returns a descriptor if found, std::nullopt
+   * otherwise. find() is for read-only access, findToWrite() is for write
+   * access.
+   *
+   * The descriptor owns the underlying ReadHandle and exposes the item's bytes.
+   * Use std::move(descriptor).release() to get the handle back, e.g. to pass it
+   * to remove().
    *
    * NOTE: if you write to the handle returned by findToWrite(), you must *must*
    * mark the handle as dirty in order for the cache component to flush the
    * write to the underlying storage.
    *
    * @param key cache item key
-   * @return a handle if found, std::nullopt if not found or an error result
+   * @return a descriptor if found, std::nullopt if not found or an error result
    * otherwise
    */
-  virtual folly::coro::Task<Result<std::optional<ReadHandle>>> find(
+  virtual folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
       Key key) = 0;
   virtual folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
       Key key) = 0;

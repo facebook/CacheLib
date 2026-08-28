@@ -82,9 +82,9 @@ CO_TYPED_TEST(DescriptorTest, AllocatedDescriptorWriteReleaseInsert) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  auto& foundHandle = findResult.value();
-  EXPECT_EQ(std::string(foundHandle->template getMemoryAs<const char>(),
-                        foundHandle->getMemorySize()),
+  auto& readDescriptor = findResult.value();
+  EXPECT_EQ(std::string(static_cast<const char*>(readDescriptor.data()),
+                        readDescriptor.size()),
             data);
 }
 
@@ -99,7 +99,7 @@ CO_TYPED_TEST(DescriptorTest, ReadDescriptorReleaseRemove) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  ReadDescriptor descriptor(std::move(findResult.value()));
+  auto descriptor = std::move(findResult.value());
   EXPECT_EQ(descriptor.size(), data.size());
   EXPECT_EQ(
       std::string(static_cast<const char*>(descriptor.data()), data.size()),
@@ -158,7 +158,8 @@ CO_TYPED_TEST(DescriptorTest, OwnedReadDescriptorOutlivesSourceItem) {
   {
     auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
-    ownedItem.emplace(*findResult.value());
+    auto foundHandle = std::move(findResult.value()).release();
+    ownedItem.emplace(*foundHandle);
   }
 
   EXPECT_TRUE(CO_ASSERT_OK(co_await this->cache_->remove(key)));
@@ -193,7 +194,8 @@ CO_TYPED_TEST(DescriptorTest, OwnedReadDescriptorSupportsEmptyValue) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  ReadDescriptor descriptor(DetachedItem(*findResult.value()));
+  auto foundHandle = std::move(findResult.value()).release();
+  ReadDescriptor descriptor{DetachedItem(*foundHandle)};
 
   // A zero-size value must still read as present -- emptiness of the value and
   // emptiness of the descriptor are different states.
@@ -250,9 +252,9 @@ CO_TYPED_TEST(DescriptorTest, WriteDescriptorMutableDataFlushes) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  auto& foundHandle = findResult.value();
-  EXPECT_EQ(std::string(foundHandle->template getMemoryAs<const char>(),
-                        foundHandle->getMemorySize()),
+  auto& descriptor = findResult.value();
+  EXPECT_EQ(std::string(static_cast<const char*>(descriptor.data()),
+                        descriptor.size()),
             updated);
 }
 

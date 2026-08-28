@@ -20,6 +20,7 @@
 
 #include "cachelib/allocator/MMLru.h"
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/Descriptor.h"
 #include "cachelib/interface/utils/Persistence.h"
 
 namespace facebook::cachelib {
@@ -129,7 +130,8 @@ class RAMCacheComponent : public CacheComponentWithStats {
   folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) override;
   folly::coro::Task<Result<std::optional<AllocatedHandle>>> insertOrReplace(
       AllocatedHandle&& handle) override;
-  folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override;
+  folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
+      Key key) override;
   folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
       Key key) override;
   folly::coro::AsyncGenerator<ReadHandle> iterator() override;

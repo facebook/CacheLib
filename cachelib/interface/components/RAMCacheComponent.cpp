@@ -344,15 +344,16 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
   }
 }
 
-folly::coro::Task<Result<std::optional<ReadHandle>>> RAMCacheComponent::find(
-    Key key) {
+folly::coro::Task<Result<std::optional<ReadDescriptor>>>
+RAMCacheComponent::find(Key key) {
   stats_->find_.throughput_.calls_.inc();
   auto latencyGuard = stats_->find_.latency_.start();
 
   if (auto handle = cache_->find(key)) {
     stats_->find_.throughput_.hits_.inc();
     stats_->find_.throughput_.successes_.inc();
-    co_return toGenericHandle<ReadHandle>(*this, std::move(handle));
+    co_return ReadDescriptor(
+        toGenericHandle<ReadHandle>(*this, std::move(handle)));
   }
   stats_->find_.throughput_.misses_.inc();
   stats_->find_.throughput_.successes_.inc();

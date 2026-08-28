@@ -142,7 +142,7 @@ class MemcpyConnectorTest : public ::testing::Test {
       co_return makeError(Error::Code::FIND_FAILED, "source miss");
     }
 
-    ReadDescriptor source(std::move(found->value()));
+    auto source = std::move(found->value());
     co_return co_await transferDescriptor(std::move(source), dst, destSize);
   }
 
@@ -151,9 +151,9 @@ class MemcpyConnectorTest : public ::testing::Test {
                                       const std::string& data) {
     auto found = CO_ASSERT_OK(co_await cache.find(key));
     CO_ASSERT_TRUE(found.has_value());
-    EXPECT_EQ(std::string(static_cast<const char*>(found.value()->getMemory()),
-                          data.size()),
-              data);
+    EXPECT_EQ(
+        std::string(static_cast<const char*>(found->data()), found->size()),
+        data);
   }
 
   MemcpyConnector connector_;
@@ -182,7 +182,9 @@ CO_TEST_F(MemcpyConnectorTest, MovesDetachedItemToHandle) {
   {
     auto found = CO_ASSERT_OK(co_await ram_->find(key));
     CO_ASSERT_TRUE(found.has_value());
-    detachedItem.emplace(*found.value());
+    auto source = std::move(found.value());
+    auto handle = std::move(source).release();
+    detachedItem.emplace(*handle);
   }
 
   const auto creationTime = detachedItem->getCreationTime();
@@ -195,10 +197,9 @@ CO_TEST_F(MemcpyConnectorTest, MovesDetachedItemToHandle) {
 
   auto found = CO_ASSERT_OK(co_await flash_->find(key));
   CO_ASSERT_TRUE(found.has_value());
-  EXPECT_EQ(found.value()->getCreationTime(), creationTime);
-  EXPECT_EQ(found.value()->getExpiryTime(), expiryTime);
-  EXPECT_EQ(std::string(static_cast<const char*>(found.value()->getMemory()),
-                        found.value()->getMemorySize()),
+  EXPECT_EQ(found->creationTime(), creationTime);
+  EXPECT_EQ(found->expiryTime(), expiryTime);
+  EXPECT_EQ(std::string(static_cast<const char*>(found->data()), found->size()),
             data);
 }
 
@@ -212,7 +213,7 @@ CO_TEST_F(MemcpyConnectorTest, MovesZeroLengthValue) {
 
   auto found = CO_ASSERT_OK(co_await flash_->find(key));
   CO_ASSERT_TRUE(found.has_value());
-  EXPECT_EQ(found.value()->getMemorySize(), 0u);
+  EXPECT_EQ(found->size(), 0u);
 }
 
 // Truncating would leave a silently short item that is corrupt when read back,

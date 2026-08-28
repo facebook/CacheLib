@@ -87,6 +87,28 @@ CO_TEST_F(RAMCacheComponentTest, InsertOrReplaceAlwaysReturnsReplacedItem) {
   EXPECT_EQ(replacedData, data1);
 }
 
+CO_TEST_F(RAMCacheComponentTest, FindDescriptorReturnsValue) {
+  const std::string key = "descriptor_key";
+  const std::string data = "descriptor_value";
+  const uint32_t now = facebook::cachelib::util::getCurrentTimeSec();
+
+  auto handle =
+      CO_ASSERT_OK(co_await cache_->allocate(key, data.size(), now, 3600));
+  std::memcpy(handle->getMemory(), data.data(), data.size());
+  EXPECT_OK(co_await cache_->insert(std::move(handle)));
+
+  {
+    auto descriptor = CO_ASSERT_OK(co_await ramCache().find(key));
+    CO_ASSERT_TRUE(descriptor.has_value());
+    EXPECT_EQ(descriptor->size(), data.size());
+    EXPECT_EQ(std::string(static_cast<const char*>(descriptor->data()),
+                          descriptor->size()),
+              data);
+  }
+
+  checkNoOutstandingRefs({key});
+}
+
 // ============================================================================
 // iterator() Tests
 // ============================================================================
@@ -126,17 +148,17 @@ CO_TEST_F(RAMCacheComponentTest, ActiveHandleAccounting) {
   CO_ASSERT_EQ(allocator.getHandleCountForThread(), 0);
 
   {
-    std::vector<ReadHandle> handles;
+    std::vector<ReadDescriptor> descriptors;
     for (int i = 0; i < kNumItems; ++i) {
       auto key = "handle_count_" + std::to_string(i);
       auto result = CO_ASSERT_OK(co_await cache_->find(key));
       CO_ASSERT_TRUE(result.has_value());
-      handles.push_back(std::move(result).value());
+      descriptors.push_back(std::move(result).value());
     }
     EXPECT_EQ(allocator.getHandleCountForThread(), kNumItems);
 
     for (int i = kNumItems; i > 0; --i) {
-      handles.pop_back();
+      descriptors.pop_back();
       EXPECT_EQ(allocator.getHandleCountForThread(), i - 1);
     }
   }

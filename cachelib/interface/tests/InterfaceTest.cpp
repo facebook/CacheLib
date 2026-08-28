@@ -140,8 +140,16 @@ class TestCacheComponent : public CacheComponent {
     return std::nullopt;
   }
 
-  folly::coro::Task<Result<std::optional<ReadHandle>>> find(Key key) override {
-    co_return findImpl<ReadHandle>(key);
+  folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
+      Key key) override {
+    auto result = findImpl<ReadHandle>(key);
+    if (result.hasError()) {
+      co_return folly::makeUnexpected(std::move(result).error());
+    }
+    if (!result->has_value()) {
+      co_return std::nullopt;
+    }
+    co_return ReadDescriptor(std::move(result->value()));
   }
 
   folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
@@ -316,9 +324,12 @@ TYPED_TEST(HandleTest, move) {
 CO_TEST_F(InterfaceTest, basic) {
   co_await allocateAndInsertItem();
 
-  auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
-  CO_ASSERT_TRUE(readHandle.has_value());
-  checkItemFields(readHandle.value());
+  auto readDescriptor = CO_ASSERT_OK(co_await cache_.find(key_));
+  CO_ASSERT_TRUE(readDescriptor.has_value());
+  // Keep the handle alive past remove(key_) so the item is released by
+  // ~ReadHandle rather than by remove() itself.
+  auto readHandle = std::move(readDescriptor.value()).release();
+  checkItemFields(readHandle);
 
   {
     auto writeHandle = CO_ASSERT_OK(co_await cache_.findToWrite(key_));
@@ -350,7 +361,7 @@ CO_TEST_F(InterfaceTest, replace) {
 
   auto readHandleOpt = CO_ASSERT_OK(co_await cache_.find(key_));
   CO_ASSERT_TRUE(readHandleOpt.has_value());
-  auto& readHandle = readHandleOpt.value();
+  auto readHandle = std::move(readHandleOpt.value()).release();
   EXPECT_EQ(std::memcmp(readHandle->getMemory(), data2, sizeof(data2)), 0);
 
   CO_ASSERT_OK(co_await cache_.remove(std::move(readHandle)));
@@ -359,7 +370,7 @@ CO_TEST_F(InterfaceTest, replace) {
 CO_TEST_F(InterfaceTest, removeHandle) {
   co_await allocateAndInsertItem();
   auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
-  CO_ASSERT_OK(co_await cache_.remove(std::move(readHandle.value())));
+  CO_ASSERT_OK(co_await cache_.remove(std::move(readHandle.value()).release()));
   EXPECT_FALSE(this->cache_.cachedItems_.contains(this->key_));
 }
 
@@ -383,9 +394,10 @@ CO_TEST_F(InterfaceTest, incRefFailed) {
 
   item->setFailIncRef(false);
 
-  auto readHandle = CO_ASSERT_OK(co_await cache_.find(key_));
-  CO_ASSERT_TRUE(readHandle.has_value());
-  checkItemFields(readHandle.value());
+  auto readDescriptor = CO_ASSERT_OK(co_await cache_.find(key_));
+  CO_ASSERT_TRUE(readDescriptor.has_value());
+  auto readHandle = std::move(readDescriptor.value()).release();
+  checkItemFields(readHandle);
 
   EXPECT_OK(co_await cache_.remove(key_));
 }

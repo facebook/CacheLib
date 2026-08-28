@@ -137,8 +137,8 @@ CO_TYPED_TEST(CacheComponentTest, InsertWithData) {
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
-  std::string retrievedData(
-      findResult.value()->template getMemoryAs<const char>(), data.size());
+  std::string retrievedData(static_cast<const char*>(findResult->data()),
+                            findResult->size());
   EXPECT_EQ(retrievedData, data);
 }
 
@@ -199,8 +199,8 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceExistingItem) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  std::string currentData(
-      findResult.value()->template getMemoryAs<const char>(), data2.size());
+  std::string currentData(static_cast<const char*>(findResult->data()),
+                          findResult->size());
   EXPECT_EQ(currentData, data2);
 }
 
@@ -255,10 +255,9 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   // Verify large data is now in cache
   auto findResult1 = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult1.has_value());
-  EXPECT_GE(findResult1.value()->getMemorySize(), largeData.size());
-  std::string retrievedLarge1(
-      findResult1.value()->template getMemoryAs<const char>(),
-      largeData.size());
+  EXPECT_GE(findResult1->size(), largeData.size());
+  std::string retrievedLarge1(static_cast<const char*>(findResult1->data()),
+                              largeData.size());
   EXPECT_EQ(retrievedLarge1, largeData);
 
   // Replace large item with smaller item
@@ -281,10 +280,9 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   // Verify small data is now in cache
   auto findResult2 = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult2.has_value());
-  EXPECT_GE(findResult2.value()->getMemorySize(), smallData.size());
-  std::string retrievedSmall2(
-      findResult2.value()->template getMemoryAs<const char>(),
-      smallData.size());
+  EXPECT_GE(findResult2->size(), smallData.size());
+  std::string retrievedSmall2(static_cast<const char*>(findResult2->data()),
+                              smallData.size());
   EXPECT_EQ(retrievedSmall2, smallData);
 }
 
@@ -304,11 +302,11 @@ CO_TYPED_TEST(CacheComponentTest, FindExistingItem) {
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
-  auto& foundHandle = findResult.value();
-  EXPECT_EQ(foundHandle->getKey(), key);
+  auto& descriptor = findResult.value();
+  EXPECT_EQ(descriptor.key(), key);
 
-  std::string retrievedData(foundHandle->template getMemoryAs<const char>(),
-                            data.size());
+  std::string retrievedData(static_cast<const char*>(descriptor.data()),
+                            descriptor.size());
   EXPECT_EQ(retrievedData, data);
 }
 
@@ -332,7 +330,8 @@ CO_TYPED_TEST(CacheComponentTest, FindMultipleItems) {
   for (const auto& key : keys) {
     auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
-    EXPECT_EQ(findResult.value()->getKey(), key);
+    auto foundHandle = std::move(findResult.value()).release();
+    EXPECT_EQ(foundHandle->getKey(), key);
   }
 }
 
@@ -362,7 +361,7 @@ CO_TYPED_TEST(CacheComponentTest, FindPropertiesMatch) {
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
 
-  auto& foundHandle = findResult.value();
+  auto foundHandle = std::move(findResult.value()).release();
   EXPECT_EQ(foundHandle->getKey(), key);
   EXPECT_GE(foundHandle->getMemorySize(), size);
   EXPECT_EQ(foundHandle->getCreationTime(), creationTime);
@@ -417,9 +416,8 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteAndModify) {
 
   auto readResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(readResult.has_value());
-  std::string retrievedData(
-      readResult.value()->template getMemoryAs<const char>(),
-      modifiedData.size());
+  std::string retrievedData(static_cast<const char*>(readResult->data()),
+                            readResult->size());
   EXPECT_EQ(retrievedData, modifiedData);
 }
 
@@ -640,7 +638,8 @@ CO_TYPED_TEST(CacheComponentTest, RemoveByHandle) {
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  EXPECT_OK(co_await this->cache_->remove(std::move(findResult.value())));
+  EXPECT_OK(
+      co_await this->cache_->remove(std::move(findResult.value()).release()));
 
   auto findAgainResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   EXPECT_FALSE(findAgainResult.has_value());
@@ -714,9 +713,9 @@ TYPED_TEST(CacheComponentTest, MultiThreadedOperations) {
           if (findResult.hasValue() && findResult.value().has_value()) {
             successfulFinds.fetch_add(1, std::memory_order_relaxed);
 
-            const auto& handle = findResult.value().value();
-            const char* data = handle->template getMemoryAs<const char>();
-            const size_t dataSize = handle->getMemorySize();
+            const auto& descriptor = findResult.value().value();
+            const char* data = static_cast<const char*>(descriptor.data());
+            const size_t dataSize = descriptor.size();
 
             std::string_view retrievedData(data, dataSize);
             if (!retrievedData.starts_with("thread_") &&
@@ -752,7 +751,7 @@ TYPED_TEST(CacheComponentTest, MultiThreadedOperations) {
           auto findResult = co_await this->cache_->find(key);
           if (findResult.hasValue() && findResult.value().has_value()) {
             auto removeResult = co_await this->cache_->remove(
-                std::move(findResult.value().value()));
+                std::move(findResult.value().value()).release());
             if (removeResult.hasValue()) {
               successfulRemoves.fetch_add(1, std::memory_order_relaxed);
             }
@@ -818,8 +817,8 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecover) {
 
   auto findResult = CO_ASSERT_OK(co_await recovered->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
-  std::string retrievedData(
-      findResult.value()->template getMemoryAs<const char>(), data.size());
+  std::string retrievedData(static_cast<const char*>(findResult->data()),
+                            findResult->size());
   EXPECT_EQ(retrievedData, data);
 }
 
@@ -851,9 +850,8 @@ CO_TYPED_TEST(CacheComponentTest, PersistAndRecoverMultipleItems) {
     auto expectedVal = "data_" + std::to_string(i);
     auto findResult = CO_ASSERT_OK(co_await recovered->find(key));
     CO_ASSERT_TRUE(findResult.has_value());
-    std::string retrievedData(
-        findResult.value()->template getMemoryAs<const char>(),
-        expectedVal.size());
+    std::string retrievedData(static_cast<const char*>(findResult->data()),
+                              findResult->size());
     EXPECT_EQ(retrievedData, expectedVal);
   }
   EXPECT_OK(recovered->shutdown());
