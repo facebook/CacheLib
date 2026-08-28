@@ -196,12 +196,13 @@ folly::coro::Task<OpResultType> CacheComponentStressor::setKey(
     co_return OpResultType::kSetFailure;
   }
 
-  auto handle = std::move(allocResult.value());
+  auto descriptor = std::move(allocResult.value());
   if (config_.populateItem) {
-    populateItem(handle, itemValue);
+    populateItem(descriptor, itemValue);
   }
 
-  auto insertResult = co_await cache_->insertOrReplace(std::move(handle));
+  auto insertResult =
+      co_await cache_->insertOrReplace(std::move(descriptor).release());
   if (!insertResult.hasValue()) {
     ++stats.setFailure;
     co_return OpResultType::kSetFailure;
@@ -248,14 +249,14 @@ folly::coro::Task<OpResultType> CacheComponentStressor::deleteKey(
   co_return OpResultType::kNop;
 }
 
-void CacheComponentStressor::populateItem(AllocatedHandle& handle,
+void CacheComponentStressor::populateItem(AllocatedDescriptor& descriptor,
                                           const std::string& itemValue) {
   // For the generic interface, we'll just store the itemValue or hardcoded
   // string. NOTE: This is simplified compared to Cache<Allocator> which has
   // special methods for setting uint64 and string values with consistency
   // checking
-  char* data = reinterpret_cast<char*>(handle->getMemory());
-  uint32_t dataSize = handle->getMemorySize();
+  char* data = reinterpret_cast<char*>(descriptor.mutableData());
+  uint32_t dataSize = descriptor.capacity();
 
   // Copy the item value into the handle's memory
   auto& value = itemValue.empty() ? hardcodedString_ : itemValue;

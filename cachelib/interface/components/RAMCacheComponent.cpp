@@ -233,7 +233,7 @@ const std::string& RAMCacheComponent::getName() const noexcept {
   return cache_->config_.getCacheName();
 }
 
-folly::coro::Task<Result<AllocatedHandle>> RAMCacheComponent::allocate(
+folly::coro::Task<Result<AllocatedDescriptor>> RAMCacheComponent::allocate(
     Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
   stats_->allocate_.throughput_.calls_.inc();
   // Latency is not tracked here; CacheAllocator already tracks it via
@@ -248,9 +248,14 @@ folly::coro::Task<Result<AllocatedHandle>> RAMCacheComponent::allocate(
           Error::Code::NO_SPACE,
           fmt::format("could not find room in cache for {}", key));
     }
-    stats_->allocate_.throughput_.successes_.inc();
-    co_return tryCreateHandle<AllocatedHandle>(
+    auto handle = tryCreateHandle<AllocatedHandle>(
         *this, *RAMCacheItem::init(implHandle.get()));
+    if (handle.hasError()) {
+      stats_->allocate_.throughput_.errors_.inc();
+      co_return folly::makeUnexpected(std::move(handle).error());
+    }
+    stats_->allocate_.throughput_.successes_.inc();
+    co_return AllocatedDescriptor(std::move(handle).value());
   } catch (const exception::RefcountOverflow& ro) {
     XLOG(DFATAL) << "ERROR: refcount overflow in allocate which shouldn't be "
                     "possible (nobody else can access the item)";

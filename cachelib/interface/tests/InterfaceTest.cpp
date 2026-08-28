@@ -79,14 +79,15 @@ class TestCacheComponent : public CacheComponent {
     return name_;
   }
 
-  folly::coro::Task<Result<AllocatedHandle>> allocate(
+  folly::coro::Task<Result<AllocatedDescriptor>> allocate(
       Key key,
       uint32_t size,
       uint32_t creationTime,
       uint32_t ttlSecs) override {
     auto& allocated = allocatedItems_.emplace_back(
         new TestCacheItem(key, size, creationTime, ttlSecs));
-    co_return ASSERT_OK(tryCreateHandle<AllocatedHandle>(*this, *allocated));
+    co_return AllocatedDescriptor(
+        ASSERT_OK(tryCreateHandle<AllocatedHandle>(*this, *allocated)));
   }
 
   folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) override {
@@ -241,8 +242,8 @@ class InterfaceTest : public ::testing::Test {
   folly::coro::Task<void> allocateAndInsertItem() {
     auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
         key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
-    memcpy(allocHandle->getMemory(), data_, sizeof(data_));
-    EXPECT_OK(co_await cache_.insert(std::move(allocHandle)));
+    memcpy(allocHandle.mutableData(), data_, sizeof(data_));
+    EXPECT_OK(co_await cache_.insert(std::move(allocHandle).release()));
   }
 
   template <typename HandleT>
@@ -350,9 +351,9 @@ CO_TEST_F(InterfaceTest, replace) {
   auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
   const char data2[]{"my test data 2"};
-  memcpy(allocHandle->getMemory(), data2, sizeof(data2));
-  auto oldHandleOpt =
-      CO_ASSERT_OK(co_await cache_.insertOrReplace(std::move(allocHandle)));
+  memcpy(allocHandle.mutableData(), data2, sizeof(data2));
+  auto oldHandleOpt = CO_ASSERT_OK(
+      co_await cache_.insertOrReplace(std::move(allocHandle).release()));
 
   CO_ASSERT_TRUE(oldHandleOpt.has_value());
   const auto& oldHandle = oldHandleOpt.value();
@@ -378,7 +379,7 @@ CO_TEST_F(InterfaceTest, duplicate) {
   co_await allocateAndInsertItem();
   auto allocHandle = CO_ASSERT_OK(co_await cache_.allocate(
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
-  EXPECT_ERROR(co_await cache_.insert(std::move(allocHandle)),
+  EXPECT_ERROR(co_await cache_.insert(std::move(allocHandle).release()),
                Error::Code::ALREADY_INSERTED);
   EXPECT_OK(co_await cache_.remove(key_));
 }

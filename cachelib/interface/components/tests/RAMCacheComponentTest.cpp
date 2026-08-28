@@ -69,17 +69,17 @@ CO_TEST_F(RAMCacheComponentTest, InsertOrReplaceAlwaysReturnsReplacedItem) {
 
   auto handle1 =
       CO_ASSERT_OK(co_await cache_->allocate(key, data1.size(), now, 3600));
-  std::memcpy(handle1->getMemory(), data1.c_str(), data1.size());
-  auto result1 =
-      CO_ASSERT_OK(co_await cache_->insertOrReplace(std::move(handle1)));
+  std::memcpy(handle1.mutableData(), data1.c_str(), data1.size());
+  auto result1 = CO_ASSERT_OK(
+      co_await cache_->insertOrReplace(std::move(handle1).release()));
   EXPECT_FALSE(result1.has_value());
 
   // RAM cache must always return the replaced item
   auto handle2 =
       CO_ASSERT_OK(co_await cache_->allocate(key, data2.size(), now, 3600));
-  std::memcpy(handle2->getMemory(), data2.c_str(), data2.size());
-  auto result2 =
-      CO_ASSERT_OK(co_await cache_->insertOrReplace(std::move(handle2)));
+  std::memcpy(handle2.mutableData(), data2.c_str(), data2.size());
+  auto result2 = CO_ASSERT_OK(
+      co_await cache_->insertOrReplace(std::move(handle2).release()));
   CO_ASSERT_TRUE(result2.has_value());
   EXPECT_EQ(result2.value()->getKey(), key);
   std::string replacedData(result2.value()->getMemoryAs<const char>(),
@@ -94,8 +94,8 @@ CO_TEST_F(RAMCacheComponentTest, FindDescriptorReturnsValue) {
 
   auto handle =
       CO_ASSERT_OK(co_await cache_->allocate(key, data.size(), now, 3600));
-  std::memcpy(handle->getMemory(), data.data(), data.size());
-  EXPECT_OK(co_await cache_->insert(std::move(handle)));
+  std::memcpy(handle.mutableData(), data.data(), data.size());
+  EXPECT_OK(co_await cache_->insert(std::move(handle).release()));
 
   {
     auto descriptor = CO_ASSERT_OK(co_await ramCache().find(key));
@@ -120,7 +120,7 @@ CO_TEST_F(RAMCacheComponentTest, IteratorReleasesRefcounts) {
 
   for (const auto& key : keys) {
     auto handle = CO_ASSERT_OK(co_await cache_->allocate(key, 100, now, 3600));
-    EXPECT_OK(co_await cache_->insert(std::move(handle)));
+    EXPECT_OK(co_await cache_->insert(std::move(handle).release()));
   }
 
   // Iterate and consume all handles
@@ -142,7 +142,7 @@ CO_TEST_F(RAMCacheComponentTest, ActiveHandleAccounting) {
   for (int i = 0; i < kNumItems; ++i) {
     auto key = "handle_count_" + std::to_string(i);
     auto handle = CO_ASSERT_OK(co_await cache_->allocate(key, 100, now, 3600));
-    EXPECT_OK(co_await cache_->insert(std::move(handle)));
+    EXPECT_OK(co_await cache_->insert(std::move(handle).release()));
   }
 
   CO_ASSERT_EQ(allocator.getHandleCountForThread(), 0);
@@ -172,7 +172,7 @@ CO_TEST_F(RAMCacheComponentTest, IteratorEarlyTerminationReleasesRefcounts) {
   for (int i = 0; i < kNumItems; ++i) {
     auto& key = keys.emplace_back("early_ref_" + std::to_string(i));
     auto handle = CO_ASSERT_OK(co_await cache_->allocate(key, 100, now, 3600));
-    EXPECT_OK(co_await cache_->insert(std::move(handle)));
+    EXPECT_OK(co_await cache_->insert(std::move(handle).release()));
   }
 
   // Iterate but break early after 3 items

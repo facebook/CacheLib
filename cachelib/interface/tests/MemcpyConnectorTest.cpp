@@ -96,10 +96,10 @@ class MemcpyConnectorTest : public ::testing::Test {
   folly::coro::Task<void> put(CacheComponent& cache,
                               const std::string& key,
                               const std::string& data) {
-    auto handle = CO_ASSERT_OK(co_await cache.allocate(
+    auto descriptor = CO_ASSERT_OK(co_await cache.allocate(
         key, data.size(), util::getCurrentTimeSec(), kTtlSecs));
-    std::memcpy(handle->getMemory(), data.data(), data.size());
-    EXPECT_OK(co_await cache.insert(std::move(handle)));
+    std::memcpy(descriptor.mutableData(), data.data(), data.size());
+    EXPECT_OK(co_await cache.insert(std::move(descriptor).release()));
   }
 
   // find -> allocate -> transfer -> insert. An unset @destSize sizes the
@@ -120,8 +120,8 @@ class MemcpyConnectorTest : public ::testing::Test {
       co_return folly::makeUnexpected(std::move(allocated).error());
     }
 
-    auto moved = co_await connector_.transfer(
-        std::move(source), AllocatedDescriptor(std::move(allocated.value())));
+    auto moved = co_await connector_.transfer(std::move(source),
+                                              std::move(allocated.value()));
     if (moved.hasError()) {
       co_return folly::makeUnexpected(std::move(moved).error());
     }
@@ -276,8 +276,7 @@ CO_TEST_F(MemcpyConnectorTest, RejectsMovedFromSource) {
 
   // NOLINTNEXTLINE(bugprone-use-after-move)
   EXPECT_ERROR(
-      co_await connector_.transfer(std::move(source),
-                                   AllocatedDescriptor(std::move(allocated))),
+      co_await connector_.transfer(std::move(source), std::move(allocated)),
       Error::Code::INVALID_ARGUMENTS);
 }
 

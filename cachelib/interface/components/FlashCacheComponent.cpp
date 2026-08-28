@@ -378,10 +378,14 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocateGeneric(
   co_return std::move(handle);
 }
 
-folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
+folly::coro::Task<Result<AllocatedDescriptor>> FlashCacheComponent::allocate(
     Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
-  co_return co_await allocateGeneric<FlashCacheItem>(key, size, creationTime,
-                                                     ttlSecs);
+  auto result = co_await allocateGeneric<FlashCacheItem>(key, size,
+                                                         creationTime, ttlSecs);
+  if (result.hasError()) {
+    co_return folly::makeUnexpected(std::move(result).error());
+  }
+  co_return AllocatedDescriptor(std::move(result).value());
 }
 
 folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
@@ -776,7 +780,7 @@ ConsistentFlashCacheComponent::create(
   }
 }
 
-folly::coro::Task<Result<AllocatedHandle>>
+folly::coro::Task<Result<AllocatedDescriptor>>
 ConsistentFlashCacheComponent::allocate(Key key,
                                         uint32_t size,
                                         uint32_t creationTime,
@@ -790,7 +794,7 @@ ConsistentFlashCacheComponent::allocate(Key key,
   // need to hold the lock through insert()/insertOrReplace() because the cache
   // item stores a region descriptor
   static_cast<ConsistentFlashCacheItem*>(res->get())->setLock(std::move(lock));
-  co_return res;
+  co_return AllocatedDescriptor(std::move(res).value());
 }
 
 folly::coro::Task<Result<std::optional<ReadDescriptor>>>

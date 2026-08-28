@@ -93,8 +93,8 @@ class CacheComponentStressor : public CacheStressorBase {
   folly::coro::Task<OpResultType> deleteKey(ThroughputStats& stats,
                                             const std::string_view key);
 
-  // Populate an allocated item handle with data
-  void populateItem(interface::AllocatedHandle& handle,
+  // Populate an allocated item descriptor with data
+  void populateItem(interface::AllocatedDescriptor& descriptor,
                     const std::string& itemValue = "");
 
   std::unique_ptr<interface::CacheComponent> cache_;

@@ -125,7 +125,7 @@ class RAMCacheComponent : public CacheComponentWithStats {
   // ------------------------------ Interface ------------------------------ //
 
   const std::string& getName() const noexcept override;
-  folly::coro::Task<Result<AllocatedHandle>> allocate(
+  folly::coro::Task<Result<AllocatedDescriptor>> allocate(
       Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) override;
   folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) override;
   folly::coro::Task<Result<std::optional<AllocatedHandle>>> insertOrReplace(

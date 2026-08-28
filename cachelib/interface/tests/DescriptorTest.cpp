@@ -69,9 +69,8 @@ CO_TYPED_TEST(DescriptorTest, AllocatedDescriptorWriteReleaseInsert) {
   const std::string key = "write_release_insert";
   const std::string data = "written_through_descriptor";
 
-  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+  auto descriptor = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), util::getCurrentTimeSec(), kTtlSecs));
-  AllocatedDescriptor descriptor(std::move(handle));
 
   EXPECT_EQ(descriptor.capacity(), data.size());
   std::memcpy(descriptor.mutableData(), data.data(), data.size());
@@ -92,10 +91,10 @@ CO_TYPED_TEST(DescriptorTest, ReadDescriptorReleaseRemove) {
   const std::string key = "read_release_remove";
   const std::string data = "read_then_removed";
 
-  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+  auto allocated = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), util::getCurrentTimeSec(), kTtlSecs));
-  std::memcpy(handle->getMemory(), data.data(), data.size());
-  EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  std::memcpy(allocated.mutableData(), data.data(), data.size());
+  EXPECT_OK(co_await this->cache_->insert(std::move(allocated).release()));
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
@@ -118,30 +117,29 @@ CO_TYPED_TEST(DescriptorTest, ReadDescriptorPreservesViewAcrossMoves) {
   const std::string data = "read_descriptor_value";
   const auto creationTime = util::getCurrentTimeSec();
 
-  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+  auto descriptor = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), creationTime, kTtlSecs));
-  std::memcpy(handle->getMemory(), data.data(), data.size());
-  EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  std::memcpy(descriptor.mutableData(), data.data(), data.size());
+  EXPECT_OK(co_await this->cache_->insert(std::move(descriptor).release()));
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
   ReadDescriptor first(std::move(findResult.value()));
   ReadDescriptor second(std::move(first));
-  ReadDescriptor descriptor(std::move(second));
+  ReadDescriptor moved(std::move(second));
 
   // NOLINTNEXTLINE(bugprone-use-after-move)
   EXPECT_FALSE(static_cast<bool>(first));
   // NOLINTNEXTLINE(bugprone-use-after-move)
   EXPECT_FALSE(static_cast<bool>(second));
-  CO_ASSERT_TRUE(static_cast<bool>(descriptor));
-  EXPECT_TRUE(descriptor.isHandleBacked());
-  EXPECT_EQ(descriptor.key(), key);
-  EXPECT_EQ(descriptor.creationTime(), creationTime);
-  EXPECT_EQ(descriptor.expiryTime(), creationTime + kTtlSecs);
-  EXPECT_EQ(descriptor.size(), data.size());
-  EXPECT_EQ(
-      std::string(static_cast<const char*>(descriptor.data()), data.size()),
-      data);
+  CO_ASSERT_TRUE(static_cast<bool>(moved));
+  EXPECT_TRUE(moved.isHandleBacked());
+  EXPECT_EQ(moved.key(), key);
+  EXPECT_EQ(moved.creationTime(), creationTime);
+  EXPECT_EQ(moved.expiryTime(), creationTime + kTtlSecs);
+  EXPECT_EQ(moved.size(), data.size());
+  EXPECT_EQ(std::string(static_cast<const char*>(moved.data()), data.size()),
+            data);
 }
 
 CO_TYPED_TEST(DescriptorTest, OwnedReadDescriptorOutlivesSourceItem) {
@@ -149,10 +147,10 @@ CO_TYPED_TEST(DescriptorTest, OwnedReadDescriptorOutlivesSourceItem) {
   const std::string data = "detached_value";
   const auto creationTime = util::getCurrentTimeSec();
 
-  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+  auto allocated = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, data.size(), creationTime, kTtlSecs));
-  std::memcpy(handle->getMemory(), data.data(), data.size());
-  EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  std::memcpy(allocated.mutableData(), data.data(), data.size());
+  EXPECT_OK(co_await this->cache_->insert(std::move(allocated).release()));
 
   std::optional<DetachedItem> ownedItem;
   {
@@ -188,9 +186,9 @@ CO_TYPED_TEST(DescriptorTest, OwnedReadDescriptorSupportsEmptyValue) {
   const std::string key = "owned_empty_value";
   const auto creationTime = util::getCurrentTimeSec();
 
-  auto handle = CO_ASSERT_OK(
+  auto allocated = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, 0, creationTime, kTtlSecs));
-  EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  EXPECT_OK(co_await this->cache_->insert(std::move(allocated).release()));
 
   auto findResult = CO_ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
@@ -214,9 +212,8 @@ CO_TYPED_TEST(DescriptorTest, AllocatedDescriptorDiscardsWithoutInsert) {
   const std::string data = "never_inserted";
 
   {
-    auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+    auto descriptor = CO_ASSERT_OK(co_await this->cache_->allocate(
         key, data.size(), util::getCurrentTimeSec(), kTtlSecs));
-    AllocatedDescriptor descriptor(std::move(handle));
     std::memcpy(descriptor.mutableData(), data.data(), data.size());
   }
 
@@ -230,10 +227,10 @@ CO_TYPED_TEST(DescriptorTest, WriteDescriptorMutableDataFlushes) {
   const std::string updated = "UPDATED!_value";
   CO_ASSERT_EQ(original.size(), updated.size());
 
-  auto handle = CO_ASSERT_OK(co_await this->cache_->allocate(
+  auto allocated = CO_ASSERT_OK(co_await this->cache_->allocate(
       key, original.size(), util::getCurrentTimeSec(), kTtlSecs));
-  std::memcpy(handle->getMemory(), original.data(), original.size());
-  EXPECT_OK(co_await this->cache_->insert(std::move(handle)));
+  std::memcpy(allocated.mutableData(), original.data(), original.size());
+  EXPECT_OK(co_await this->cache_->insert(std::move(allocated).release()));
 
   {
     auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
