@@ -33,6 +33,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, moveOnSlabRelease);
   JSONSetVal(configJson, rebalanceStrategy);
   JSONSetVal(configJson, rebalanceMinSlabs);
+  JSONSetVal(configJson, rebalanceMinDiff);
   JSONSetVal(configJson, rebalanceDiffRatio);
 
   JSONSetVal(configJson, htBucketPower);
@@ -190,7 +191,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 1096>();
+  checkCorrectSize<CacheConfig, 1104>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(
@@ -278,6 +279,7 @@ std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {
   } else if (rebalanceStrategy == "hits") {
     auto config = HitsPerSlabStrategy::Config{
         rebalanceDiffRatio, static_cast<unsigned int>(rebalanceMinSlabs)};
+    config.minDiff = static_cast<unsigned int>(rebalanceMinDiff);
     return std::make_shared<HitsPerSlabStrategy>(config);
   } else {
     // use random strategy to just trigger some slab release.

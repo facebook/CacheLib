@@ -91,6 +91,16 @@ TEST(CacheConfigTest, NavyArenasDefaultToLegacySingleArena) {
   EXPECT_EQ(1, config.getNavyNumArenas());
 }
 
+TEST(CacheConfigTest, ParsesHitsPerSlabRebalanceMinDiff) {
+  const CacheConfig config{
+      folly::dynamic::object("poolRebalanceIntervalSec", 1)(
+          "rebalanceStrategy", "hits")("rebalanceMinDiff", 123)};
+
+  const auto strategy = config.getRebalanceStrategy();
+  ASSERT_NE(nullptr, strategy);
+  EXPECT_EQ("123", strategy->exportConfig().at("min_diff"));
+}
+
 TEST(CacheConfigTest, ParsesNavyArenas) {
   const auto arenas = folly::dynamic::array(
       folly::dynamic::object("name", "first")("sizePct", 40)("bigHashPct", 0),

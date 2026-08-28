@@ -97,6 +97,7 @@ struct CacheConfig : public JSONConfig {
   uint64_t poolRebalanceIntervalSec{0};
   std::string rebalanceStrategy;
   uint64_t rebalanceMinSlabs{1};
+  uint64_t rebalanceMinDiff{100};
   double rebalanceDiffRatio{0.25};
   bool moveOnSlabRelease{false};
 
