@@ -37,6 +37,7 @@ add_library (cachelib_cachebench
   ./util/AggregateStats.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp
+  ./util/MemoryMonitorScript.cpp
   ./util/NandWrites.cpp
   ./util/Sleep.cpp
   ./workload/BlockChunkCache.cpp
@@ -62,6 +63,7 @@ add_library (cachelib_binary_trace_gen
   ./runner/Stressor.cpp
   ./util/CacheConfig.cpp
   ./util/Config.cpp
+  ./util/MemoryMonitorScript.cpp
   ./workload/BlockChunkCache.cpp
   ./workload/BlockChunkReplayGenerator.cpp
   ./workload/PieceWiseCache.cpp
@@ -130,6 +132,7 @@ if (BUILD_TESTS)
   add_source_test (consistency/tests/ShortThreadIdTest.cpp)
   add_source_test (consistency/tests/ValueHistoryTest.cpp)
   add_source_test (consistency/tests/ValueTrackerTest.cpp)
+  add_source_test (util/tests/MemoryMonitorScriptTest.cpp)
   add_source_test (util/tests/NandWritesTest.cpp)
   add_source_test (cache/tests/TimeStampTickerTest.cpp)
 
