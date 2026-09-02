@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <utility>
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -130,7 +131,7 @@ void WorkloadGenerator::generateReqs() {
         chainSizes.push_back(util::narrow_cast<size_t>(
             workloadDist_[idx].sampleChainedValDist(gen)));
       }
-      sizes_.emplace_back(chainSizes);
+      sizes_.emplace_back(std::move(chainSizes));
       auto reqSizes = sizes_.end() - 1;
       reqs_.emplace_back(keys_[j], reqSizes->begin(), reqSizes->end());
       if (workloadDist_[idx].hasTtl()) {
