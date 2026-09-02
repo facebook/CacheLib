@@ -338,7 +338,7 @@ class RegionManager {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 
-  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_clean_regions">
+  mutable trace::Profiled<util::SharedMutex, "cachelib:navy:bc_clean_regions">
       cleanRegionsMutex_;
   mutable util::ConditionVariable cleanRegionsCond_;
   std::vector<RegionId> cleanRegions_;

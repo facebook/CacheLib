@@ -746,7 +746,12 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
           evictedCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_num_regions", numRegions_);
-  visitor("navy_bc_num_clean_regions", cleanRegions_.size());
+  size_t numCleanRegions;
+  {
+    std::shared_lock lock{cleanRegionsMutex_};
+    numCleanRegions = cleanRegions_.size();
+  }
+  visitor("navy_bc_num_clean_regions", numCleanRegions);
   visitor("navy_bc_num_clean_region_retries", cleanRegionRetries_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
