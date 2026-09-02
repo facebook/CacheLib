@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <random>
 #include <unordered_set>
 
@@ -26,6 +27,30 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+TEST(WorkloadGeneratorTest,
+     GenerateKeysWithMultipleThreadsSortsAndDeduplicates) {
+  StressorConfig config;
+  config.numKeys = 10000;
+  config.numOps = 1;
+  config.numThreads = 4;
+  config.poolDistributions.emplace_back();
+  auto& workloadConfig = config.poolDistributions.back();
+  workloadConfig.getRatio = 1.0;
+  workloadConfig.keySizeRange = std::vector<double>{1, 2};
+  workloadConfig.keySizeRangeProbability = std::vector<double>{1.0};
+  workloadConfig.valSizeRange = std::vector<double>{10, 11};
+  workloadConfig.valSizeRangeProbability = std::vector<double>{1.0};
+  config.opPoolDistribution = std::vector<double>{1.0};
+  config.keyPoolDistribution = std::vector<double>{1.0};
+
+  WorkloadGenerator keygen{config};
+  const auto& keys = keygen.getAllKeys();
+
+  ASSERT_GT(keys.size(), 1);
+  EXPECT_TRUE(std::is_sorted(keys.begin(), keys.end()));
+  EXPECT_EQ(keys.end(), std::adjacent_find(keys.begin(), keys.end()));
+}
+
 TEST(WorkloadGeneratorTest, SimplePiecewiseValueSizes) {
   StressorConfig config;
   config.numKeys = 1000;

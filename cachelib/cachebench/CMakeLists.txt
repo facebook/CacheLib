@@ -51,11 +51,14 @@ add_library (cachelib_cachebench
   )
 
 add_dependencies(cachelib_cachebench thrift_generated_files)
-target_link_libraries(cachelib_cachebench PUBLIC
-  cachelib_interface
-  cachelib_datatype
-  cachelib_allocator
-  gflags
+target_link_libraries(cachelib_cachebench
+  PUBLIC
+    cachelib_interface
+    cachelib_datatype
+    cachelib_allocator
+    gflags
+  PRIVATE
+    Boost::boost
 )
 
 add_library (cachelib_binary_trace_gen
@@ -73,10 +76,13 @@ add_library (cachelib_binary_trace_gen
   ${OBJECT_CACHE_PERSISTENCE_THRIFT_FILES}
   )
 add_dependencies(cachelib_binary_trace_gen thrift_generated_files)
-target_link_libraries(cachelib_binary_trace_gen PUBLIC
-  cachelib_datatype
-  cachelib_allocator
-  gflags
+target_link_libraries(cachelib_binary_trace_gen
+  PUBLIC
+    cachelib_datatype
+    cachelib_allocator
+    gflags
+  PRIVATE
+    Boost::boost
 )
 
 if ((CMAKE_SYSTEM_NAME STREQUAL Linux) AND

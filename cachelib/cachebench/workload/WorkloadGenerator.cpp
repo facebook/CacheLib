@@ -19,6 +19,7 @@
 #include <fmt/core.h>
 
 #include <algorithm>
+#include <boost/sort/block_indirect_sort/block_indirect_sort.hpp>
 #include <chrono>
 #include <iostream>
 #include <utility>
@@ -93,7 +94,10 @@ void WorkloadGenerator::generateKeys() {
     auto poolKeyBegin = keys_.begin() + firstKeyIndexForPool_[i];
     // past the end iterator
     auto poolKeyEnd = keys_.begin() + (firstKeyIndexForPool_[i + 1]);
-    std::sort(poolKeyBegin, poolKeyEnd);
+    boost::sort::block_indirect_sort(
+        poolKeyBegin,
+        poolKeyEnd,
+        util::narrow_cast<uint32_t>(std::max<uint64_t>(config_.numThreads, 1)));
     auto newEnd = std::unique(poolKeyBegin, poolKeyEnd);
     // update pool key boundary before invalidating iterators
     for (size_t j = i + 1; j < firstKeyIndexForPool_.size(); j++) {
