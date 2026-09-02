@@ -177,7 +177,10 @@ void WorkloadGenerator::generateKeyDistributions() {
               << std::endl;
     keyGenForPool_.emplace_back(0,
                                 util::narrow_cast<uint32_t>(numOpsForPool) - 1);
-    keyIndicesForPool_.emplace_back(numOpsForPool);
+    // The parallel generation below initializes every entry before any
+    // request can access this table.
+    keyIndicesForPool_.emplace_back(
+        std::make_unique_for_overwrite<uint32_t[]>(numOpsForPool));
 
     duration += detail::executeParallel(
         [&, this](size_t start, size_t end) {

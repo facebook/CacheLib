@@ -21,6 +21,7 @@
 #include <folly/logging/xlog.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -65,7 +66,7 @@ class WorkloadGenerator : public GeneratorBase {
   // in a pool. @keyGenForPool_ contains uniform distributions to select indices
   // contained in @keyIndicesForPool_.
   std::vector<uint32_t> firstKeyIndexForPool_;
-  std::vector<std::vector<uint32_t>> keyIndicesForPool_;
+  std::vector<std::unique_ptr<uint32_t[]>> keyIndicesForPool_;
   std::vector<std::uniform_int_distribution<uint32_t>> keyGenForPool_;
 
   std::vector<WorkloadDistribution> workloadDist_;
