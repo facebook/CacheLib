@@ -97,7 +97,7 @@ struct UseTwoF14Maps {
 
 // The following were automatically generated and may benefit from renaming.
 @thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
-@cpp.Type{name = "facebook::cachelib::objcache::test::TestString"}
+@cpp.Adapter{name = "::apache::thrift::StringTypeAdapter<facebook::cachelib::objcache::test::TestString>"}
 typedef string string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
 
 // The following were automatically generated and may benefit from renaming.
@@ -120,5 +120,5 @@ typedef map<
   string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
 > map_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_2760
 @thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
-@cpp.Type{name = "facebook::cachelib::objcache::test::TestString"}
+@cpp.Adapter{name = "::apache::thrift::StringTypeAdapter<facebook::cachelib::objcache::test::TestString>"}
 typedef string string_9300
