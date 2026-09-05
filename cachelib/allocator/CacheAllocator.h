@@ -2194,6 +2194,13 @@ class CacheAllocator : public CacheBase {
   // time.
   template <typename Fn>
   void traverseAndExpireItems(Fn&& f) {
+    // Skip the slab walk when there are no accessible primary items. An
+    // insertion racing this snapshot can be handled by the next periodic pass,
+    // as with the existing weakly consistent slab walk.
+    if (accessContainer_->getNumKeys() == 0) {
+      return;
+    }
+
     // The intent here is to scan the memory to identify candidates for reaping
     // without holding any locks. Candidates that are identified as potential
     // ones are further processed by holding the right synchronization
