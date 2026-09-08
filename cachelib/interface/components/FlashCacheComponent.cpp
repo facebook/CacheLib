@@ -262,6 +262,19 @@ UnitResult initConfig(
       device->getIOAlignedSize(persistenceConfig.metadataSize());
   return folly::unit;
 }
+
+// findToWriteGeneric() yields the handle the alloc path built; the public API
+// hands back a descriptor. Error and miss cases pass through untouched.
+Result<std::optional<WriteDescriptor>> toWriteDescriptor(
+    Result<std::optional<WriteHandle>>&& result) {
+  if (result.hasError()) {
+    return folly::makeUnexpected(std::move(result).error());
+  }
+  if (!result->has_value()) {
+    return std::optional<WriteDescriptor>{};
+  }
+  return std::optional<WriteDescriptor>{std::in_place, std::move(**result)};
+}
 } // namespace
 
 // ============================================================================
@@ -517,12 +530,12 @@ FlashCacheComponent::findToWriteGeneric(Key key) {
   co_return std::move(handle);
 }
 
-folly::coro::Task<Result<std::optional<WriteHandle>>>
+folly::coro::Task<Result<std::optional<WriteDescriptor>>>
 FlashCacheComponent::findToWrite(Key key) {
-  co_return co_await findToWriteGeneric<FlashCacheItem>(key);
+  co_return toWriteDescriptor(co_await findToWriteGeneric<FlashCacheItem>(key));
 }
 
-folly::coro::AsyncGenerator<ReadHandle> FlashCacheComponent::iterator() {
+folly::coro::AsyncGenerator<ReadDescriptor> FlashCacheComponent::iterator() {
   // Iterate over the BlockCache index and lookup each entry
   for (const auto& entry : cache_->index()) {
     auto result = co_await onWorkerThread(
@@ -532,7 +545,7 @@ folly::coro::AsyncGenerator<ReadHandle> FlashCacheComponent::iterator() {
         ReadHandle handle(*this, InlineItem);
         new (getInlineBuf(handle))
             FlashCacheItem(result.value().releaseBuffer());
-        co_yield std::move(handle);
+        co_yield ReadDescriptor(std::move(handle));
       }
     } else {
       XLOG_EVERY_MS(WARN, 250)
@@ -805,20 +818,17 @@ ConsistentFlashCacheComponent::find(Key key) {
   co_return co_await Base::find(key);
 }
 
-folly::coro::Task<Result<std::optional<WriteHandle>>>
+folly::coro::Task<Result<std::optional<WriteDescriptor>>>
 ConsistentFlashCacheComponent::findToWrite(Key key) {
   auto lock = co_await timedWlock(key, lockLatency_->findToWrite_);
   auto res = co_await Base::findToWriteGeneric<ConsistentFlashCacheItem>(key);
-  if (res.hasError()) {
-    co_return folly::makeUnexpected(std::move(res).error());
-  } else if (!res->has_value()) {
-    co_return std::nullopt;
+  if (res.hasValue() && res->has_value()) {
+    // need to hold the lock through writeBack() since the cache item stores a
+    // region descriptor
+    static_cast<ConsistentFlashCacheItem*>(res->value().get())
+        ->setLock(std::move(lock));
   }
-  // need to hold the lock through writeBack() since the cache item stores a
-  // region descriptor
-  static_cast<ConsistentFlashCacheItem*>(res->value().get())
-      ->setLock(std::move(lock));
-  co_return res;
+  co_return toWriteDescriptor(std::move(res));
 }
 
 folly::coro::Task<Result<bool>> ConsistentFlashCacheComponent::remove(Key key) {

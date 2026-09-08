@@ -78,10 +78,9 @@ CO_TYPED_TEST(CacheComponentTest, AllocateBasic) {
       co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
 
   EXPECT_EQ(descriptor.capacity(), size);
-  auto handle = std::move(descriptor).release();
-  EXPECT_EQ(handle->getKey(), key);
-  EXPECT_EQ(handle->getCreationTime(), creationTime);
-  EXPECT_EQ(handle->getExpiryTime(), creationTime + ttlSecs);
+  EXPECT_EQ(descriptor.key(), key);
+  EXPECT_EQ(descriptor.creationTime(), creationTime);
+  EXPECT_EQ(descriptor.expiryTime(), creationTime + ttlSecs);
 }
 
 CO_TYPED_TEST(CacheComponentTest, AllocateVariousSizes) {
@@ -106,8 +105,7 @@ CO_TYPED_TEST(CacheComponentTest, AllocateZeroTTL) {
   auto descriptor = CO_ASSERT_OK(
       co_await this->cache_->allocate(key, size, creationTime, ttlSecs));
   // zero TTL = infinite TTL
-  auto handle = std::move(descriptor).release();
-  EXPECT_EQ(handle->getExpiryTime(), 0);
+  EXPECT_EQ(descriptor.expiryTime(), 0);
 }
 
 CO_TYPED_TEST(CacheComponentTest, AllocateEmptyKey) {
@@ -386,8 +384,12 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteExistingItem) {
   auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
   CO_ASSERT_TRUE(writeResult.has_value());
 
-  auto& writeHandle = writeResult.value();
-  EXPECT_EQ(writeHandle->getKey(), key);
+  auto& descriptor = writeResult.value();
+  EXPECT_EQ(descriptor.key(), key);
+  CO_ASSERT_GE(descriptor.size(), originalData.size());
+  EXPECT_EQ(
+      std::memcmp(descriptor.data(), originalData.data(), originalData.size()),
+      0);
 }
 
 CO_TYPED_TEST(CacheComponentTest, FindToWriteNonExistentItem) {
@@ -410,10 +412,10 @@ CO_TYPED_TEST(CacheComponentTest, FindToWriteAndModify) {
   {
     auto writeResult = CO_ASSERT_OK(co_await this->cache_->findToWrite(key));
     CO_ASSERT_TRUE(writeResult.has_value());
-    auto& writeHandle = writeResult.value();
-    std::memcpy(writeHandle->getMemory(), modifiedData.c_str(),
+    auto& descriptor = writeResult.value();
+    CO_ASSERT_GE(descriptor.capacity(), modifiedData.size());
+    std::memcpy(descriptor.mutableData(), modifiedData.c_str(),
                 modifiedData.size());
-    writeHandle.markDirty();
   }
 
   auto readResult = CO_ASSERT_OK(co_await this->cache_->find(key));
@@ -465,12 +467,10 @@ CO_TYPED_TEST(CacheComponentTest, IteratorBasic) {
   auto iterator = this->cache_->iterator();
   while (auto item = co_await iterator.next()) {
     CO_ASSERT_TRUE(item.has_value());
-    auto& handle = item.value();
-    auto key = handle->getKey();
-    std::string keyStr(key.data(), key.size());
-    std::string data(handle->template getMemoryAs<const char>(),
-                     handle->getMemorySize());
-    foundItems[keyStr] = data;
+    const auto& descriptor = item.value();
+    const auto key = descriptor.key();
+    foundItems[std::string(key.data(), key.size())] = std::string(
+        static_cast<const char*>(descriptor.data()), descriptor.size());
   }
 
   EXPECT_EQ(foundItems.size(), items.size());
@@ -526,7 +526,7 @@ CO_TYPED_TEST(CacheComponentTest, IteratorAfterRemovals) {
   auto iterator = this->cache_->iterator();
   std::unordered_set<std::string> foundKeys;
   while (auto item = co_await iterator.next()) {
-    auto key = item.value()->getKey();
+    const auto key = item.value().key();
     foundKeys.insert(std::string(key.data(), key.size()));
   }
 
@@ -557,7 +557,7 @@ CO_TYPED_TEST(CacheComponentTest, IteratorWithExpiredItems) {
   auto iterator = this->cache_->iterator();
   std::unordered_set<std::string> foundKeys;
   while (auto item = co_await iterator.next()) {
-    auto key = item.value()->getKey();
+    const auto key = item.value().key();
     foundKeys.insert(std::string(key.data(), key.size()));
   }
 
@@ -731,12 +731,11 @@ TYPED_TEST(CacheComponentTest, MultiThreadedOperations) {
         case 3: { // findToWrite + modify
           auto writeResult = co_await this->cache_->findToWrite(key);
           if (writeResult.hasValue() && writeResult.value().has_value()) {
-            auto& writeHandle = writeResult.value().value();
+            auto& descriptor = writeResult.value().value();
             const std::string modifiedValue = "modified_" + value;
-            CO_ASSERT_GE(writeHandle->getMemorySize(), modifiedValue.size());
-            std::memcpy(writeHandle->getMemory(), modifiedValue.c_str(),
+            CO_ASSERT_GE(descriptor.capacity(), modifiedValue.size());
+            std::memcpy(descriptor.mutableData(), modifiedValue.c_str(),
                         modifiedValue.size());
-            writeHandle.markDirty();
           }
           break;
         }

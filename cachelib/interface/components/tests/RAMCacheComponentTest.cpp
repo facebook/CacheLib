@@ -123,7 +123,7 @@ CO_TEST_F(RAMCacheComponentTest, IteratorReleasesRefcounts) {
     EXPECT_OK(co_await cache_->insert(std::move(handle).release()));
   }
 
-  // Iterate and consume all handles
+  // Iterate and consume all descriptors
   {
     auto gen = cache_->iterator();
     while (auto item = co_await gen.next()) {

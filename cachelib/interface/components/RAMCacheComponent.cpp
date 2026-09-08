@@ -365,7 +365,7 @@ RAMCacheComponent::find(Key key) {
   co_return std::nullopt;
 }
 
-folly::coro::Task<Result<std::optional<WriteHandle>>>
+folly::coro::Task<Result<std::optional<WriteDescriptor>>>
 RAMCacheComponent::findToWrite(Key key) {
   stats_->findToWrite_.throughput_.calls_.inc();
   auto latencyGuard = stats_->findToWrite_.latency_.start();
@@ -373,14 +373,15 @@ RAMCacheComponent::findToWrite(Key key) {
   if (auto handle = cache_->findToWrite(key)) {
     stats_->findToWrite_.throughput_.hits_.inc();
     stats_->findToWrite_.throughput_.successes_.inc();
-    co_return toGenericHandle<WriteHandle>(*this, std::move(handle));
+    co_return WriteDescriptor(
+        toGenericHandle<WriteHandle>(*this, std::move(handle)));
   }
   stats_->findToWrite_.throughput_.misses_.inc();
   stats_->findToWrite_.throughput_.successes_.inc();
   co_return std::nullopt;
 }
 
-folly::coro::AsyncGenerator<ReadHandle> RAMCacheComponent::iterator() {
+folly::coro::AsyncGenerator<ReadDescriptor> RAMCacheComponent::iterator() {
   for (auto it = cache_->begin(); it != cache_->end(); ++it) {
     // Create a new handle (bump the refcount) rather than adopting the handle &
     // pulling it out from underneath the iterator
@@ -389,7 +390,7 @@ folly::coro::AsyncGenerator<ReadHandle> RAMCacheComponent::iterator() {
     if (result.hasValue()) {
       auto& handle = result.value();
       if (!util::isExpired(handle->getExpiryTime())) {
-        co_yield std::move(handle);
+        co_yield ReadDescriptor(std::move(handle));
       }
     } else {
       XLOG_EVERY_MS(WARN, 250) << "Failed to get handle for RAM cache item "

@@ -39,9 +39,8 @@ namespace {
 
 constexpr uint32_t kTtlSecs{3600};
 
-// AllocatedHandle IS-A WriteHandle, so an unconstrained WriteHandle&& parameter
-// would accept one and produce a WriteHandle with inserted_ == false. The
-// middle assertion is what fails if the same_as constraint is ever dropped.
+// Preserve the ownership boundary even if the handle hierarchy changes:
+// WriteDescriptor must accept only an owned WriteHandle, never an allocation.
 static_assert(std::constructible_from<WriteDescriptor, WriteHandle&&>);
 static_assert(!std::constructible_from<WriteDescriptor, AllocatedHandle&&>);
 static_assert(!std::constructible_from<WriteDescriptor, WriteHandle&>);

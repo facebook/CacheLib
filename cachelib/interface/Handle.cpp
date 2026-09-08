@@ -66,22 +66,12 @@ WriteHandle::~WriteHandle() noexcept {
   }
 }
 
-WriteHandle::WriteHandle(CacheComponent& cache,
-                         CacheItem& item,
-                         bool inserted) noexcept
-    : Handle(cache, item, inserted) {}
-
-WriteHandle::WriteHandle(CacheComponent& cache,
-                         bool inserted,
-                         InlineItemTag) noexcept
-    : Handle(cache, inserted, InlineItem) {}
-
 AllocatedHandle::AllocatedHandle(CacheComponent& cache,
                                  CacheItem& item) noexcept
-    : WriteHandle(cache, item, /* inserted */ false) {}
+    : Handle(cache, item, /* inserted */ false) {}
 
 AllocatedHandle::AllocatedHandle(CacheComponent& cache, InlineItemTag) noexcept
-    : WriteHandle(cache, /* inserted */ false, InlineItem) {}
+    : Handle(cache, /* inserted */ false, InlineItem) {}
 
 ReadHandle::ReadHandle(CacheComponent& cache, CacheItem& item) noexcept
     : Handle(cache, item, /* inserted */ true) {}

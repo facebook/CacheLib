@@ -108,13 +108,12 @@ class CacheComponent {
    * otherwise. find() is for read-only access, findToWrite() is for write
    * access.
    *
-   * The descriptor owns the underlying ReadHandle and exposes the item's bytes.
-   * Use std::move(descriptor).release() to get the handle back, e.g. to pass it
-   * to remove().
-   *
-   * NOTE: if you write to the handle returned by findToWrite(), you must *must*
-   * mark the handle as dirty in order for the cache component to flush the
-   * write to the underlying storage.
+   * The descriptors own the item's lifetime and expose its bytes. A
+   * ReadDescriptor may not be handle-backed; check isHandleBacked() before
+   * calling std::move(readDescriptor).release(), e.g. to pass the ReadHandle to
+   * remove().
+   * WriteDescriptor::mutableData() ensures mutations are flushed by the
+   * component when the descriptor is destroyed.
    *
    * @param key cache item key
    * @return a descriptor if found, std::nullopt if not found or an error result
@@ -122,7 +121,7 @@ class CacheComponent {
    */
   virtual folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
       Key key) = 0;
-  virtual folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+  virtual folly::coro::Task<Result<std::optional<WriteDescriptor>>> findToWrite(
       Key key) = 0;
 
   /**
@@ -132,16 +131,16 @@ class CacheComponent {
    *
    * auto iterator = cache->iterator();
    * while (auto item = co_await iterator.next()) {
-   *   auto&& handle = *item;
-   *   // do something with handle
+   *   auto&& descriptor = *item;
+   *   // do something with descriptor
    * }
    *
    * Expired items are NOT returned by the iterator. Also there are no
    * consistency guarantees with concurrent inserts/updates/removals.
    *
-   * @return an async generator that yields ReadHandles to cache items
+   * @return an async generator that yields ReadDescriptors for cache items
    */
-  virtual folly::coro::AsyncGenerator<ReadHandle> iterator() = 0;
+  virtual folly::coro::AsyncGenerator<ReadDescriptor> iterator() = 0;
 
   /**
    * Remove an item from cache if it is present.

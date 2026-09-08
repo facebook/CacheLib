@@ -96,9 +96,9 @@ class FlashCacheComponent : public CacheComponentWithStats {
       AllocatedHandle&& handle) override;
   folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
       Key key) override;
-  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+  folly::coro::Task<Result<std::optional<WriteDescriptor>>> findToWrite(
       Key key) override;
-  folly::coro::AsyncGenerator<ReadHandle> iterator() override;
+  folly::coro::AsyncGenerator<ReadDescriptor> iterator() override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
   UnitResult shutdown() override;
@@ -240,10 +240,10 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
 
   /**
    * Same as FlashCacheComponent::findToWrite() but runs while holding an
-   * exclusive lock. The returned handle holds the lock until it is destroyed
-   * (after write back if the handle is marked dirty).
+   * exclusive lock. The returned descriptor holds the lock until it is
+   * destroyed (after write back if it was accessed through mutableData()).
    */
-  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+  folly::coro::Task<Result<std::optional<WriteDescriptor>>> findToWrite(
       Key key) override;
 
   /**

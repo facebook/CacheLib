@@ -137,15 +137,10 @@ class WriteHandle : public Handle {
     dirty_ = dirty;
   }
 
- protected:
+ private:
   // Whether the CacheItem needs to be written back
   bool dirty_{false};
 
-  // Only used by AllocatedHandle
-  WriteHandle(CacheComponent& cache, CacheItem& item, bool inserted) noexcept;
-  WriteHandle(CacheComponent& cache, bool inserted, InlineItemTag) noexcept;
-
- private:
   WriteHandle(CacheComponent& cache, CacheItem& item) noexcept;
 
   template <typename HandleT>
@@ -157,12 +152,17 @@ class WriteHandle : public Handle {
 };
 
 /**
- * A handle for an item that has been allocated but not yet inserted. Provides
- * the same APIs as WriteHandle.
+ * A handle for an item that has been allocated but not yet inserted. Same
+ * accessors as WriteHandle, minus markDirty().
+ *
  */
-class AllocatedHandle : public WriteHandle {
+class AllocatedHandle : public Handle {
  public:
   AllocatedHandle(CacheComponent& cache, InlineItemTag) noexcept;
+
+  FOLLY_ALWAYS_INLINE CacheItem* operator->() const noexcept { return item_; }
+  FOLLY_ALWAYS_INLINE CacheItem& operator*() const noexcept { return *item_; }
+  FOLLY_ALWAYS_INLINE CacheItem* get() const noexcept { return item_; }
 
  private:
   AllocatedHandle(CacheComponent& cache, CacheItem& item) noexcept;

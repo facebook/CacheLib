@@ -132,9 +132,9 @@ class RAMCacheComponent : public CacheComponentWithStats {
       AllocatedHandle&& handle) override;
   folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
       Key key) override;
-  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+  folly::coro::Task<Result<std::optional<WriteDescriptor>>> findToWrite(
       Key key) override;
-  folly::coro::AsyncGenerator<ReadHandle> iterator() override;
+  folly::coro::AsyncGenerator<ReadDescriptor> iterator() override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
   UnitResult shutdown() override;

@@ -128,37 +128,30 @@ class TestCacheComponent : public CacheComponent {
     co_return std::nullopt;
   }
 
-  template <typename HandleT>
-  Result<std::optional<HandleT>> findImpl(Key key) {
+  template <typename DescriptorT, typename HandleT>
+  Result<std::optional<DescriptorT>> findImpl(Key key) {
     auto it = cachedItems_.find(key);
-    if (it != cachedItems_.end()) {
-      auto result = tryCreateHandle<HandleT>(*this, *it->second);
-      if (result.hasError()) {
-        return folly::makeUnexpected(std::move(result).error());
-      }
-      return std::move(result).value();
+    if (it == cachedItems_.end()) {
+      return std::optional<DescriptorT>{};
     }
-    return std::nullopt;
+    auto result = tryCreateHandle<HandleT>(*this, *it->second);
+    if (result.hasError()) {
+      return folly::makeUnexpected(std::move(result).error());
+    }
+    return std::optional<DescriptorT>{std::in_place, std::move(result).value()};
   }
 
   folly::coro::Task<Result<std::optional<ReadDescriptor>>> find(
       Key key) override {
-    auto result = findImpl<ReadHandle>(key);
-    if (result.hasError()) {
-      co_return folly::makeUnexpected(std::move(result).error());
-    }
-    if (!result->has_value()) {
-      co_return std::nullopt;
-    }
-    co_return ReadDescriptor(std::move(result->value()));
+    co_return findImpl<ReadDescriptor, ReadHandle>(key);
   }
 
-  folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+  folly::coro::Task<Result<std::optional<WriteDescriptor>>> findToWrite(
       Key key) override {
-    co_return findImpl<WriteHandle>(key);
+    co_return findImpl<WriteDescriptor, WriteHandle>(key);
   }
 
-  folly::coro::AsyncGenerator<ReadHandle> iterator() override { co_return; }
+  folly::coro::AsyncGenerator<ReadDescriptor> iterator() override { co_return; }
 
   folly::coro::Task<Result<bool>> remove(Key key) override {
     auto itemIt = cachedItems_.find(key);
@@ -246,18 +239,26 @@ class InterfaceTest : public ::testing::Test {
     EXPECT_OK(co_await cache_.insert(std::move(allocHandle).release()));
   }
 
+  void checkItemFields(const WriteDescriptor& descriptor) {
+    ASSERT_TRUE(descriptor);
+    EXPECT_EQ(descriptor.creationTime(), 1000);
+    EXPECT_EQ(descriptor.expiryTime(), 1010);
+    EXPECT_EQ(descriptor.key(), key_);
+    EXPECT_EQ(std::memcmp(descriptor.data(), data_, sizeof(data_)), 0);
+    EXPECT_EQ(descriptor.size(), 128);
+  }
+
   template <typename HandleT>
   void checkItemFields(const HandleT& handle) {
     ASSERT_TRUE(handle);
     EXPECT_EQ(handle->getCreationTime(), 1000);
     EXPECT_EQ(handle->getExpiryTime(), 1010);
-    EXPECT_EQ(handle->getKey(), this->key_);
-    EXPECT_EQ(handle->getKeySize(), this->key_.size());
-    EXPECT_EQ(
-        std::memcmp(handle->getMemory(), this->data_, sizeof(this->data_)), 0);
+    EXPECT_EQ(handle->getKey(), key_);
+    EXPECT_EQ(handle->getKeySize(), key_.size());
+    EXPECT_EQ(std::memcmp(handle->getMemory(), data_, sizeof(data_)), 0);
     EXPECT_EQ(handle->getMemorySize(), 128);
     EXPECT_EQ(handle->getTotalSize(),
-              sizeof(TestCacheItem) + this->key_.size() + 128);
+              sizeof(TestCacheItem) + key_.size() + 128);
   }
 
   std::string keyData_{"test_key"};
@@ -333,10 +334,11 @@ CO_TEST_F(InterfaceTest, basic) {
   checkItemFields(readHandle);
 
   {
-    auto writeHandle = CO_ASSERT_OK(co_await cache_.findToWrite(key_));
-    CO_ASSERT_TRUE(writeHandle.has_value());
-    checkItemFields(writeHandle.value());
-    writeHandle->markDirty();
+    auto writeDescriptor = CO_ASSERT_OK(co_await cache_.findToWrite(key_));
+    CO_ASSERT_TRUE(writeDescriptor.has_value());
+    checkItemFields(writeDescriptor.value());
+    // Marks the handle dirty, which the writeBacks_ check below depends on.
+    writeDescriptor->mutableData();
   }
   EXPECT_EQ(cache_.writeBacks_, 1);
 

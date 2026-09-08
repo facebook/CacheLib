@@ -19,7 +19,6 @@
 #include <folly/CPortability.h>
 #include <folly/logging/xlog.h>
 
-#include <concepts>
 #include <cstdint>
 #include <utility>
 #include <variant>
@@ -106,9 +105,9 @@ class ReadDescriptor {
     return std::holds_alternative<ReadHandle>(owner_);
   }
 
-  // For component.remove(std::move(descriptor).release()).
+  // Only valid for a handle-backed descriptor.
   ReadHandle release() && noexcept {
-    XDCHECK(isHandleBacked());
+    XCHECK(isHandleBacked());
     auto handle = std::move(std::get<ReadHandle>(owner_));
     owner_.emplace<Empty>();
     return handle;
@@ -135,14 +134,8 @@ class ReadDescriptor {
  */
 class WriteDescriptor {
  public:
-  // same_as constrains the *deduced* type. A plain WriteHandle&& would accept
-  // an AllocatedHandle rvalue -- it IS-A WriteHandle and adds no members --
-  // yielding a WriteHandle with inserted_ == false, which ~WriteHandle() writes
-  // back while release() charges the same bytes as a hole. It also rejects
-  // lvalues, preserving explicit ownership transfer.
-  template <std::same_as<WriteHandle> H>
-  explicit WriteDescriptor(H&& handle) noexcept
-      : handle_(std::forward<H>(handle)) {}
+  explicit WriteDescriptor(WriteHandle&& handle) noexcept
+      : handle_(std::move(handle)) {}
 
   ~WriteDescriptor() noexcept = default;
 
@@ -153,6 +146,21 @@ class WriteDescriptor {
 
   FOLLY_ALWAYS_INLINE explicit operator bool() const noexcept {
     return static_cast<bool>(handle_);
+  }
+
+  FOLLY_ALWAYS_INLINE Key key() const noexcept {
+    checkNotEmpty();
+    return handle_->getKey();
+  }
+
+  FOLLY_ALWAYS_INLINE uint32_t creationTime() const noexcept {
+    checkNotEmpty();
+    return handle_->getCreationTime();
+  }
+
+  FOLLY_ALWAYS_INLINE uint32_t expiryTime() const noexcept {
+    checkNotEmpty();
+    return handle_->getExpiryTime();
   }
 
   // Reading does not mark the handle dirty; mutableData() does.
@@ -175,10 +183,7 @@ class WriteDescriptor {
 
   // Destination-side spelling of size(); an in-place update writes exactly the
   // bytes already there.
-  FOLLY_ALWAYS_INLINE uint32_t capacity() const noexcept {
-    checkNotEmpty();
-    return handle_->getMemorySize();
-  }
+  FOLLY_ALWAYS_INLINE uint32_t capacity() const noexcept { return size(); }
 
  private:
   // Moving leaves the handle empty, so its operator-> would dereference null.
@@ -209,6 +214,21 @@ class AllocatedDescriptor {
 
   FOLLY_ALWAYS_INLINE explicit operator bool() const noexcept {
     return static_cast<bool>(handle_);
+  }
+
+  FOLLY_ALWAYS_INLINE Key key() const noexcept {
+    checkNotEmpty();
+    return handle_->getKey();
+  }
+
+  FOLLY_ALWAYS_INLINE uint32_t creationTime() const noexcept {
+    checkNotEmpty();
+    return handle_->getCreationTime();
+  }
+
+  FOLLY_ALWAYS_INLINE uint32_t expiryTime() const noexcept {
+    checkNotEmpty();
+    return handle_->getExpiryTime();
   }
 
   // Must NOT mark the handle dirty, unlike WriteDescriptor: the item is not
