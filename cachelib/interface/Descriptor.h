@@ -28,6 +28,8 @@
 
 namespace facebook::cachelib::interface {
 
+class Cache;
+
 /**
  * Source side of a transfer: hands a cache item's bytes to a connector, the way
  * a Handle hands them to a user. Move-only, like the handle it owns.
@@ -129,8 +131,9 @@ class ReadDescriptor {
 
 /**
  * Destination side of an in-place update: wraps the WriteHandle from
- * findToWrite(). The item is already inserted, so there is nothing to hand
- * back -- ~WriteHandle() flushes once mutableData() has marked it dirty.
+ * findToWrite(). The item is already inserted, so a connector has nothing to
+ * hand back -- ~WriteHandle() flushes once mutableData() has marked it dirty.
+ * Only Cache reclaims the handle, to build the user-facing WriteHandle.
  */
 class WriteDescriptor {
  public:
@@ -186,6 +189,10 @@ class WriteDescriptor {
   FOLLY_ALWAYS_INLINE uint32_t capacity() const noexcept { return size(); }
 
  private:
+  // Cache-only, unlike the sibling descriptors' public release(): handing the
+  // handle out drops the guarantee that mutable access marks it dirty.
+  WriteHandle release() && noexcept { return std::move(handle_); }
+
   // Moving leaves the handle empty, so its operator-> would dereference null.
   FOLLY_ALWAYS_INLINE void checkNotEmpty() const noexcept {
     XDCHECK(static_cast<bool>(handle_))
@@ -193,6 +200,8 @@ class WriteDescriptor {
   }
 
   WriteHandle handle_;
+
+  friend class Cache;
 };
 
 /**

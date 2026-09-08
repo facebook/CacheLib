@@ -138,6 +138,10 @@ class CacheComponent {
    * Expired items are NOT returned by the iterator. Also there are no
    * consistency guarantees with concurrent inserts/updates/removals.
    *
+   * As with find(), yielded descriptors are always handle-backed, so
+   * std::move(descriptor).release() is valid. Detached copies are not
+   * iterable.
+   *
    * @return an async generator that yields ReadDescriptors for cache items
    */
   virtual folly::coro::AsyncGenerator<ReadDescriptor> iterator() = 0;

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 add_library (cachelib_interface
+  Cache.cpp
   CacheItem.cpp
   Handle.cpp
   MemcpyConnector.cpp
@@ -64,6 +65,7 @@ if (BUILD_TESTS)
 
   # GCC ICE in gimplify_var_or_parm_decl with coroutine test macros
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_source_test (tests/CacheTest.cpp)
     add_source_test (tests/InterfaceTest.cpp)
     add_source_test (tests/DescriptorTest.cpp)
     add_source_test (tests/MemcpyConnectorTest.cpp)
