@@ -504,6 +504,8 @@ class ObjectCacheTest : public ::testing::Test {
         .setDelayCacheWorkersStart()
         .setItemReaperInterval(std::chrono::milliseconds{10})
         .setPreRemoveCb([&](const ObjectCachePreRemoveData& data) {
+          EXPECT_EQ(data.context == RemoveContext::kEviction,
+                    data.isEviction());
           const char* context = "unknown";
           switch (data.context) {
           case RemoveContext::kEviction:
@@ -520,8 +522,9 @@ class ObjectCacheTest : public ::testing::Test {
         })
         .setItemDestructor([&](ObjectCacheDestructorData data) {
           recordEvent(fmt::format(
-              "destroy:{}{}",
+              "destroy:{}:{}{}",
               data.key.str(),
+              data.isEviction() ? "evicted" : "removed",
               data.removedBySuccessfulReplacement ? ":replacement" : ""));
           data.deleteObject<Foo>();
         });
@@ -571,14 +574,14 @@ class ObjectCacheTest : public ::testing::Test {
 
     const std::vector<std::string> expected{
         "pre:evicted:evicted",
-        "destroy:evicted",
+        "destroy:evicted:evicted",
         "pre:explicit:removed",
-        "destroy:explicit",
+        "destroy:explicit:removed",
         "pre:expired:expired",
-        "destroy:expired",
-        "destroy:replacement:replacement",
+        "destroy:expired:removed",
+        "destroy:replacement:removed:replacement",
         "pre:replacement:removed",
-        "destroy:replacement",
+        "destroy:replacement:removed",
     };
     std::lock_guard lock(eventsMutex);
     EXPECT_EQ(expected, events);

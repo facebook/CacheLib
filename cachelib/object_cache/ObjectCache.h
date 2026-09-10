@@ -75,6 +75,10 @@ struct ObjectCacheDestructorData {
         lastAccessTime(lastAccessTime),
         removedBySuccessfulReplacement(removedBySuccessfulReplacement) {}
 
+  bool isEviction() const noexcept {
+    return context == ObjectCacheDestructorContext::kEvicted;
+  }
+
   // release the evicted/removed/expired object memory
   template <typename T>
   void deleteObject() {
@@ -117,6 +121,10 @@ struct ObjectCachePreRemoveData {
         expiryTime(expiry),
         creationTime(creation),
         lastAccessTime(lastAccess) {}
+
+  bool isEviction() const noexcept {
+    return context == RemoveContext::kEviction;
+  }
 
   // This data contains non-owning views into the item being removed. The data,
   // key bytes, and object pointer are valid only during the callback.
