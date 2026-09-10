@@ -356,7 +356,8 @@ class BinaryFileStream {
     struct stat fileStat;
     if (fstat(fd_, &fileStat) == -1) {
       close(fd_);
-      XLOGF(INFO, "Error reading file size {}", filePath);
+      fd_ = -1;
+      XLOGF(FATAL, "Error reading file size {}", filePath);
     }
     size_t* binaryData = reinterpret_cast<size_t*>(
         mmap(nullptr, fileStat.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE,
@@ -384,7 +385,11 @@ class BinaryFileStream {
     releaseIdx_ = nRelease_ * releaseCount_;
   }
 
-  ~BinaryFileStream() { close(fd_); }
+  ~BinaryFileStream() {
+    if (fd_ >= 0) {
+      close(fd_);
+    }
+  }
 
   uint64_t getNumReqs() { return nreqs_; }
 
