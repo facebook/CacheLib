@@ -138,6 +138,12 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   // BlockCacheConfig::setCleanRegions() in NavyConfig.cpp
   bcConfig.numInMemBuffers = 2 * config.navyCleanRegions;
   bcConfig.checksum = config.navyDataChecksum;
+  bcConfig.indexConfig.setNumSparseMapBuckets(config.navyNumSparseMapBuckets)
+      .setNumBucketsPerMutex(config.navyNumBucketsPerMutex);
+  if (config.navyEnableItemHistoryTracking) {
+    bcConfig.indexConfig.enableTrackItemHistory();
+  }
+  bcConfig.indexConfig.validate();
   // Note: LRU is not yet supported
   if (config.navySegmentedFifoSegmentRatio.empty() ||
       config.navySegmentedFifoSegmentRatio.size() == 1) {
@@ -174,7 +180,6 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   //  eventTracker
   //  inMemBufFlushRetryLimit
   //  preciseRemove
-  //  indexConfig
 
   utils::CoroFiberAdapter::Config executorConfig{
       .numThreads = config.fccCoroFiberAdapterNumThreads,

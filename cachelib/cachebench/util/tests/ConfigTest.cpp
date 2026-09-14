@@ -211,6 +211,14 @@ TEST(CacheConfigTest, NavyRegionManagerFlushAsyncDefaultsDisabled) {
   EXPECT_FALSE(config.navyRegionManagerFlushAsync);
 }
 
+TEST(CacheConfigTest, ParsesNavySparseMapIndexConfig) {
+  const CacheConfig config{folly::dynamic::object(
+      "navyNumSparseMapBuckets", 32 * 1024)("navyNumBucketsPerMutex", 128)};
+
+  EXPECT_EQ(32 * 1024, config.navyNumSparseMapBuckets);
+  EXPECT_EQ(128, config.navyNumBucketsPerMutex);
+}
+
 TEST(CacheConfigTest, SlabAsanPoisoningDefaultsDisabled) {
   const CacheConfig config{folly::dynamic::object()};
 

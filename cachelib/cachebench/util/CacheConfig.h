@@ -21,6 +21,7 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
 #include "cachelib/cachebench/util/MemoryMonitorScript.h"
 #include "cachelib/common/Ticker.h"
@@ -222,6 +223,14 @@ struct CacheConfig : public JSONConfig {
   // Enable item history tracking in Navy's BlockCache index.
   // Required by reinsertion policies that use item access history.
   bool navyEnableItemHistoryTracking{false};
+
+  // Number of bucket maps in Navy's SparseMapIndex.
+  uint32_t navyNumSparseMapBuckets{
+      navy::BlockCacheIndexConfig::kDefaultNumSparseMapBuckets};
+
+  // Number of consecutive SparseMapIndex bucket maps protected by each mutex.
+  uint32_t navyNumBucketsPerMutex{
+      navy::BlockCacheIndexConfig::kDefaultNumBucketsPerMutex};
 
   // number of asynchronous worker thread for navy read operation.
   uint32_t navyReaderThreads{32};
