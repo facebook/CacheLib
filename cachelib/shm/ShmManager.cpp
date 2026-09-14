@@ -332,7 +332,7 @@ void ShmManager::removeUnAttachedSegments() {
   while (it != nameToKey_.end()) {
     const auto name = it->first;
     // check if the segment is attached.
-    if (segments_.find(name) == segments_.end()) { // not attached
+    if (!segments_.contains(name)) { // not attached
       if (!removeSegByName(usePosix_, uniqueIdForName(name),
                            hugePageMountDir_)) {
         removeSegByName(usePosix_, oldUniqueIdForName(name), hugePageMountDir_);
@@ -353,8 +353,8 @@ ShmAddr ShmManager::createShm(const std::string& shmName,
   // attached or mapped
   removeShm(shmName);
 
-  DCHECK(segments_.find(shmName) == segments_.end());
-  DCHECK(nameToKey_.find(shmName) == nameToKey_.end());
+  DCHECK(!segments_.contains(shmName));
+  DCHECK(!nameToKey_.contains(shmName));
 
   std::unique_ptr<ShmSegment> newSeg;
   try {
@@ -463,8 +463,8 @@ bool ShmManager::removeShm(const std::string& shmName) {
         removeSegByName(usePosix_, oldUniqueIdForName(shmName),
                         hugePageMountDir_);
     if (!wasPresent) {
-      DCHECK(segments_.end() == segments_.find(shmName));
-      DCHECK(nameToKey_.end() == nameToKey_.find(shmName));
+      DCHECK(!segments_.contains(shmName));
+      DCHECK(!nameToKey_.contains(shmName));
       return false;
     }
   }
