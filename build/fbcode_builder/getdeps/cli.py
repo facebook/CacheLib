@@ -967,6 +967,15 @@ def parse_args():
         default=False,
     )
     add_common_arg(
+        "--vendor-dir",
+        help=(
+            "Take third party sources from <vendor-dir>/<project>, as populated "
+            "by the vendor command, and fail rather than download anything "
+            "that is missing there"
+        ),
+        default=None,
+    )
+    add_common_arg(
         "-v",
         "--verbose",
         help="Print more output",

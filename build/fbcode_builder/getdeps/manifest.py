@@ -32,6 +32,7 @@ from .expr import ExprNode, parse_expr
 from .fetcher import (
     ArchiveFetcher,
     GitFetcher,
+    LocalDirFetcher,
     PreinstalledNopFetcher,
     ShipitTransformerFetcher,
     SimpleShipitTransformerFetcher,
@@ -611,6 +612,17 @@ class ManifestParser:
                 if package_fetcher.packages_are_installed():
                     # pyre-fixme[7]: Expected `Fetcher` but got `SystemPackageFetcher`.
                     return package_fetcher
+
+        if build_options.vendor_dir:
+            vendored = os.path.join(build_options.vendor_dir, self.name)
+            if not os.path.isdir(vendored):
+                raise Exception(
+                    f"project {self.name} is not present in "
+                    f"{build_options.vendor_dir}; populate it with "
+                    "`getdeps.py vendor` using the same options"
+                )
+            # pyre-fixme[7]: Expected `Fetcher` but got `LocalDirFetcher`.
+            return LocalDirFetcher(vendored)
 
         if repo_url:
             rev = self.get("git", "rev")

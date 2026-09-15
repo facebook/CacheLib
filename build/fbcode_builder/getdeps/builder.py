@@ -226,8 +226,12 @@ class BuilderBase:
         self._build(reconfigure=reconfigure)
 
         if self.build_opts.free_up_disk:
-            # don't clean --src-dir=. case as user may want to build again or run tests on the build
-            if self.src_dir.startswith(self.build_opts.scratch_dir) and os.path.isdir(
+            # don't clean --src-dir=. case as user may want to build again or
+            # run tests on the build; vendored sources are ours to clean up after.
+            managed = [self.build_opts.scratch_dir]
+            if self.build_opts.vendor_dir:
+                managed.append(self.build_opts.vendor_dir)
+            if self.src_dir.startswith(tuple(managed)) and os.path.isdir(
                 self.build_dir
             ):
                 if os.path.islink(self.build_dir):
