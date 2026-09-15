@@ -192,6 +192,54 @@ class FetchCmd(ProjectCmdBase):
             fetcher.update()
 
 
+@cmd("vendor", "copy the sources of a project's dependencies into a directory")
+class VendorCmd(ProjectCmdBase):
+    """Populate a directory with one source tree per third-party dependency,
+    analogous to `cargo vendor`, so that a later build can run without
+    network access (see --vendor-dir)."""
+
+    def setup_project_cmd_parser(self, parser):
+        parser.add_argument(
+            "--output-dir",
+            required=True,
+            help=(
+                "Directory to populate; each dependency is copied "
+                "to <output-dir>/<project>"
+            ),
+        )
+        parser.add_argument(
+            "--host-type",
+            help="Vendor deps for this host type rather than the current system",
+        )
+
+    def run_project_cmd(self, args, loader, manifest):
+        os.makedirs(args.output_dir, exist_ok=True)
+        vendored = []
+        for m in loader.manifests_in_dependency_order():
+            if m == manifest:
+                continue
+            fetcher = loader.create_fetcher(m)
+            if isinstance(fetcher, SystemPackageFetcher):
+                # Satisfied by system packages; nothing to vendor
+                continue
+            fetcher.update()
+            dest = os.path.join(args.output_dir, m.name)
+            if os.path.exists(dest):
+                shutil.rmtree(dest)
+            print("Vendoring %s -> %s" % (m.name, dest))
+            # Follow symlinks so the result is self-contained: subproject
+            # fetchers link into the scratch dir, which won't exist offline.
+            shutil.copytree(
+                fetcher.get_src_dir(),
+                dest,
+                ignore=shutil.ignore_patterns(".git"),
+                ignore_dangling_symlinks=True,
+            )
+            vendored.append("%s %s\n" % (m.name, fetcher.hash()))
+        with open(os.path.join(args.output_dir, "getdeps-vendor.txt"), "w") as f:
+            f.writelines(vendored)
+
+
 @cmd("install-system-deps", "Install system packages to satisfy the deps for a project")
 class InstallSysDepsCmd(ProjectCmdBase):
     def setup_project_cmd_parser(self, parser):
@@ -917,6 +965,15 @@ def parse_args():
         help="Allow satisfying third party deps from installed system packages",
         action="store_true",
         default=False,
+    )
+    add_common_arg(
+        "--vendor-dir",
+        help=(
+            "Take third party sources from <vendor-dir>/<project>, as populated "
+            "by the vendor command, and fail rather than download anything "
+            "that is missing there"
+        ),
+        default=None,
     )
     add_common_arg(
         "-v",
