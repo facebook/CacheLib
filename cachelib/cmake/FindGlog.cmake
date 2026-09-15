@@ -18,8 +18,22 @@
 # GLOG_FOUND - system has Glog
 # GLOG_INCLUDE_DIRS - the Glog include directories
 # GLOG_LIBRARIES - link these to use Glog
+# glog::glog - imported target, preferred over the variables above
 
 include(FindPackageHandleStandardArgs)
+
+# glog >= 0.7 only compiles when consumers see its exported target, which
+# carries the GLOG_USE_GLOG_EXPORT definition. Prefer the upstream config and
+# derive this module's documented variables from it; GLOG_LIBRARIES names the
+# target so that linking through the variable still picks up the definition.
+find_package(glog CONFIG QUIET)
+if (TARGET glog::glog)
+  get_target_property(GLOG_INCLUDE_DIR glog::glog INTERFACE_INCLUDE_DIRECTORIES)
+  set(GLOG_INCLUDE_DIRS ${GLOG_INCLUDE_DIR})
+  set(GLOG_LIBRARIES glog::glog)
+  set(GLOG_FOUND TRUE)
+  return()
+endif()
 
 find_library(GLOG_LIBRARY glog
   PATHS ${GLOG_LIBRARYDIR})
