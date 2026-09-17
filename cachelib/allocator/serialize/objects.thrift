@@ -49,6 +49,7 @@ struct NvmCacheMetadata {
   3: bool safeShutDown = false;
   4: bool encryptionEnabled = false;
   5: bool truncateAllocSize = false;
+  6: i64 lastPersistTimeMs = 0;
 }
 
 struct CompactCacheMetadataObject {

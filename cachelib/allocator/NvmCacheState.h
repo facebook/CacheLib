@@ -67,7 +67,10 @@ class NvmCacheState {
   bool wasCleanShutDown() const;
 
   // mark the nvmcache as safely shutdown.
-  void markSafeShutDown();
+  void markSafeShutDown(uint64_t lastPersistTimeMs = 0);
+
+  // duration of the persist recorded by the previous clean shutdown, 0 if none
+  uint64_t getLastPersistTimeMs() const { return lastPersistTimeMs_; }
 
   // clear the previous state associated with the nvmcache
   void clearPrevState();
@@ -92,6 +95,9 @@ class NvmCacheState {
 
   // was nvm cache cleanly shut down previously
   bool wasCleanshutDown_{false};
+
+  // persist duration read back from the previous clean shutdown
+  uint64_t lastPersistTimeMs_{0};
 
   // time when NvmCache was first created
   time_t creationTime_{0};

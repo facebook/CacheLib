@@ -6045,7 +6045,7 @@ std::optional<bool> CacheAllocator<CacheTrait>::saveNvmCache() {
     return false;
   }
 
-  nvmCacheState_.markSafeShutDown();
+  nvmCacheState_.markSafeShutDown(nvmCache_->getLastPersistTimeMs());
   return true;
 }
 
@@ -6608,6 +6608,10 @@ util::StatsMap CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
                     reasonCount(StartTruncateReason::kNoUsableState));
     ret.insertCount("start_truncated_dram_cache_new",
                     reasonCount(StartTruncateReason::kDramCacheNew));
+    // The previous shutdown's value: the stats exporters are gone by the time
+    // persist runs.
+    ret.insertCount("navy_persist_time_ms",
+                    nvmCacheState_.getLastPersistTimeMs());
   }
   return ret;
 }

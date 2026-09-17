@@ -83,6 +83,24 @@ TEST_F(NvmCacheStateTest, ClearState) {
   }
 }
 
+TEST_F(NvmCacheStateTest, LastPersistTime) {
+  auto dir = getCacheDir();
+
+  {
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
+    ASSERT_EQ(0, s.getLastPersistTimeMs());
+    s.markSafeShutDown(1234);
+  }
+
+  {
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
+    ASSERT_TRUE(s.wasCleanShutDown());
+    ASSERT_EQ(1234, s.getLastPersistTimeMs());
+  }
+}
+
 TEST_F(NvmCacheStateTest, CreationTime) {
   auto dir = getCacheDir();
 

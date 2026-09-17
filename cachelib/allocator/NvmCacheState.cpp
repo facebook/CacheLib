@@ -111,6 +111,7 @@ void NvmCacheState::restoreState() {
 
     auto metadata = loadMetadata(getFileNameFor(kNvmCacheState));
     wasCleanshutDown_ = *metadata.safeShutDown();
+    lastPersistTimeMs_ = static_cast<uint64_t>(*metadata.lastPersistTimeMs());
 
     if (!shouldStartFresh()) {
       if (*metadata.nvmFormatVersion() == kCacheNvmFormatVersion &&
@@ -155,7 +156,7 @@ void NvmCacheState::clearPrevState() {
   ftruncate(metadataFile_->fd(), 0);
 }
 
-void NvmCacheState::markSafeShutDown() {
+void NvmCacheState::markSafeShutDown(uint64_t lastPersistTimeMs) {
   XDCHECK(metadataFile_);
   serialization::NvmCacheMetadata metadata;
   *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
@@ -163,6 +164,7 @@ void NvmCacheState::markSafeShutDown() {
   *metadata.safeShutDown() = true;
   *metadata.encryptionEnabled() = encryptionEnabled_;
   *metadata.truncateAllocSize() = truncateAllocSize_;
+  *metadata.lastPersistTimeMs() = static_cast<int64_t>(lastPersistTimeMs);
   saveMetadata(*metadataFile_, metadata);
 }
 

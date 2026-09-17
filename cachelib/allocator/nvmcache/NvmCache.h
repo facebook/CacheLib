@@ -257,6 +257,10 @@ class NvmCache {
   // Returns true if shutdown was performed properly, false otherwise.
   bool shutDown();
 
+  // How long the persist inside shutDown() took. Only meaningful after a
+  // successful shutDown().
+  uint64_t getLastPersistTimeMs() const { return lastPersistTimeMs_; }
+
   // blocks until all in-flight ops are flushed to the device. To be used when
   // there are no more operations being enqueued.
   void flushPendingOps();
@@ -567,6 +571,8 @@ class NvmCache {
   const Config config_;
   C& cache_;                            //< cache allocator
   std::atomic<bool> navyEnabled_{true}; //< switch to turn off/on navy
+
+  uint64_t lastPersistTimeMs_{0};
 
   const size_t numShards_;
 
@@ -1717,7 +1723,9 @@ bool NvmCache<C>::shutDown() {
       }
     }
 
+    const auto persistStart = util::getCurrentTimeMs();
     navyCache_->persist();
+    lastPersistTimeMs_ = util::getCurrentTimeMs() - persistStart;
   } catch (const std::exception& e) {
     XLOG(ERR) << "Got error persisting cache: " << e.what();
     return false;

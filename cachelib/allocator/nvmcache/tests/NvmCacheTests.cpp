@@ -1597,6 +1597,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("start_truncated_no_cache_dir"));
   EXPECT_TRUE(cs("start_truncated_no_usable_state"));
   EXPECT_TRUE(cs("start_truncated_dram_cache_new"));
+  EXPECT_TRUE(cs("navy_persist_time_ms"));
 
   // navy::OrderedThreadPoolJobScheduler
   EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));
