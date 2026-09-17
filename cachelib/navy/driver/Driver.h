@@ -228,6 +228,7 @@ class Driver final : public AbstractCache {
   // Set by recover(), not persist(): persist() runs after the stats exporters
   // are gone.
   AtomicCounter recoverTimeMs_;
+  AtomicCounter metadataRecoveredBytes_;
 
   FRIEND_TEST(Driver, MultiRecovery);
   FRIEND_TEST(Driver, EstimateWriteSize);

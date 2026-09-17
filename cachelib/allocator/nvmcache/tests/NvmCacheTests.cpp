@@ -1590,6 +1590,13 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_metadata_size_bytes"));
   EXPECT_TRUE(cs("navy_metadata_estimated_bytes"));
   EXPECT_TRUE(cs("navy_recover_time_ms"));
+  EXPECT_TRUE(cs("navy_metadata_recovered_bytes"));
+
+  // CacheAllocator
+  EXPECT_TRUE(cs("start_truncated"));
+  EXPECT_TRUE(cs("start_truncated_no_cache_dir"));
+  EXPECT_TRUE(cs("start_truncated_no_usable_state"));
+  EXPECT_TRUE(cs("start_truncated_dram_cache_new"));
 
   // navy::OrderedThreadPoolJobScheduler
   EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));

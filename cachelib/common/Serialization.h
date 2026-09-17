@@ -175,6 +175,10 @@ class RecordReader {
   virtual ~RecordReader() = default;
   virtual std::unique_ptr<folly::IOBuf> readRecord() = 0;
   virtual bool isEnd() const = 0;
+
+  // Current read position in bytes, or 0 if the implementation does not track
+  // it.
+  virtual uint64_t getCurPos() const { return 0; }
 };
 
 // record reader and write implemmentations that use a folly io queue as

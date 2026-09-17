@@ -263,6 +263,10 @@ class DeviceMetaDataReader final : public RecordReader {
     return !valid;
   }
 
+  // Block-granular: offset_ advances a block at a time, so this rounds up to
+  // the block holding the last record read.
+  uint64_t getCurPos() const override { return offset_; }
+
  private:
   static constexpr size_t kBlockSizeDefault = 4096;
   Device& dev_;

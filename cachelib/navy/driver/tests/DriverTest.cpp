@@ -24,6 +24,7 @@
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/engine/NoopEngine.h"
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
@@ -725,6 +726,68 @@ TEST(Driver, RecoveryError) {
 
   driver->persist();
   EXPECT_FALSE(driver->recover());
+}
+
+// The counters must cover every engine of every pair. Prod runs three pairs,
+// so a single-pair check would not catch a skipped engine.
+TEST(Driver, MetadataCounters) {
+  // Both set by makeDriverConfig() below.
+  constexpr uint64_t kMetadataSize = 3 * 1024 * 1024;
+  constexpr uint64_t kBlockSize = 4096;
+
+  // Distinct lengths, so dropping any one engine changes the total.
+  const std::vector<std::string> names = {"large0", "small0-wider",
+                                          "large1-widest", "small1"};
+
+  // MockEngine::persist() writes one record holding the name.
+  uint64_t expectedBytes = 0;
+  for (const auto& name : names) {
+    expectedBytes += folly::recordio_helpers::headerSize() + name.size();
+  }
+
+  auto ex = makeJobScheduler();
+  auto config = makeDriverConfig(
+      std::make_unique<testing::NiceMock<MockEngine>>(names[0]),
+      std::make_unique<testing::NiceMock<MockEngine>>(names[1], nullptr, 32),
+      std::move(ex));
+  config.enginePairs.push_back(makeEnginePair(
+      config.scheduler.get(),
+      std::make_unique<testing::NiceMock<MockEngine>>(names[2]),
+      std::make_unique<testing::NiceMock<MockEngine>>(names[3], nullptr, 20),
+      20));
+  config.selector = [](HashedKey) { return 0; };
+
+  auto* device = config.device.get();
+  auto driver = std::make_unique<Driver>(std::move(config));
+
+  std::unordered_map<std::string, double> counters;
+  auto collect = [&counters, &driver]() {
+    counters.clear();
+    driver->getCounters(
+        CounterVisitor{[&counters](folly::StringPiece name, double value) {
+          counters[name.str()] = value;
+        }});
+  };
+
+  collect();
+  EXPECT_EQ(kMetadataSize, counters["navy_metadata_size_bytes"]);
+  EXPECT_EQ(expectedBytes, counters["navy_metadata_estimated_bytes"]);
+
+  driver->persist();
+
+  auto rr = createMetadataRecordReader(*device, kMetadataSize);
+  for (size_t i = 0; i < names.size(); i++) {
+    ASSERT_NE(nullptr, rr->readRecord());
+  }
+  EXPECT_TRUE(rr->isEnd());
+
+  // The records pack into shared blocks rather than one block per engine.
+  const uint64_t written = rr->getCurPos();
+  EXPECT_EQ(kBlockSize, written);
+
+  ASSERT_TRUE(driver->recover());
+  collect();
+  EXPECT_EQ(written, counters["navy_metadata_recovered_bytes"]);
 }
 
 TEST(Driver, ConcurrentInserts) {

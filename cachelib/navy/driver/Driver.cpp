@@ -299,6 +299,8 @@ bool Driver::recover() {
     // Only timed on success. A fast failure would otherwise publish a small
     // duration that reads like a fast recovery.
     recoverTimeMs_.set(toMillis(getSteadyClock() - recoverStart).count());
+    // Read before invalidating, while the reader still holds its position.
+    metadataRecoveredBytes_.set(rr->getCurPos());
     // If recovery is successful, invalidate the metadata
     auto rw = createMetadataRecordWriter(*device_, metadataSize_);
     if (rw) {
@@ -389,6 +391,7 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_metadata_size_bytes", metadataSize_);
   visitor("navy_metadata_estimated_bytes", estimatedMetadataSize);
   visitor("navy_recover_time_ms", recoverTimeMs_.get());
+  visitor("navy_metadata_recovered_bytes", metadataRecoveredBytes_.get());
 
   if (admissionPolicy_) {
     admissionPolicy_->getCounters(visitor);
