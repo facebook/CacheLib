@@ -102,7 +102,7 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
                                         size_t poolSize,
                                         const std::set<uint32_t>& allocSizes) {
   std::unique_lock l(lock_);
-  if (poolsByName_.find(name) != poolsByName_.end()) {
+  if (poolsByName_.contains(name)) {
     throw std::invalid_argument("Duplicate pool");
   }
 
