@@ -521,6 +521,16 @@ void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
   INJECT_PAUSE(pause_do_eviction_done);
 }
 
+uint64_t RegionManager::estimatePersistSize() const {
+  static const uint64_t kRegionDataBytes =
+      serializedProtoSize(serialization::RegionData{});
+  static const uint64_t kRegionBytes =
+      serializedProtoSize(serialization::Region{});
+
+  return kRegionDataBytes + kRegionBytes * numRegions_ +
+         (recoverEvictionPolicy_ ? policy_->estimatePersistSize() : 0);
+}
+
 void RegionManager::persist(RecordWriter& rw) const {
   serialization::RegionData regionData;
   *regionData.regionSize() = regionSize_;

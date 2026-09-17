@@ -83,7 +83,10 @@ class Engine {
   virtual bool recover(RecordReader& rr) = 0;
 
   // Gets engine specific counters. Calls back @visitor with key name and value.
-  virtual void getCounters(const CounterVisitor& visitor) const = 0;
+  //
+  // @return  estimated bytes persist() would write to the metadata region, 0
+  //          for engines that persist nothing.
+  virtual uint64_t getCounters(const CounterVisitor& visitor) const = 0;
 
   // Gets the maximum item size that can be inserted into the engine.
   virtual uint64_t getMaxItemSize() const = 0;

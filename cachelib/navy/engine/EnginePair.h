@@ -106,7 +106,8 @@ class EnginePair {
   bool recover(RecordReader& rr);
 
   // returns the navy stats
-  void getCounters(const CounterVisitor& visitor) const;
+  // @return  estimated bytes both engines would persist.
+  uint64_t getCounters(const CounterVisitor& visitor) const;
 
   uint64_t getUsableSize() const;
 

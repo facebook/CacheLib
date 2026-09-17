@@ -113,6 +113,11 @@ class BloomFilter {
   template <typename SerializationProto>
   void recover(RecordReader& rw);
 
+  // Bytes persist() would write.
+  // @param recordHeaderBytes  framing the RecordWriter adds per record
+  template <typename SerializationProto>
+  uint64_t estimatePersistSize(uint64_t recordHeaderBytes) const;
+
  private:
   uint8_t* getFilterBytes(uint32_t idx) const {
     XDCHECK(bits_);
@@ -130,6 +135,27 @@ class BloomFilter {
   std::vector<uint64_t> seeds_;
   std::unique_ptr<uint8_t[]> bits_;
 };
+
+template <typename SerializationProto>
+uint64_t BloomFilter::estimatePersistSize(uint64_t recordHeaderBytes) const {
+  // Mirrors persist() below: a config record, then the bits and compat init
+  // bits, each fragmented at kPersistFragmentSize.
+  serialization::BloomFilterPersistentData bd;
+  bd.seeds()->resize(seeds_.size());
+
+  const uint64_t bitsBytes = getByteSize();
+  // One compatibility bit per filter, rounded up to bytes.
+  const uint64_t initBytes = (numFilters_ + 7) / 8;
+  const auto numFragments = [](uint64_t bytes) {
+    return (bytes + kPersistFragmentSize - 1) / kPersistFragmentSize;
+  };
+
+  typename SerializationProto::ProtocolWriter writer;
+  return recordHeaderBytes + bd.serializedSize(&writer) + bitsBytes +
+         initBytes +
+         recordHeaderBytes *
+             (numFragments(bitsBytes) + numFragments(initBytes));
+}
 
 template <typename SerializationProto>
 void BloomFilter::persist(RecordWriter& rw) {

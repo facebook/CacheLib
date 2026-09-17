@@ -70,6 +70,8 @@ class FifoPolicy final : public EvictionPolicy {
   // Persists metadata associated with FIFO policy.
   void persist(serialization::EvictionPolicyData& out) const override;
 
+  uint64_t estimatePersistSize() const override;
+
   // Recovers from previously persisted metadata associated with FIFO policy.
   void recover(const serialization::EvictionPolicyData& in) override;
 

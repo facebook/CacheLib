@@ -349,6 +349,9 @@ class Index {
   // Walks buckets and computes total index entry count
   virtual size_t computeSize() const = 0;
 
+  // Estimated bytes persist() would write, given the entry count.
+  virtual uint64_t estimatePersistSize(size_t numEntries) const = 0;
+
   // Walks buckets and computes max/min memory footprint range that index will
   // currently use for the entries it currently has. (Since there could be cases
   // that it's difficult to get exact number with the memory footprint (ex.

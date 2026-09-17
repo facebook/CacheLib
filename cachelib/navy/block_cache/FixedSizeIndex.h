@@ -175,6 +175,11 @@ class FixedSizeIndex : public Index {
   // Walks buckets and computes total index entry count
   size_t computeSize() const override;
 
+  // Persisted via shm, so nothing is written to the metadata region.
+  uint64_t estimatePersistSize(size_t /* numEntries */) const override {
+    return 0;
+  }
+
   // Walks buckets and computes max/min memory footprint range that index will
   // currently use for the entries it currently has.
   MemFootprintRange computeMemFootprintRange() const override;

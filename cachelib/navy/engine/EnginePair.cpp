@@ -278,7 +278,7 @@ bool EnginePair::recover(RecordReader& rr) {
   return largeItemCache_->recover(rr) && smallItemCache_->recover(rr);
 }
 
-void EnginePair::getCounters(const CounterVisitor& visitor) const {
+uint64_t EnginePair::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_inserts", insertCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_succ_inserts",
@@ -297,8 +297,8 @@ void EnginePair::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_io_errors", ioErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_total_usable_size", getUsableSize());
-  largeItemCache_->getCounters(visitor);
-  smallItemCache_->getCounters(visitor);
+  return largeItemCache_->getCounters(visitor) +
+         smallItemCache_->getCounters(visitor);
 }
 
 uint64_t EnginePair::getUsableSize() const {

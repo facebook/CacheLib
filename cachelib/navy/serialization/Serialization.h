@@ -24,6 +24,15 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 using ProtoSerializer = apache::thrift::BinarySerializer;
+// Writer paired with ProtoSerializer, used only to size objects.
+using ProtoSizer = apache::thrift::BinaryProtocolWriter;
+
+// @return  bytes serializeProto() would write, without serializing it
+template <typename ThriftObject>
+size_t serializedProtoSize(const ThriftObject& obj) {
+  ProtoSizer writer;
+  return obj.serializedSize(&writer);
+}
 
 // @param obj       Object to be serialized. Must be a thrift object
 // @param writer    Serializer that implements RecordWriter interface

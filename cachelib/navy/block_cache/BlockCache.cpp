@@ -18,6 +18,7 @@
 
 #include <fmt/core.h>
 #include <folly/ScopeGuard.h>
+#include <folly/io/RecordIO.h>
 #include <folly/logging/xlog.h>
 
 #include <algorithm>
@@ -1476,9 +1477,13 @@ void BlockCache::initializeBlockCache() {
   usedSizeBytes_.set(0);
 }
 
-void BlockCache::getCounters(const CounterVisitor& visitor) const {
+uint64_t BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_size", getSize());
-  visitor("navy_bc_items", index_->computeSize());
+  // computeSize() walks every bucket map, so call it once and reuse.
+  const auto numIndexEntries = index_->computeSize();
+  const auto persistSize = estimatePersistSize(numIndexEntries);
+  visitor("navy_bc_items", numIndexEntries);
+  visitor("navy_bc_metadata_est_bytes", persistSize);
   visitor("navy_bc_inserts", insertCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_insert_hash_collisions", insertHashCollisionCount_.get(),
@@ -1552,6 +1557,18 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   if (reinsertionPolicy_) {
     reinsertionPolicy_->getCounters(visitor);
   }
+
+  return persistSize;
+}
+
+uint64_t BlockCache::estimatePersistSize(size_t numIndexEntries) const {
+  // Mirrors persist() below: config record, region table, index. Approximate,
+  // since the cache is not quiesced.
+  constexpr uint64_t kHeaderBytes = folly::recordio_helpers::headerSize();
+
+  return serializedProtoSize(config_) + kHeaderBytes +
+         regionManager_.estimatePersistSize() + kHeaderBytes +
+         index_->estimatePersistSize(numIndexEntries);
 }
 
 void BlockCache::persist(RecordWriter& rw) {

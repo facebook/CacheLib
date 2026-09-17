@@ -45,7 +45,9 @@ class NoopEngine final : public Engine {
   void reset() override {}
   void persist(RecordWriter& /* rw */) override {}
   bool recover(RecordReader& /* rr */) override { return true; }
-  void getCounters(const CounterVisitor& /* visitor */) const override {}
+  uint64_t getCounters(const CounterVisitor& /* visitor */) const override {
+    return 0;
+  }
   uint64_t getMaxItemSize() const override { return UINT32_MAX; }
   std::pair<Status, std::string> getRandomAlloc(Buffer&) override {
     return std::make_pair(Status::NotFound, "");

@@ -135,6 +135,10 @@ class SparseMapIndex : public Index {
   // Walks bucket maps and computes total index entry count
   size_t computeSize() const override;
 
+  // Estimates persist() output: one record per bucket map, plus numEntries
+  // index entries.
+  uint64_t estimatePersistSize(size_t numEntries) const override;
+
   // Walks bucket maps and computes max/min memory footprint range that index
   // will currently use for the entries it currently has. (Since sparse_map is
   // difficult to get the internal status without modifying its implementaion

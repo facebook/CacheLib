@@ -19,6 +19,7 @@
 #include <fmt/core.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
+#include <folly/io/RecordIO.h>
 
 #include <chrono>
 
@@ -112,6 +113,7 @@ void BigHash::reset() {
 
   validBucketChecker_ = std::make_unique<ValidBucketChecker>(
       numBuckets_, kBigHashValidBucketCheckerBucketsPerBit);
+  persistSizeEstimate_.set(estimatePersistSize());
 
   itemCount_.set(0);
   insertCount_.set(0);
@@ -170,7 +172,8 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
   return std::make_pair(Status::Ok, key);
 }
 
-void BigHash::getCounters(const CounterVisitor& visitor) const {
+uint64_t BigHash::getCounters(const CounterVisitor& visitor) const {
+  const uint64_t persistSizeEstimate = persistSizeEstimate_.get();
   visitor("navy_bh_size", getSize());
   visitor("navy_bh_items", itemCount_.get());
   visitor("navy_bh_inserts", insertCount_.get(),
@@ -210,6 +213,7 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_bf_rebuilds",
           bfRebuildCount_.get(),
           CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_metadata_est_bytes", persistSizeEstimate);
   visitor("navy_bh_checksum_errors",
           checksumErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
@@ -227,6 +231,25 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   bhLifetimeSecs_.visitQuantileEstimator(visitor, "navy_bh_item_lifetime_secs");
   lookupLatency_.visitQuantileEstimator(visitor, "navy_bh_lookup_latency_us");
   insertLatency_.visitQuantileEstimator(visitor, "navy_bh_insert_latency_us");
+
+  return persistSizeEstimate;
+}
+
+uint64_t BigHash::estimatePersistSize() const {
+  // Mirrors persist() below.
+  constexpr uint64_t kHeaderBytes = folly::recordio_helpers::headerSize();
+
+  // The checker bitmap ships inside BigHashPersistentData as a list<byte>: one
+  // wire byte per element.
+  serialization::BigHashPersistentData pd;
+  uint64_t size =
+      kHeaderBytes + serializedProtoSize(pd) + validBucketChecker_->numBytes();
+
+  if (bloomFilter_) {
+    size += bloomFilter_->estimatePersistSize<ProtoSerializer>(kHeaderBytes);
+  }
+
+  return size;
 }
 
 void BigHash::persist(RecordWriter& rw) {

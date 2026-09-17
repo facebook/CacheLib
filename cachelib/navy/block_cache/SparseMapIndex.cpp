@@ -17,6 +17,7 @@
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 #include <fmt/core.h>
+#include <folly/io/RecordIO.h>
 
 #include <vector>
 
@@ -262,6 +263,18 @@ size_t SparseMapIndex::computeSize() const {
     size += bucketMaps_[i].size();
   }
   return size;
+}
+
+uint64_t SparseMapIndex::estimatePersistSize(size_t numEntries) const {
+  // One IndexBucket record per bucket map, holding that map's live entries.
+  // Sizes come from the wire format, so they track objects.thrift.
+  static const uint64_t kEmptyBucketBytes =
+      serializedProtoSize(serialization::IndexBucket{}) +
+      folly::recordio_helpers::headerSize();
+  static const uint64_t kEntryBytes =
+      serializedProtoSize(serialization::IndexEntry{});
+
+  return numBucketMaps_ * kEmptyBucketBytes + numEntries * kEntryBytes;
 }
 
 Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {

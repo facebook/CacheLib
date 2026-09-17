@@ -20,6 +20,8 @@
 
 #include <numeric>
 
+#include "cachelib/navy/serialization/Serialization.h"
+
 namespace facebook::cachelib::navy {
 namespace detail {
 unsigned int accumulate(const std::vector<unsigned int>& nums) {
@@ -68,6 +70,18 @@ void FifoPolicy::persist(serialization::EvictionPolicyData& out) const {
   }
 
   out.fifo() = std::move(fifoPolicyData);
+}
+
+uint64_t FifoPolicy::estimatePersistSize() const {
+  std::lock_guard lock{mutex_};
+  // The union member plus one FifoPolicyNodeData per queued region.
+  static const uint64_t kNodeBytes =
+      serializedProtoSize(serialization::FifoPolicyNodeData{});
+  static const uint64_t kBaseBytes =
+      serializedProtoSize(serialization::FifoPolicyData{}) +
+      // Union field header and stop byte for the enclosing EvictionPolicyData.
+      4;
+  return kBaseBytes + kNodeBytes * queue_.size();
 }
 
 void FifoPolicy::recover(const serialization::EvictionPolicyData& in) {

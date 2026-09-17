@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <folly/io/RecordIO.h>
 #include <gtest/gtest.h>
 
 #include <map>
@@ -59,6 +60,33 @@ TEST(SparseMapIndex, Recovery) {
     auto lookupResult = newIndex.lookup(entry.first);
     EXPECT_EQ(entry.second, lookupResult.address());
   }
+}
+
+TEST(SparseMapIndex, EstimatePersistSize) {
+  constexpr uint32_t kNumBucketMaps = 64;
+
+  auto persistedBytes = [](uint32_t numEntries) {
+    SparseMapIndex index{kNumBucketMaps, 1};
+    for (uint32_t i = 0; i < numEntries; i++) {
+      // High 32 bits select the bucket map, so entries spread across them.
+      index.insert(static_cast<uint64_t>(i % kNumBucketMaps) << 32 | i, i, 0);
+    }
+    folly::IOBufQueue ioq{folly::IOBufQueue::cacheChainLength()};
+    auto rw = createMemoryRecordWriter(ioq);
+    index.persist(*rw);
+    return rw->getCurPos();
+  };
+
+  SparseMapIndex index{kNumBucketMaps, 1};
+
+  // The delta cancels the framing terms, pinning the per-entry cost exactly.
+  EXPECT_EQ(persistedBytes(1000) - persistedBytes(0),
+            index.estimatePersistSize(1000) - index.estimatePersistSize(0));
+
+  // The memory writer adds no framing, so the difference is exactly one record
+  // header per bucket map.
+  EXPECT_EQ(index.estimatePersistSize(0) - persistedBytes(0),
+            kNumBucketMaps * folly::recordio_helpers::headerSize());
 }
 
 TEST(SparseMapIndex, EntrySize) {

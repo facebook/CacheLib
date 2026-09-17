@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <folly/io/RecordIO.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -129,7 +130,10 @@ class MockEngine : public Engine {
   MOCK_METHOD0(mockPersistData, std::string());
   MOCK_METHOD1(mockRecoverData, bool(const std::string&));
 
-  void getCounters(const CounterVisitor& /* visitor */) const override {}
+  uint64_t getCounters(const CounterVisitor& /* visitor */) const override {
+    // Matches persist() above, which writes one record holding the name.
+    return folly::recordio_helpers::headerSize() + name_.size();
+  }
   uint64_t getMaxItemSize() const override { return itemMaxSize_; }
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override {

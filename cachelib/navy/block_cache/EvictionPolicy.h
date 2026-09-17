@@ -60,6 +60,10 @@ class EvictionPolicy {
     throw std::runtime_error("EvictionPolicy::persist not implemented");
   }
 
+  // Estimated bytes persist() would add to the RegionData record. Zero if the
+  // policy does not persist.
+  virtual uint64_t estimatePersistSize() const { return 0; }
+
   // Recovers from previously persisted metadata. Implementations must read
   // the variant member that matches their policy type. The default
   // implementation throws — override only in policies that support recovery.

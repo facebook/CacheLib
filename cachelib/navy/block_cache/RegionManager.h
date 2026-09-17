@@ -144,6 +144,10 @@ class RegionManager {
   // Returns the size of one region.
   uint64_t regionSize() const { return regionSize_; }
 
+  // Estimated bytes persist() would write, including the eviction policy
+  // payload when its recovery is enabled.
+  uint64_t estimatePersistSize() const;
+
   // Gets a region to evict.
   RegionId evict();
 

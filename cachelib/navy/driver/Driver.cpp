@@ -22,6 +22,7 @@
 #include "cachelib/common/Profiled.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
+#include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook::cachelib::navy {
@@ -278,6 +279,9 @@ bool Driver::recover() {
   if (rr->isEnd()) {
     return false;
   }
+
+  const auto recoverStart = getSteadyClock();
+
   // Because we insert item and remove from the other engine, partial recovery
   // is potentially possible.
   bool recovered = true;
@@ -292,6 +296,9 @@ bool Driver::recover() {
     reset();
   }
   if (recovered) {
+    // Only timed on success. A fast failure would otherwise publish a small
+    // duration that reads like a fast recovery.
+    recoverTimeMs_.set(toMillis(getSteadyClock() - recoverStart).count());
     // If recovery is successful, invalidate the metadata
     auto rw = createMetadataRecordWriter(*device_, metadataSize_);
     if (rw) {
@@ -341,6 +348,10 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_concurrent_inserts", concurrentInserts_.get());
 
   scheduler_->getCounters(visitor);
+
+  // Summed from the engines' counter pass; a separate call would repeat the
+  // index walk.
+  uint64_t estimatedMetadataSize = 0;
   if (enginePairs_.size() > 1) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
       auto suffix =
@@ -353,7 +364,7 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
                                         CounterVisitor::CounterType type) {
         visitor(folly::to<std::string>(name, "_", idx, suffix), count, type);
       }};
-      enginePairs_[idx].getCounters(pv);
+      estimatedMetadataSize += enginePairs_[idx].getCounters(pv);
 
       visitor(folly::to<std::string>("navy_rejected_", idx, suffix),
               rejectedCountByEngine_[idx].get(),
@@ -372,8 +383,12 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
     }
     visitor("navy_total_usable_size", getUsableSize());
   } else {
-    enginePairs_[0].getCounters(visitor);
+    estimatedMetadataSize = enginePairs_[0].getCounters(visitor);
   }
+
+  visitor("navy_metadata_size_bytes", metadataSize_);
+  visitor("navy_metadata_estimated_bytes", estimatedMetadataSize);
+  visitor("navy_recover_time_ms", recoverTimeMs_.get());
 
   if (admissionPolicy_) {
     admissionPolicy_->getCounters(visitor);

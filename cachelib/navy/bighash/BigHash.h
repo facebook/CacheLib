@@ -107,6 +107,9 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
 
   uint64_t estimateWriteSize(HashedKey, BufferView) const override;
 
+  // Fixed once the bucket count and bloom filter are sized; reset() caches it.
+  uint64_t estimatePersistSize() const;
+
   // Look up a key in BigHash. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
   // Buffer as "value" as any existing storage will be freed. If not found,
@@ -145,7 +148,7 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
   bool recover(RecordReader& rr) override;
 
   // returns BigHash stats to the visitor
-  void getCounters(const CounterVisitor& visitor) const override;
+  uint64_t getCounters(const CounterVisitor& visitor) const override;
 
   // return the maximum allowed item size
   uint64_t getMaxItemSize() const override;
@@ -264,6 +267,7 @@ class BigHash final : public Engine, folly::NonCopyableNonMovable {
   mutable AtomicCounter bfRebuildCount_;
   mutable AtomicCounter checksumErrorCount_;
   mutable AtomicCounter usedSizeBytes_;
+  mutable AtomicCounter persistSizeEstimate_;
   mutable AtomicCounter disabledBucketLookup_;
   mutable AtomicCounter disabledBucketInsert_;
   mutable AtomicCounter disabledBucketRemove_;
@@ -329,6 +333,9 @@ class ValidBucketChecker {
   }
 
   uint32_t numDisabledBuckets() const { return numDisabledBuckets_.get(); }
+
+  // Size of the bitmap, which persist() emits as a list<byte>.
+  uint32_t numBytes() const { return numBytes_; }
 
   bool isBucketValid(uint32_t idx) const {
     XDCHECK_GE(numBuckets_, idx);

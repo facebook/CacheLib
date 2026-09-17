@@ -1477,6 +1477,50 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   driver->flush();
 }
 
+// Validated against the real metadata writer, since that is what the
+// reservation is checked against.
+TEST(BlockCache, EstimatePersistSize) {
+  constexpr uint64_t kMetadataSize = 16 * 1024 * 1024;
+  constexpr uint64_t kBlockSize = 4096;
+
+  // Enough regions that the eviction-policy payload (~19 B each) exceeds the
+  // block tolerance below, so it is actually exercised.
+  constexpr uint64_t kBigDeviceSize = 64 * 1024 * 1024;
+  auto device = createMemoryDevice(kBigDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config =
+      makeConfig(std::make_unique<FifoPolicy>(), *device, kBigDeviceSize);
+  // On in production for several bigcache tiers; adds a per-region payload.
+  config.recoverEvictionPolicy = true;
+  auto engine = makeEngine(std::move(config));
+  auto* bc = static_cast<BlockCache*>(engine.get());
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  for (size_t i = 0; i < 20; i++) {
+    CacheEntry e{bg.gen(8), bg.gen(500)};
+    EXPECT_EQ(
+        Status::Ok,
+        driver->insert(e.key(), e.value(), 0 /* poolId */, 0 /* expiryTime */));
+  }
+  driver->flush();
+
+  // Read through getCounters, which is the path that publishes the estimate.
+  const uint64_t estimated =
+      bc->getCounters(CounterVisitor{[](folly::StringPiece, double) {}});
+
+  auto metaDevice = createMemoryDevice(kMetadataSize, nullptr /* encryption */);
+  auto rw = createMetadataRecordWriter(*metaDevice, kMetadataSize);
+  bc->persist(*rw);
+  const uint64_t written = rw->getCurPos();
+
+  EXPECT_GT(written, kBlockSize);
+  // getCurPos() counts only whole-block flushes; the tail is written by the
+  // writer's destructor, so it under-reports by up to one block.
+  EXPECT_GE(estimated, written);
+  EXPECT_LT(estimated - written, kBlockSize);
+}
+
 TEST(BlockCache, Recovery) {
   std::vector<uint32_t> hits(4);
   uint32_t ioAlignSize = 4096;

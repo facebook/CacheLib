@@ -714,6 +714,38 @@ TEST(BigHash, BloomFilter) {
   EXPECT_EQ(6, bh.bfRejectCount());
 }
 
+// Validated against the real metadata writer, since that is what the
+// reservation is checked against.
+TEST(BigHash, EstimatePersistSize) {
+  constexpr uint64_t kMetadataSize = 16 * 1024 * 1024;
+  constexpr uint64_t kBlockSize = 4096;
+
+  BigHash::Config config;
+  config.cacheSize = 8 * 1024 * 1024;
+  config.bucketSize = 4096;
+  auto device = createMemoryDevice(config.cacheSize, nullptr /* encryption */);
+  config.device = device.get();
+  config.bloomFilter =
+      std::make_unique<BloomFilter>(config.numBuckets(), 4, 128);
+
+  BigHash bh(std::move(config));
+
+  // Read through getCounters, which publishes the value cached by reset().
+  const uint64_t estimated =
+      bh.getCounters(CounterVisitor{[](folly::StringPiece, double) {}});
+
+  auto metaDevice = createMemoryDevice(kMetadataSize, nullptr /* encryption */);
+  auto rw = createMetadataRecordWriter(*metaDevice, kMetadataSize);
+  bh.persist(*rw);
+  const uint64_t written = rw->getCurPos();
+
+  EXPECT_GT(written, kBlockSize);
+  // getCurPos() counts only whole-block flushes; the tail is written by the
+  // writer's destructor, so it under-reports by up to one block.
+  EXPECT_GE(estimated, written);
+  EXPECT_LT(estimated - written, kBlockSize);
+}
+
 // persist the bighash and ensure recovery has the bloom filter
 TEST(BigHash, BloomFilterRecovery) {
   std::unique_ptr<Device> actual;

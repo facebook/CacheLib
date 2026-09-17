@@ -225,6 +225,10 @@ class Driver final : public AbstractCache {
   mutable AtomicCounter parcelMemory_; // In bytes
   mutable AtomicCounter concurrentInserts_;
 
+  // Set by recover(), not persist(): persist() runs after the stats exporters
+  // are gone.
+  AtomicCounter recoverTimeMs_;
+
   FRIEND_TEST(Driver, MultiRecovery);
   FRIEND_TEST(Driver, EstimateWriteSize);
 };

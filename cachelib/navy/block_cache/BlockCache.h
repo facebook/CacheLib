@@ -161,6 +161,9 @@ class BlockCache final : public Engine {
   // Estimate the device write size if the item is written to BlockCache.
   uint64_t estimateWriteSize(HashedKey hk, BufferView value) const override;
 
+  // Estimated bytes persist() would write for numIndexEntries index entries.
+  uint64_t estimatePersistSize(size_t numIndexEntries) const;
+
   // Inserts a key-value pair into BlockCache.
   //
   // @param hk      key to be inserted
@@ -220,7 +223,7 @@ class BlockCache final : public Engine {
   // Exports BlockCache stats via CounterVisitor.
   //
   // @param visitor   CounterVisitor to export stats
-  void getCounters(const CounterVisitor& visitor) const override;
+  uint64_t getCounters(const CounterVisitor& visitor) const override;
 
   // Gets the maximum item size that can be inserted into BlockCache.
   uint64_t getMaxItemSize() const override {
