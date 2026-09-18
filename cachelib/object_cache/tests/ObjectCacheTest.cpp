@@ -448,48 +448,6 @@ class ObjectCacheTest : public ::testing::Test {
         [&] { return objcache->template inspectCache<Foo>("Foo") == nullptr; });
   }
 
-  void testSuccessfulReplacementFlag() {
-    std::atomic<int> numReplaced{0};
-    std::atomic<int> numNotReplaced{0};
-    ObjectCacheConfig config;
-    config.setCacheName("test")
-        .setCacheCapacity(10'000)
-        .setItemReaperInterval(std::chrono::seconds{1})
-        .setItemDestructor([&](ObjectCacheDestructorData data) {
-          EXPECT_EQ(data.context, ObjectCacheDestructorContext::kRemoved);
-          if (data.removedBySuccessfulReplacement) {
-            ++numReplaced;
-          } else {
-            ++numNotReplaced;
-          }
-          data.deleteObject<Foo>();
-        });
-    auto objcache = ObjectCache::create(config);
-
-    objcache->insertOrReplace("k", std::make_unique<Foo>(), 0 /*object size*/,
-                              1000 /*ttlSecs*/);
-    auto heldOldObject = objcache->template find<Foo>("k");
-    auto [status, newObject, replacedObject] = objcache->insertOrReplace(
-        "k", std::make_unique<Foo>(), 0 /*object size*/, 1000 /*ttlSecs*/);
-    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
-
-    heldOldObject.reset();
-    EXPECT_EQ(0, numReplaced.load());
-    replacedObject.reset();
-    EXPECT_EQ(1, numReplaced.load());
-    EXPECT_EQ(0, numNotReplaced.load());
-
-    ASSERT_TRUE(objcache->remove("k"));
-    newObject.reset();
-    EXPECT_EQ(1, numReplaced.load());
-    EXPECT_EQ(1, numNotReplaced.load());
-
-    objcache->insertOrReplace("e", std::make_unique<Foo>(), 0 /*object size*/,
-                              1 /*ttlSecs*/);
-    ASSERT_EVENTUALLY_TRUE([&] { return numNotReplaced.load() == 2; });
-    EXPECT_EQ(1, numReplaced.load());
-  }
-
   void testPreRemoveCallbackOrdering() {
     std::mutex eventsMutex;
     std::vector<std::string> events;
@@ -521,11 +479,9 @@ class ObjectCacheTest : public ::testing::Test {
           recordEvent(fmt::format("pre:{}:{}", data.key.str(), context));
         })
         .setItemDestructor([&](ObjectCacheDestructorData data) {
-          recordEvent(fmt::format(
-              "destroy:{}:{}{}",
-              data.key.str(),
-              data.isEviction() ? "evicted" : "removed",
-              data.removedBySuccessfulReplacement ? ":replacement" : ""));
+          recordEvent(fmt::format("destroy:{}:{}",
+                                  data.key.str(),
+                                  data.isEviction() ? "evicted" : "removed"));
           data.deleteObject<Foo>();
         });
     auto objcache = ObjectCache::create(config);
@@ -573,14 +529,10 @@ class ObjectCacheTest : public ::testing::Test {
     objcache->stopAllWorkers();
 
     const std::vector<std::string> expected{
-        "pre:evicted:evicted",
-        "destroy:evicted:evicted",
-        "pre:explicit:removed",
-        "destroy:explicit:removed",
-        "pre:expired:expired",
-        "destroy:expired:removed",
-        "destroy:replacement:removed:replacement",
-        "pre:replacement:removed",
+        "pre:evicted:evicted",         "destroy:evicted:evicted",
+        "pre:explicit:removed",        "destroy:explicit:removed",
+        "pre:expired:expired",         "destroy:expired:removed",
+        "destroy:replacement:removed", "pre:replacement:removed",
         "destroy:replacement:removed",
     };
     std::lock_guard lock(eventsMutex);
@@ -2207,9 +2159,6 @@ TYPED_TEST(ObjectCacheTest, UserItemDestructor) {
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
 TYPED_TEST(ObjectCacheTest, InspectCacheIncludingExpiredUntilReaped) {
   this->testInspectCacheIncludingExpiredUntilReaped();
-}
-TYPED_TEST(ObjectCacheTest, SuccessfulReplacementFlag) {
-  this->testSuccessfulReplacementFlag();
 }
 TYPED_TEST(ObjectCacheTest, PreRemoveCallbackOrdering) {
   if constexpr (std::is_same_v<TypeParam, LruAllocator>) {
