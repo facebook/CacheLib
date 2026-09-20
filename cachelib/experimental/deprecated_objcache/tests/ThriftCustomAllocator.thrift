@@ -48,27 +48,18 @@ struct UseSimpleCustomAllocator {
 //       or any member that implements allocator propagation correctly
 // } (cpp.allocator="facebook::cachelib::objcache::test::ScopedTestAllocator")
 
-@thrift.DeprecatedUnvalidatedAnnotations{
-  items = {
-    "cpp.allocator": "facebook::cachelib::objcache::test::ScopedTestAllocator",
-  },
-}
 union UnionWithCustomAllocator {
   1: map_i32_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_4964 m1;
   2: string_9300 m2;
   3: i32 m3;
 }
-// TODO: even though thrift union does not support allocator. We still need to
-//       annotate it with allocator so it has a `get_allocator()` method so
-//       that when deserializing it will be able to pass an allocator an inner
-//       member that requires an allocator. This can be resolved by adding
-//       proper allocator support in thrift union. In practice, today this
-//       means we need to annontate a union type with allocator, but must
-//       keep in mind that any copy-assignment/move-assingment, or
-//       deserializing will over-write the allocator that is associated with
-//       the inner member inside the union. Because of this, I would recommend
-//       user do NOT cache union types into object-cache. Only use this as
-//       a structure for process/responding to client requests.
+// TODO: thrift union does not support allocator. This can be resolved by
+//       adding proper allocator support in thrift union. In practice, today
+//       this means any copy-assignment/move-assingment, or deserializing will
+//       over-write the allocator that is associated with the inner member
+//       inside the union. Because of this, I would recommend user do NOT
+//       cache union types into object-cache. Only use this as a structure for
+//       process/responding to client requests.
 //          MyUnion myUnion;
 //          myUnion.member = cache->find<MyMemberType>("a key");
 //          // allocator is cachelib-backed allocator
