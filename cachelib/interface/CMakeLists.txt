@@ -17,6 +17,7 @@ add_library (cachelib_interface
   CacheItem.cpp
   Handle.cpp
   MemcpyConnector.cpp
+  TransferExecutor.cpp
   Stats.cpp
   components/FlashCacheComponent.cpp
   components/RAMCacheComponent.cpp
@@ -69,6 +70,7 @@ if (BUILD_TESTS)
     add_source_test (tests/InterfaceTest.cpp)
     add_source_test (tests/DescriptorTest.cpp)
     add_source_test (tests/MemcpyConnectorTest.cpp)
+    add_source_test (tests/TransferExecutorTest.cpp)
     add_source_test (components/tests/CacheComponentTest.cpp)
     add_source_test (components/tests/FlashCacheComponentTest.cpp)
   endif()
