@@ -24,6 +24,7 @@ EventTracker::EventTracker(Config&& config)
       eventSink_(std::move(config.eventSink)),
       sampler_(config.sampler ? std::move(config.sampler)
                               : std::make_unique<FurcHashSampler>(0)),
+      eventMask_(config.eventMask),
       preQueueCallback_(std::move(config.preQueueCallback)),
       postQueueCallback_(std::move(config.postQueueCallback)) {
   validateConfig();
@@ -69,6 +70,9 @@ void EventTracker::runBackgroundThread() {
 }
 
 RecordResult EventTracker::record(EventInfo&& eventInfo) {
+  if (!acceptEvent(eventInfo.event)) {
+    return RecordResult::EVENT_DISABLED;
+  }
   if (!sampleKey(eventInfo.key)) {
     return RecordResult::NOT_SAMPLED;
   }
@@ -90,6 +94,7 @@ RecordResult EventTracker::recordWithoutSampling(EventInfo&& eventInfo) {
 void EventTracker::getStats(
     folly::F14FastMap<std::string, uint64_t>& statsMap) const {
   statsMap["sample_success"] = sampleSuccessCount_.get();
+  statsMap["event_disabled"] = eventDisabledCount_.get();
   statsMap["dropped"] = dropCount_.get();
   statsMap["add_to_queue"] = addToQueueCount_.get();
 }

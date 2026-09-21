@@ -1070,7 +1070,7 @@ void BlockCache::recordEvent(folly::StringPiece key,
                              const NvmItem* nvmItem) {
   auto eventTracker = getEventTracker();
   if (eventTracker) {
-    if (!eventTracker->sampleKey(key)) {
+    if (!eventTracker->shouldRecordEvent(event, key)) {
       return;
     }
     EventInfo eventInfo;

@@ -19,6 +19,8 @@
 #include <folly/Optional.h>
 #include <folly/logging/xlog.h>
 
+#include <cstdint>
+#include <limits>
 #include <magic_enum/magic_enum.hpp>
 
 #include "cachelib/allocator/KAllocation.h"
@@ -50,6 +52,27 @@ enum class AllocatorApiEvent : uint8_t {
   NVM_ADMIT = 18,
   NVM_REINSERT = 19
 };
+
+using AllocatorApiEventMask = uint64_t;
+
+constexpr AllocatorApiEventMask kAllAllocatorApiEvents =
+    std::numeric_limits<AllocatorApiEventMask>::max();
+
+// A value that does not fit in the mask would make eventMaskFor() shift out of
+// range, so grow AllocatorApiEventMask before adding such an event.
+static_assert(
+    static_cast<uint8_t>(magic_enum::enum_values<AllocatorApiEvent>().back()) <
+        std::numeric_limits<AllocatorApiEventMask>::digits,
+    "AllocatorApiEvent has outgrown AllocatorApiEventMask");
+
+constexpr AllocatorApiEventMask eventMaskFor(AllocatorApiEvent event) noexcept {
+  return AllocatorApiEventMask{1} << static_cast<uint8_t>(event);
+}
+
+constexpr bool eventMaskContains(AllocatorApiEventMask mask,
+                                 AllocatorApiEvent event) noexcept {
+  return (mask & eventMaskFor(event)) != 0;
+}
 
 // Enum to describe possible outcomes of Allocator API calls.
 enum class AllocatorApiResult : uint8_t {

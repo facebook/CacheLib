@@ -147,6 +147,12 @@ class CacheAPIWrapperForNvm {
     return cache.getEventTracker();
   }
 
+  // Returns true iff a configured tracker would consume this event. Use with
+  // recordEventWithoutSampling() to gate an event exactly once.
+  static bool shouldRecordEvent(C& cache, AllocatorApiEvent event, Key key) {
+    return cache.shouldRecordEvent(event, key);
+  }
+
   /**
    * Record event, key, result and info from a struct of type EventRecordParams
    * through CacheAllocator's recordEvent function.
@@ -174,7 +180,7 @@ class CacheAPIWrapperForNvm {
   }
 
   // Record event without sampling. Use when the caller has already called
-  // sampleKey() and determined the key should be sampled.
+  // shouldRecordEvent() and determined the event and key should be sampled.
   static void recordEventWithoutSampling(
       C& cache,
       AllocatorApiEvent event,

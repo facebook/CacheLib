@@ -56,6 +56,19 @@ class EvenKeyReinsertionPolicy : public BlockCacheReinsertionPolicy {
   void getCounters(const util::CounterVisitor& /* visitor */) const override {}
 };
 
+class CountingSampler final : public SamplerInterface {
+ public:
+  uint64_t shouldSample(folly::StringPiece /* key */) const override {
+    ++numCalls_;
+    return 1;
+  }
+
+  uint64_t numCalls() const { return numCalls_; }
+
+ private:
+  mutable uint64_t numCalls_{0};
+};
+
 class EventTrackerTest : public ::testing::Test {
  protected:
   std::vector<EventInfo> createEvents(const char* key, uint32_t numItems) {
@@ -213,6 +226,75 @@ TEST_F(EventTrackerTest, BasicLogging) {
 
   auto csvRows = readCsvRows(tmpFile);
   checkCsvRows(csvRows, events);
+}
+
+TEST_F(EventTrackerTest, DefaultEventMaskSamplesEveryEvent) {
+  auto sampler = std::make_unique<CountingSampler>();
+  auto* samplerPtr = sampler.get();
+
+  EventTracker::Config config;
+  config.sampler = std::move(sampler);
+  config.queueSize = 10;
+  config.eventSink = std::make_unique<InMemoryEventSink>();
+  auto eventTracker = std::make_unique<EventTracker>(std::move(config));
+
+  for (auto event : magic_enum::enum_values<AllocatorApiEvent>()) {
+    EXPECT_TRUE(eventTracker->shouldRecordEvent(event, "key"))
+        << magic_enum::enum_name(event);
+  }
+  EXPECT_EQ(samplerPtr->numCalls(),
+            magic_enum::enum_count<AllocatorApiEvent>());
+}
+
+TEST_F(EventTrackerTest, EventMaskSkipsSamplerForDisabledEvents) {
+  auto sampler = std::make_unique<CountingSampler>();
+  auto* samplerPtr = sampler.get();
+
+  EventTracker::Config config;
+  config.sampler = std::move(sampler);
+  config.eventMask = eventMaskFor(AllocatorApiEvent::FIND) |
+                     eventMaskFor(AllocatorApiEvent::FIND_FAST);
+  config.queueSize = 10;
+  config.eventSink = std::make_unique<InMemoryEventSink>();
+  auto eventTracker = std::make_unique<EventTracker>(std::move(config));
+
+  for (auto event : magic_enum::enum_values<AllocatorApiEvent>()) {
+    const bool enabled = event == AllocatorApiEvent::FIND ||
+                         event == AllocatorApiEvent::FIND_FAST;
+    EXPECT_EQ(eventTracker->shouldRecordEvent(event, "key"), enabled)
+        << magic_enum::enum_name(event);
+  }
+  EXPECT_EQ(samplerPtr->numCalls(), 2);
+}
+
+TEST_F(EventTrackerTest, RecordChecksEventMaskBeforeSampler) {
+  auto sampler = std::make_unique<CountingSampler>();
+  auto* samplerPtr = sampler.get();
+
+  EventTracker::Config config;
+  config.sampler = std::move(sampler);
+  config.eventMask = eventMaskFor(AllocatorApiEvent::FIND);
+  config.queueSize = 10;
+  config.eventSink = std::make_unique<InMemoryEventSink>();
+  auto eventTracker = std::make_unique<EventTracker>(std::move(config));
+
+  EventInfo removeEvent;
+  removeEvent.event = AllocatorApiEvent::REMOVE;
+  removeEvent.key = "key";
+  EXPECT_EQ(eventTracker->record(std::move(removeEvent)),
+            RecordResult::EVENT_DISABLED);
+  EXPECT_EQ(samplerPtr->numCalls(), 0);
+
+  EventInfo findEvent;
+  findEvent.event = AllocatorApiEvent::FIND;
+  findEvent.key = "key";
+  EXPECT_EQ(eventTracker->record(std::move(findEvent)), RecordResult::QUEUED);
+  EXPECT_EQ(samplerPtr->numCalls(), 1);
+
+  folly::F14FastMap<std::string, uint64_t> stats;
+  eventTracker->getStats(stats);
+  EXPECT_EQ(stats["event_disabled"], 1);
+  EXPECT_EQ(stats["sample_success"], 1);
 }
 
 TEST_F(EventTrackerTest, SamplingRateChange) {

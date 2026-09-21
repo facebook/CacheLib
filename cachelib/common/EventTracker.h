@@ -27,12 +27,14 @@
 
 namespace facebook::cachelib {
 
-enum class RecordResult { NOT_SAMPLED, QUEUED, QUEUE_FULL };
+enum class RecordResult { NOT_SAMPLED, QUEUED, QUEUE_FULL, EVENT_DISABLED };
 
 inline const char* toString(RecordResult result) {
   switch (result) {
   case RecordResult::NOT_SAMPLED:
     return "NOT_SAMPLED";
+  case RecordResult::EVENT_DISABLED:
+    return "EVENT_DISABLED";
   case RecordResult::QUEUED:
     return "QUEUED";
   case RecordResult::QUEUE_FULL:
@@ -90,6 +92,11 @@ class EventTracker {
     uint32_t queueSize = 0;
     std::unique_ptr<EventSink> eventSink = nullptr;
 
+    // Events which are eligible for key sampling. The mask is checked before
+    // invoking the sampler so disabled event types add only a bit-test to the
+    // hot path. All events are enabled by default for backwards compatibility.
+    AllocatorApiEventMask eventMask = kAllAllocatorApiEvents;
+
     // Optional custom sampler.
     // If provided, this sampler will be used to determine whether a key
     // should be sampled. If not provided, a default FurcHashSampler is
@@ -110,9 +117,32 @@ class EventTracker {
   explicit EventTracker(Config&& config);
   ~EventTracker();
 
-  // This calls sampleKey and if sampled, adds the event
-  // to the queue.
+  // Checks the event mask and samples the key; if both accept, adds the
+  // event to the queue.
   RecordResult record(EventInfo&& eventInfo);
+
+  FOLLY_ALWAYS_INLINE bool shouldRecordEvent(AllocatorApiEvent event,
+                                             folly::StringPiece key) {
+    return acceptEvent(event) && sampleKey(key);
+  }
+
+  // For users who first call shouldRecordEvent() and then call
+  // recordWithoutSampling() if it returns true, avoiding EventInfo allocation
+  // when either the event type or key is not sampled.
+  RecordResult recordWithoutSampling(EventInfo&& eventInfo);
+
+  void getStats(folly::F14FastMap<std::string, uint64_t>& statsMap) const;
+
+ private:
+  // The two halves of shouldRecordEvent(), kept separate so record() can tell
+  // a disabled event apart from a sampled-out key without retesting the mask.
+  FOLLY_ALWAYS_INLINE bool acceptEvent(AllocatorApiEvent event) {
+    if (eventMaskContains(eventMask_, event)) {
+      return true;
+    }
+    eventDisabledCount_.inc();
+    return false;
+  }
 
   FOLLY_ALWAYS_INLINE bool sampleKey(folly::StringPiece key) {
     if (sampler_->shouldSample(key)) {
@@ -122,14 +152,6 @@ class EventTracker {
     return false;
   }
 
-  // For users who want to first call sampleKey and then call
-  // recordWithoutSampling() if sampleKey returns true to avoid
-  // allocating EventInfo object when it is not going to be sampled.
-  RecordResult recordWithoutSampling(EventInfo&& eventInfo);
-
-  void getStats(folly::F14FastMap<std::string, uint64_t>& statsMap) const;
-
- private:
   void validateConfig();
   void runBackgroundThread();
 
@@ -138,10 +160,12 @@ class EventTracker {
 
   std::unique_ptr<EventSink> eventSink_;
   std::unique_ptr<SamplerInterface> sampler_;
+  const AllocatorApiEventMask eventMask_;
   std::function<void(EventInfo&)> preQueueCallback_;
   std::function<void(EventInfo&)> postQueueCallback_;
 
   TLCounter sampleSuccessCount_{0};
+  TLCounter eventDisabledCount_{0};
   TLCounter dropCount_{0};
   TLCounter addToQueueCount_{0};
 };

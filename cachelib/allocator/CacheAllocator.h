@@ -1992,9 +1992,10 @@ class CacheAllocator : public CacheBase {
   // gate that lets callers skip both the sampling-related work and any
   // EventRecordParams construction (e.g., getAllocInfo) when no tracker is
   // configured or sampling rejects the key.
-  FOLLY_ALWAYS_INLINE bool shouldRecordEvent(Key key) const {
+  FOLLY_ALWAYS_INLINE bool shouldRecordEvent(AllocatorApiEvent event,
+                                             Key key) const {
     if (auto* eventTracker = getEventTracker()) {
-      return eventTracker->sampleKey(key);
+      return eventTracker->shouldRecordEvent(event, key);
     }
     return getLegacyEventTracker() != nullptr;
   }
@@ -2018,14 +2019,15 @@ class CacheAllocator : public CacheBase {
                    Key key,
                    AllocatorApiResult result,
                    EventRecordParams params = {}) const {
-    if (shouldRecordEvent(key)) {
+    if (shouldRecordEvent(event, key)) {
       recordEventWithoutSampling(event, key, result, std::move(params));
     }
   }
 
-  // Record event without calling sampleKey(). Use when the caller has already
-  // determined that the key should be sampled (e.g., NvmCache::recordEvent()
-  // calls sampleKey() once and then uses this to avoid double-sampling).
+  // Record event without calling shouldRecordEvent(). Use when the caller has
+  // already determined that this event and key should be sampled (e.g.,
+  // NvmCache::recordEvent() checks once and uses this to avoid
+  // double-sampling).
   void recordEventWithoutSampling(AllocatorApiEvent event,
                                   Key key,
                                   AllocatorApiResult result,
@@ -2092,7 +2094,7 @@ class CacheAllocator : public CacheBase {
                    Key key,
                    AllocatorApiResult result,
                    const HandleT& handle) const {
-    if (!shouldRecordEvent(key)) {
+    if (!shouldRecordEvent(event, key)) {
       return;
     }
     if (handle) {
@@ -3198,7 +3200,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     wakeUpPoolRebalancerOnAllocFailure();
   }
 
-  if (shouldRecordEvent(key)) {
+  if (shouldRecordEvent(AllocatorApiEvent::ALLOCATE, key)) {
     if (handle) {
       auto eventParams = makeEventRecordParams(handle);
       eventParams.size = size;
