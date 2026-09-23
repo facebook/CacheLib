@@ -18,6 +18,7 @@
 
 #include <fmt/core.h>
 #include <folly/Random.h>
+#include <folly/logging/xlog.h>
 
 #include <stdexcept>
 
@@ -27,6 +28,7 @@
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/LruPolicy.h"
+#include "cachelib/navy/common/ChecksumOffload.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/driver/Driver.h"
 
@@ -37,6 +39,30 @@
 
 namespace facebook::cachelib::navy {
 namespace {
+// Returns true if checksum offload may be enabled. Logs and returns false
+// (callers fall back to software checksums) when built without DTO support
+// or when the runtime DSA-vs-CPU checksum parity self-check fails. The
+// self-check protects against a mixed deployment where accelerator-computed
+// checksums would not verify against CPU-computed ones.
+bool verifyChecksumOffload(folly::StringPiece engine) {
+  if (!checksumOffloadSupported()) {
+    XLOGF(WARN,
+          "{}: checksum offload requested, but this binary was built without "
+          "DTO support. Falling back to software checksums.",
+          engine);
+    return false;
+  }
+  if (!checksumOffloadSelfCheck()) {
+    XLOGF(ERR,
+          "{}: DSA checksum offload self-check failed (accelerator checksum "
+          "does not match CPU checksum on this machine). Falling back to "
+          "software checksums.",
+          engine);
+    return false;
+  }
+  return true;
+}
+
 class BlockCacheProtoImpl final : public BlockCacheProto {
  public:
   BlockCacheProtoImpl() = default;
@@ -55,6 +81,11 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
   }
 
   void setChecksum(bool enable) override { config_.checksum = enable; }
+
+  void setChecksumOffload(bool enable, uint32_t minSize) override {
+    config_.checksumOffload = enable;
+    config_.checksumOffloadMinSize = minSize;
+  }
 
   void setLruEvictionPolicy() override {
     if (!(config_.cacheSize > 0 && config_.regionSize > 0)) {
@@ -155,6 +186,9 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
                                  DestructorCallback cb) && {
     config_.checkExpired = std::move(checkExpired);
     config_.destructorCb = std::move(cb);
+    if (config_.checksumOffload && !verifyChecksumOffload("BlockCache")) {
+      config_.checksumOffload = false;
+    }
     return std::make_unique<BlockCache>(std::move(config_));
   }
 
@@ -189,6 +223,10 @@ class BigHashProtoImpl final : public BigHashProto {
     config_.numMutexesPower = numMutexesPower;
   }
 
+  void setChecksumOffload(bool enable) override {
+    config_.checksumOffload = enable;
+  }
+
   void setDevice(Device* device) { config_.device = device; }
 
   void setDestructorCb(DestructorCallback cb) {
@@ -197,6 +235,9 @@ class BigHashProtoImpl final : public BigHashProto {
 
   std::unique_ptr<Engine> create(ExpiredCheck checkExpired) && {
     config_.checkExpired = std::move(checkExpired);
+    if (config_.checksumOffload && !verifyChecksumOffload("BigHash")) {
+      config_.checksumOffload = false;
+    }
     if (bloomFilterEnabled_) {
       if (config_.bucketSize == 0) {
         throw std::invalid_argument{"invalid bucket size"};

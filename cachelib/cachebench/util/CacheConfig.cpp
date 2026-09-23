@@ -116,6 +116,9 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyAdmissionWriteRateMB);
   JSONSetVal(configJson, navyMaxConcurrentInserts);
   JSONSetVal(configJson, navyDataChecksum);
+  JSONSetVal(configJson, navyChecksumOffload);
+  JSONSetVal(configJson, navyChecksumOffloadMinSize);
+  JSONSetVal(configJson, navyBigHashChecksumOffload);
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);
   JSONSetVal(configJson, deviceMaxWriteSize);

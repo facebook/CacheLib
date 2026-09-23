@@ -144,6 +144,8 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
     bcConfig.indexConfig.enableTrackItemHistory();
   }
   bcConfig.indexConfig.validate();
+  bcConfig.checksumOffload = config.navyChecksumOffload;
+  bcConfig.checksumOffloadMinSize = config.navyChecksumOffloadMinSize;
   // Note: LRU is not yet supported
   if (config.navySegmentedFifoSegmentRatio.empty() ||
       config.navySegmentedFifoSegmentRatio.size() == 1) {
