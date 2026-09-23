@@ -200,6 +200,10 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setChecksum(blockCacheConfig.getDataChecksum());
   blockCache->setChecksumOffload(blockCacheConfig.getChecksumOffload(),
                                  blockCacheConfig.getChecksumOffloadMinSize());
+  blockCache->setChecksumOffloadReadMinSize(
+      blockCacheConfig.getChecksumOffloadReadMinSize());
+  blockCache->setChecksumOffloadCacheControl(
+      blockCacheConfig.getChecksumOffloadCacheControl());
 
   // set eviction policy
   auto segmentRatio = blockCacheConfig.getSFifoSegmentRatio();
@@ -218,6 +222,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setRecoverEvictionPolicy(
       blockCacheConfig.isRecoverEvictionPolicy());
   blockCache->setDirectFlush(blockCacheConfig.isDirectFlush());
+  blockCache->setFlushCopyOffload(blockCacheConfig.isFlushCopyOffload());
   blockCache->setUseCombinedEntryBlock(
       blockCacheConfig.isCombinedEntryBlockEnabled());
   blockCache->setNumAllocatorsPerPriority(

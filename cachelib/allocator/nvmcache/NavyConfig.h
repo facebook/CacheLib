@@ -548,6 +548,23 @@ class BlockCacheConfig {
     return *this;
   }
 
+  // Separate minimum size for offloading checksum VERIFICATION on the read,
+  // reclaim and reinsertion paths; 0 = same as the write-path gate. Verifying
+  // has no CPU work to overlap with the accelerator, so its break-even is
+  // higher than the fused write.
+  BlockCacheConfig& setChecksumOffloadReadMinSize(uint32_t minSize) noexcept {
+    checksumOffloadReadMinSize_ = minSize;
+    return *this;
+  }
+
+  // Cache-control hint on the fused write-path copy (default true): steer the
+  // value bytes toward the CPU cache. Turn off when the next reader of the
+  // region buffer is the device (directFlush / flush copy offload).
+  BlockCacheConfig& setChecksumOffloadCacheControl(bool enable) noexcept {
+    checksumOffloadCacheControl_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setPreciseRemove(bool preciseRemove) noexcept {
     preciseRemove_ = preciseRemove;
     return *this;
@@ -570,6 +587,17 @@ class BlockCacheConfig {
 
   BlockCacheConfig& setDirectFlush(bool enable) noexcept {
     directFlush_ = enable;
+    return *this;
+  }
+
+  // When directFlush is off: copy the region buffer into the flush write
+  // buffer with one Intel DSA Memory Move instead of memcpy. Requires
+  // CacheLib built with BUILD_WITH_DTO; falls back to memcpy if DSA is
+  // unusable. The write buffers are pooled, so after the first flush per
+  // buffer their pages are resident; a work queue with block-on-fault covers
+  // the first touch.
+  BlockCacheConfig& setFlushCopyOffload(bool enable) noexcept {
+    flushCopyOffload_ = enable;
     return *this;
   }
 
@@ -633,6 +661,14 @@ class BlockCacheConfig {
 
   uint32_t getChecksumOffloadMinSize() const { return checksumOffloadMinSize_; }
 
+  uint32_t getChecksumOffloadReadMinSize() const {
+    return checksumOffloadReadMinSize_;
+  }
+
+  bool getChecksumOffloadCacheControl() const {
+    return checksumOffloadCacheControl_;
+  }
+
   uint64_t getSize() const { return size_; }
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
@@ -640,6 +676,7 @@ class BlockCacheConfig {
   bool isRecoverEvictionPolicy() const { return recoverEvictionPolicy_; }
 
   bool isDirectFlush() const { return directFlush_; }
+  bool isFlushCopyOffload() const { return flushCopyOffload_; }
 
   bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
 
@@ -680,6 +717,8 @@ class BlockCacheConfig {
   // copy on the write path), and the minimum value size to do so.
   bool checksumOffload_{false};
   uint32_t checksumOffloadMinSize_{4096};
+  uint32_t checksumOffloadReadMinSize_{0};
+  bool checksumOffloadCacheControl_{true};
   // Whether to remove an item by checking the key (true) or only the hash value
   // (false).
   bool preciseRemove_{false};
@@ -696,6 +735,9 @@ class BlockCacheConfig {
 
   // Whether to write region buffer directly without intermediate copy.
   bool directFlush_{false};
+
+  // Whether to do the flush copy (when not directFlush) on Intel DSA.
+  bool flushCopyOffload_{false};
 
   // Whether to use Combined entry block (For index entries and small sized
   // items).

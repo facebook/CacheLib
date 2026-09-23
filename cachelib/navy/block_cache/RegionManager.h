@@ -21,6 +21,7 @@
 #include <folly/fibers/TimedMutex.h>
 
 #include <memory>
+#include <mutex>
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"
@@ -92,6 +93,9 @@ class RegionManager {
   //                                  policy ordering across restarts
   // @param directFlush               whether to write region buffer directly
   //                                  to device without intermediate copy
+  // @param flushCopyOffload          when not directFlush: copy the region
+  //                                  buffer into the write buffer on Intel DSA
+  //                                  (DTO batch descriptor) instead of memcpy
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -108,7 +112,8 @@ class RegionManager {
                 bool workerFlushAsync,
                 bool allowReadDuringReclaim = false,
                 bool recoverEvictionPolicy = false,
-                bool directFlush = false);
+                bool directFlush = false,
+                bool flushCopyOffload = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -382,6 +387,27 @@ class RegionManager {
 
   // Whether to write region buffer directly without intermediate copy
   const bool directFlush_{false};
+
+  // Flush copy on DSA (see ctor); cleared at construction if directFlush is
+  // set or the DTO/DSA self-check fails.
+  bool flushCopyOffload_{false};
+  mutable AtomicCounter flushCopyOffloadCount_;
+  mutable AtomicCounter flushCopyFallbackCount_;
+
+  // Pool of device-aligned write buffers for the non-direct flush path.
+  // Without it every flush allocates a fresh regionSize_ buffer (16 MiB by
+  // default, ~10k times per 150 GB written): the allocation itself, and for
+  // the DSA copy fresh pages the device page-faults on. Buffers are handed
+  // out for the duration of one flush; the pool keeps at most
+  // max(2 x workers, numInMemBuffers) of them - the most flushes that can be
+  // in progress at once - so a burst neither allocates under the DMA engine
+  // nor grows without bound.
+  Buffer acquireWriteBuffer();
+  void releaseWriteBuffer(Buffer buf);
+  // mutable: getCounters() is const and reports the pool size
+  mutable std::mutex writeBufPoolMutex_;
+  std::vector<Buffer> writeBufPool_;
+  size_t writeBufPoolCap_{0};
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

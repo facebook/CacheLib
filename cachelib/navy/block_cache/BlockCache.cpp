@@ -229,6 +229,10 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       checksumData_{config.checksum},
       checksumOffload_{config.checksumOffload},
       checksumOffloadMinSize_{config.checksumOffloadMinSize},
+      checksumOffloadReadMinSize_{config.checksumOffloadReadMinSize
+                                      ? config.checksumOffloadReadMinSize
+                                      : config.checksumOffloadMinSize},
+      checksumOffloadCacheControl_{config.checksumOffloadCacheControl},
       device_{*config.device},
       allocAlignSize_{calcAllocAlignSize()},
       readBufferSize_{config.readBufferSize < kDefReadBufferSize
@@ -258,7 +262,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.regionManagerFlushAsync,
                      true /* allowReadDuringReclaim */,
                      config.recoverEvictionPolicy,
-                     config.directFlush},
+                     config.directFlush,
+                     config.flushCopyOffload},
       allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
@@ -283,7 +288,7 @@ std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
 }
 
 uint32_t BlockCache::valueChecksum(BufferView value) const {
-  if (checksumOffload_ && value.size() >= checksumOffloadMinSize_) {
+  if (checksumOffload_ && value.size() >= checksumOffloadReadMinSize_) {
     // While DSA computes the checksum, the calling fiber yields (or the
     // thread pause-polls), freeing the reader for other requests.
     return checksumWithOverlap(value, [] {});
@@ -1376,10 +1381,17 @@ void BlockCache::writeEntry(MutableBufferView buffer,
 
   if (checksumData_ && checksumOffload_ &&
       value.size() >= checksumOffloadMinSize_) {
-    // Fused copy + checksum on DSA; the descriptor and key are written by
-    // the CPU while the accelerator processes the value. The value checksum
-    // is not covered by csSelf, so it can be filled in afterwards.
-    const uint32_t cs = copyAndChecksum(buffer.data(), value, writeDescAndKey);
+    // Fused copy + checksum on DSA. The descriptor and key are written by the
+    // CPU BEFORE the descriptor is submitted rather than overlapped with it:
+    // they sit at the tail of the same slot the device writes the value into,
+    // and when value.size() is not a multiple of a cache line the CPU and the
+    // device would otherwise store into the same line concurrently (correct
+    // under coherence, but a false-sharing round trip per insert). The work
+    // is ~100 ns, so nothing measurable is lost. The value checksum is not
+    // covered by csSelf, so it can be filled in afterwards.
+    writeDescAndKey();
+    const uint32_t cs = copyAndChecksum(buffer.data(), value, [] {},
+                                        checksumOffloadCacheControl_);
     desc->cs = cs;
   } else {
     writeDescAndKey();

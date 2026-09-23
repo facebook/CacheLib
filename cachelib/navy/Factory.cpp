@@ -87,6 +87,14 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.checksumOffloadMinSize = minSize;
   }
 
+  void setChecksumOffloadReadMinSize(uint32_t minSize) override {
+    config_.checksumOffloadReadMinSize = minSize;
+  }
+
+  void setChecksumOffloadCacheControl(bool enable) override {
+    config_.checksumOffloadCacheControl = enable;
+  }
+
   void setLruEvictionPolicy() override {
     if (!(config_.cacheSize > 0 && config_.regionSize > 0)) {
       throw std::logic_error("layout is not set");
@@ -167,6 +175,9 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
   }
 
   void setDirectFlush(bool enable) override { config_.directFlush = enable; }
+  void setFlushCopyOffload(bool enable) override {
+    config_.flushCopyOffload = enable;
+  }
 
   void setUseCombinedEntryBlock(bool useCombinedEntryBlock) override {
     config_.useCombinedEntryBlock = useCombinedEntryBlock;

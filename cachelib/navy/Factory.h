@@ -55,6 +55,12 @@ class BlockCacheProto {
   // checksumming enabled and a build with DTO support.
   virtual void setChecksumOffload(bool enable, uint32_t minSize) = 0;
 
+  // (Optional) Separate size gate for read-side checksum verification;
+  // 0 = same as the write gate. (Optional) Cache-control hint on the fused
+  // write-path copy (default on). See BlockCache::Config.
+  virtual void setChecksumOffloadReadMinSize(uint32_t minSize) = 0;
+  virtual void setChecksumOffloadCacheControl(bool enable) = 0;
+
   // set*EvictionPolicy function family: sets eviction policy. Supports LRU,
   // LRU with deferred insert and FIFO. Must set up one of them.
 
@@ -102,6 +108,8 @@ class BlockCacheProto {
 
   // (Optional) Set if direct flush without intermediate copy is enabled.
   virtual void setDirectFlush(bool enable) = 0;
+  // Copy the region buffer into the flush write buffer on Intel DSA
+  virtual void setFlushCopyOffload(bool enable) = 0;
 
   // (Optional) Set if the combined entry block is enabled.
   virtual void setUseCombinedEntryBlock(bool useCombinedEntryBlock) = 0;
