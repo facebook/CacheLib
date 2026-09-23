@@ -330,7 +330,7 @@ if (BUILD_WITH_DTO)
   # whatever libdto happens to be on the system.
   set(CACHELIB_DTO_GIT_REPOSITORY "https://github.com/byrnedj/DTO.git"
       CACHE STRING "Git repository for DTO when no installed copy is found")
-  set(CACHELIB_DTO_GIT_TAG "64b01f8d06c939d8a70066e0b643cb97ffced060"
+  set(CACHELIB_DTO_GIT_TAG "e683bdc6ff2ac33836ef609a845e642a74ef5494"
       CACHE STRING "DTO revision to fetch when no installed copy is found")
 
   find_package(DTO CONFIG QUIET)

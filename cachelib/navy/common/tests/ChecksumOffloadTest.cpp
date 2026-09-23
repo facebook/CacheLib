@@ -164,13 +164,72 @@ TEST(ChecksumOffload, AsyncOpDrainOnDestroy) {
 }
 
 TEST(ChecksumOffload, SelfCheck) {
-  if (checksumOffloadSupported()) {
-    // Built with DTO: DSA (or DTO's internal CPU fallback) must agree with
-    // navy::checksum. A failure here means offloaded checksums would not
-    // verify against CPU-computed ones on this machine.
-    EXPECT_TRUE(checksumOffloadSelfCheck());
-  } else {
+  if (!checksumOffloadSupported()) {
     EXPECT_FALSE(checksumOffloadSelfCheck());
+    return;
   }
+  // Built with DTO. The self-check now requires the accelerator to actually
+  // execute the descriptors (a CPU fallback returns the right checksum and
+  // used to pass it). Probe first so a host with no usable work queue skips
+  // rather than fails; a host where the device runs must agree with
+  // navy::checksum, or offloaded checksums would not verify against CPU ones.
+  const auto src = randomBytes(1024 * 1024, 12345);
+  AsyncChecksumOp probe;
+  probe.submitChecksum(BufferView{src.size(), src.data()});
+  probe.wait();
+  if (!probe.completedOnDevice()) {
+    GTEST_SKIP() << "built with DTO but no usable DSA work queue on this host";
+  }
+  EXPECT_TRUE(checksumOffloadSelfCheck());
+}
+
+TEST(ChecksumOffload, CompletedOnDeviceIsTruthful) {
+  // The parity of the result cannot distinguish a working accelerator from a
+  // silently failing one; completedOnDevice() must.
+  const auto src = randomBytes(1024 * 1024, 777);
+  std::vector<uint8_t> dst(src.size(), 0);
+  const BufferView view{src.size(), src.data()};
+  AsyncChecksumOp op;
+  op.submitCopyAndChecksum(dst.data(), view, true /* cacheControl */);
+  EXPECT_EQ(checksum(view), op.wait());
+  EXPECT_EQ(0, std::memcmp(dst.data(), src.data(), src.size()));
+  if (!checksumOffloadSupported()) {
+    EXPECT_FALSE(op.completedOnDevice());
+  } else if (checksumOffloadSelfCheck()) {
+    // A passing self-check means 1 MiB descriptors run on the device here.
+    EXPECT_TRUE(op.completedOnDevice());
+  }
+}
+
+TEST(ChecksumOffload, CopyLargeDegradesWithoutBatch) {
+  // parts > 1 needs the DSA Batch opcode, which DSA 1.0 lacks; the copy must
+  // be correct on every path (batch, single-descriptor degrade, memcpy).
+  const auto src = randomBytes(1024 * 1024, 779);
+  for (size_t parts : {size_t{1}, size_t{4}, size_t{64}}) {
+    std::vector<uint8_t> dst(src.size(), 0);
+    copyLargeWithOffload(dst.data(), src.data(), src.size(), parts);
+    EXPECT_EQ(0, std::memcmp(dst.data(), src.data(), src.size()))
+        << "parts=" << parts;
+  }
+  if (checksumOffloadSupported() && copyOffloadSelfCheck()) {
+    // The single-descriptor path the flush uses: reports device completion
+    // and does not touch the device-fallback counter.
+    const auto before = getCopyLargeWaitStats().fallbacks;
+    std::vector<uint8_t> dst(src.size(), 0);
+    EXPECT_TRUE(copyLargeWithOffload(dst.data(), src.data(), src.size(), 1));
+    EXPECT_EQ(0, std::memcmp(dst.data(), src.data(), src.size()));
+    EXPECT_EQ(before, getCopyLargeWaitStats().fallbacks);
+  }
+}
+
+TEST(ChecksumOffload, WaitStatsExposeFallbacks) {
+  // Device failures redone on the CPU are counted, and never exceed the
+  // number of operations that reached the device path.
+  const auto csum = getChecksumWaitStats();
+  const auto copyOut = getCopyOutWaitStats();
+  const auto large = getCopyLargeWaitStats();
+  EXPECT_LE(csum.fallbacks, csum.calls);
+  EXPECT_LE(copyOut.fallbacks, copyOut.calls);
+  EXPECT_LE(large.fallbacks, large.calls);
 }
 } // namespace facebook::cachelib::navy::tests
