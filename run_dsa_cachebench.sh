@@ -27,6 +27,10 @@
 #   --nvm-size-mb N     Navy cache size (default: cdn 20480, bigcache 409600)
 #   --num-ops N         override test_config.numOps (per stressor thread;
 #                       bigcache default 500000 = the study's 12M-op replay)
+#   --page-size 4k|2mb|1gb
+#                       page size backing the DRAM cache (slabs + hash table,
+#                       SysV hugetlb shm). The hugetlb pools must be reserved
+#                       out-of-band (setup_dsa_bench.sh); 4k = default pages.
 #   --devices "0 2 4 6" DSA device ids to enable (default "0 2 4 6")
 #   --out DIR           output/work directory (default ./dsa_bench_out)
 #   --skip-build        do not (re)build cachebench
@@ -45,6 +49,7 @@ INTERCEPT=off
 FIBERS=off
 NVM_SIZE_MB=""
 NUM_OPS=""
+PAGE_SIZE=4k
 DEVICES="0 2 4 6"
 OUT="$PWD/dsa_bench_out"
 SKIP_BUILD=0
@@ -59,6 +64,7 @@ while [ $# -gt 0 ]; do
     --fibers)      FIBERS="$2"; shift 2 ;;
     --nvm-size-mb) NVM_SIZE_MB="$2"; shift 2 ;;
     --num-ops)     NUM_OPS="$2"; shift 2 ;;
+    --page-size)   PAGE_SIZE="$2"; shift 2 ;;
     --devices)     DEVICES="$2"; shift 2 ;;
     --out)         OUT="$2"; shift 2 ;;
     --skip-build)  SKIP_BUILD=1; shift ;;
@@ -85,7 +91,7 @@ case "$INTERCEPT" in on|off) ;; *) echo "--intercept must be on|off" >&2; exit 1
 case "$FIBERS" in on|off) ;; *) echo "--fibers must be on|off" >&2; exit 1 ;; esac
 mkdir -p "$OUT"
 
-export LD_LIBRARY_PATH="$PREFIX/lib:/usr/local/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${DTO_LIB_DIR:+$DTO_LIB_DIR:}$PREFIX/lib:$PREFIX/lib64:/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 # ---------------------------------------------------------------- build ----
 if [ "$SKIP_BUILD" = 0 ]; then
@@ -120,9 +126,26 @@ ls /dev/dsa/wq*.0 >/dev/null 2>&1 || { echo "no enabled DSA WQs under /dev/dsa" 
 echo "DSA WQs: $(ls /dev/dsa/)"
 
 # ------------------------------------------------------- derive config -----
-RUN_CONFIG="$OUT/config_${WORKLOAD}_offload_${OFFLOAD}.json"
+case "$PAGE_SIZE" in
+  4k)  HUGE_BYTES=0 ;;
+  2mb) HUGE_BYTES=2097152
+       free=$(cat /sys/kernel/mm/hugepages/hugepages-2048kB/free_hugepages)
+       [ "$free" -ge 4600 ] || { echo "need >=4600 free 2MB pages (have $free); reserve with setup_dsa_bench.sh" >&2; exit 1; } ;;
+  1gb) HUGE_BYTES=1073741824
+       free=$(cat /sys/kernel/mm/hugepages/hugepages-1048576kB/free_hugepages)
+       [ "$free" -ge 26 ] || { echo "need >=26 free 1GB pages (have $free); reserve with setup_dsa_bench.sh" >&2; exit 1; } ;;
+  *) echo "bad --page-size '$PAGE_SIZE' (4k|2mb|1gb)" >&2; exit 1 ;;
+esac
+export HUGE_BYTES
+
+# SysV shm metadata dir; recreated fresh for every run
+SHM_CACHE_DIR="$OUT/shm_meta_${WORKLOAD}_page_${PAGE_SIZE}"
+export SHM_CACHE_DIR
+
+RUN_CONFIG="$OUT/config_${WORKLOAD}_offload_${OFFLOAD}_page_${PAGE_SIZE}.json"
 CONFIG="$CONFIG" RUN_CONFIG="$RUN_CONFIG" OFFLOAD="$OFFLOAD" \
 NVM_SIZE_MB="$NVM_SIZE_MB" NUM_OPS="$NUM_OPS" OUT="$OUT" FIBERS="$FIBERS" \
+HUGE_BYTES="$HUGE_BYTES" \
 python3 - <<'EOF'
 import json, os, shutil, sys
 cfgPath = os.environ["CONFIG"]
@@ -162,17 +185,30 @@ if isTraceReplay:
     if offload != "none":
         cc["navyDataChecksum"] = True
         cc["navyChecksumOffload"] = offload == "on"
-        cc["navyChecksumOffloadMinSize"] = 4096
+        # only a default: a base config that sets the gate (a size sweep) wins
+        cc.setdefault("navyChecksumOffloadMinSize", 4096)
 elif offload != "none":
     # Synthetic workloads (CDN): the base config is DRAM-only; add the
     # hybrid Navy tier the offload applies to.
     cc["nvmCacheSizeMB"] = int(os.environ["NVM_SIZE_MB"])
     cc["nvmCachePaths"] = [os.path.join(os.environ["OUT"], "navy_cache_file")]
-    cc["navyReaderThreads"] = 32
-    cc["navyWriterThreads"] = 32
+    # defaults only: a base config may set these (the fiber scheduler needs
+    # maxNumReads 1024 / maxNumWrites 1200 to divide evenly, so 32 writers
+    # is invalid with --fibers on; use 30 or 40)
+    cc.setdefault("navyReaderThreads", 32)
+    cc.setdefault("navyWriterThreads", 32)
     cc["navyDataChecksum"] = True
     cc["navyChecksumOffload"] = offload == "on"
-    cc["navyChecksumOffloadMinSize"] = 4096
+    cc.setdefault("navyChecksumOffloadMinSize", 4096)
+
+huge = int(os.environ.get("HUGE_BYTES", "0"))
+# DRAM cache (slabs + hash table) on SysV shm so the page-size knob actually
+# applies to the cache; hugePageSize 0 = normal 4K pages. Without shmType +
+# cacheDir the allocator silently uses heap memory and ignores hugePageSize.
+cc["shmType"] = "sysv"
+cc["cacheDir"] = os.environ["SHM_CACHE_DIR"]
+if huge:
+    cc["hugePageSize"] = huge
 
 if os.environ["FIBERS"] == "on":
     # NavyRequestScheduler (fibers, libaio) with the study's settings;
@@ -182,13 +218,30 @@ if os.environ["FIBERS"] == "on":
     cc["navyQDepth"] = 32
     cc["navyEnableIoUring"] = False
 
+# Print the navy counter map at the end of the run: the offload/fallback/wait
+# counters are registered in RegionManager::getCounters but only reach the log
+# with this on. A run that cannot be audited from its log is not a measurement.
+cc["printNvmCounters"] = True
+
 json.dump(cfg, open(os.environ["RUN_CONFIG"], "w"), indent=2)
 print(f"wrote {os.environ['RUN_CONFIG']}")
 EOF
 
 # ---------------------------------------------------------------- run ------
+# navy with 128 reader + 300 writer threads needs far more fds than the
+# usual 1024 soft limit
+ulimit -n 65536 2>/dev/null || true
+
 export DTO_USESTDC_CALLS=0
 export DTO_CRC_MIN_BYTES=4096
+# Keep freed memory mapped. Navy populates its region and flush buffers
+# itself (RegionManager), which is what keeps a DSA using shared virtual
+# addressing from stalling on IOMMU page requests; these tunables remove the
+# remaining allocator churn (a few hundred thousand first-touch page requests
+# per run from glibc unmapping and re-obtaining large chunks) and also trim
+# the software arm by ~7%, so they are set for every arm. jemalloc users: the
+# equivalent is dirty_decay_ms:-1,muzzy_decay_ms:-1.
+export GLIBC_TUNABLES="${GLIBC_TUNABLES:-glibc.malloc.mmap_threshold=33554432:glibc.malloc.trim_threshold=4294967295:glibc.malloc.top_pad=67108864}"
 export DTO_WAIT_METHOD="${DTO_WAIT_METHOD:-busypoll}"
 export DTO_COLLECT_STATS=1
 if [ "$INTERCEPT" = off ]; then
@@ -197,18 +250,25 @@ else
   unset DTO_MIN_BYTES               # DTO's own threshold decides
 fi
 
-LOG="$OUT/cachebench_${WORKLOAD}_offload_${OFFLOAD}_intercept_${INTERCEPT}.log"
+LOG="$OUT/cachebench_${WORKLOAD}_offload_${OFFLOAD}_intercept_${INTERCEPT}_page_${PAGE_SIZE}.log"
 echo "== Running cachebench on socket 0 (workload=$WORKLOAD offload=$OFFLOAD intercept=$INTERCEPT fibers=$FIBERS) =="
 echo "   log: $LOG"
 
 # The fiber scheduler has a known ~1-in-4 startup hang (frozen at
 # NavyRequestDispatcher startup). With --progress 60 a healthy run writes to
-# its log at least once a minute, so 150s of log silence while the process
-# lives means hung: kill and retry (up to 3 attempts).
+# its log at least once a minute, so prolonged log silence while the process
+# lives means hung: kill and retry (up to 3 attempts). A cold trace preload
+# is silent too, so the threshold is configurable (WATCHDOG_SILENCE seconds).
+WATCHDOG_SILENCE="${WATCHDOG_SILENCE:-330}"
 attempt_run() {
   rm -f "$OUT/navy_cache_file"
-  /usr/bin/time -v numactl -N 0 \
-    "$CACHEBENCH" --json_test_config "$RUN_CONFIG" --progress 60 \
+  rm -rf "$SHM_CACHE_DIR"
+  # reap orphaned SysV segments (>100MB, ours) from earlier killed runs;
+  # a clean cachelib exit persists them for warm restart, which would pin
+  # the hugetlb pool across runs
+  ipcs -m 2>/dev/null | awk -v u="$USER" '$3==u && $5+0>100000000 {print $2}' | while read -r id; do ipcrm -m "$id" 2>/dev/null || true; done
+  /usr/bin/time -v numactl -N 0 -m 0 \
+    "$CACHEBENCH" --json_test_config "$RUN_CONFIG" --progress 60 --report_api_latency=true \
     > "$LOG" 2>&1 &
   local tpid=$!
   local last=-1 silent=0
@@ -218,7 +278,7 @@ attempt_run() {
     sz=$(stat -c %s "$LOG" 2>/dev/null || echo 0)
     if [ "$sz" = "$last" ]; then
       silent=$((silent + 1))
-      if [ "$silent" -ge 5 ]; then
+      if [ "$silent" -ge $((WATCHDOG_SILENCE / 30)) ]; then
         pkill -9 -P "$tpid" 2>/dev/null
         kill -9 "$tpid" 2>/dev/null
         wait "$tpid" 2>/dev/null
@@ -234,19 +294,27 @@ attempt_run() {
 
 set +e
 rc=99
-for attempt in 1 2 3; do
+WATCHDOG_RETRIES="${WATCHDOG_RETRIES:-6}"
+for attempt in $(seq 1 "$WATCHDOG_RETRIES"); do
   attempt_run
   rc=$?
   [ "$rc" -ne 99 ] && break
-  echo "WATCHDOG: run frozen for 150s+ (startup hang?), retrying (attempt $attempt of 3)"
+  echo "WATCHDOG: run frozen for ${WATCHDOG_SILENCE}s+ (startup hang?), retrying (attempt $attempt of $WATCHDOG_RETRIES)"
 done
 set -e
 rm -f "$OUT/navy_cache_file"
+rm -rf "$SHM_CACHE_DIR"
+ipcs -m 2>/dev/null | awk -v u="$USER" '$3==u && $5+0>100000000 {print $2}' | while read -r id; do ipcrm -m "$id" 2>/dev/null || true; done
 
 # ------------------------------------------------------------- report ------
 echo "exit=$rc"
 grep -E "Total Ops|get   |set   |NVM Gets|NVM Puts" "$LOG" | head -6 || true
-echo "checksum error lines: $(grep -ciE 'checksum.*(error|mismatch)' "$LOG" || true)"
+# exclude the printed counter map: its key names (navy_*_checksum_errors : 0)
+# would otherwise count as errors
+echo "checksum error lines: $(grep -viE '^navy_' "$LOG" | grep -ciE 'checksum.*(error|mismatch)' || true)"
+echo "checksum error counters: $(grep -iE '^navy_.*checksum.*error' "$LOG" | sed 's/  :  /=/' | tr '\n' ' ')"
+echo "-- DSA offload counters (device fallbacks must be 0 for an offload run) --"
+grep -E "^navy_bc_(csum|copyout|flush_copy)_|^navy_hugetlb_arena_misses" "$LOG" | sed 's/  :  / = /' || true
 grep -E "User time|System time|Elapsed \(wall|Maximum resident" "$LOG" || true
 if grep -q "Number of Memory Operations" "$LOG"; then
   echo "-- DTO op counts (see full table in the log) --"

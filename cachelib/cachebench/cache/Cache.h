@@ -773,6 +773,12 @@ Cache<Allocator>::Cache(const CacheConfig& config,
             .setDataChecksum(config_.navyDataChecksum)
             .setChecksumOffload(config_.navyChecksumOffload,
                                 config_.navyChecksumOffloadMinSize)
+            .setChecksumOffloadReadMinSize(
+                config_.navyChecksumOffloadReadMinSize)
+            .setChecksumOffloadCacheControl(
+                config_.navyChecksumOffloadCacheControl)
+            .setDirectFlush(config_.navyBlockCacheDirectFlush)
+            .setFlushCopyOffload(config_.navyBlockCacheFlushCopyOffload)
             .setCleanRegions(config_.navyCleanRegions,
                              config_.navyCleanRegionThreads)
             .setRegionSize(config_.navyRegionSizeMB * MB)
