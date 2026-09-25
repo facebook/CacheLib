@@ -56,6 +56,26 @@ class BlockCache final : public Engine {
     DestructorCallback destructorCb;
     // Checksum data read/written
     bool checksum{};
+    // Offload value checksumming (fused with the value copy on the write
+    // path) to Intel DSA via the DTO library when available. Requires
+    // checksum to be enabled. No effect when built without DTO support.
+    bool checksumOffload{false};
+    // Minimum value size to use the offloaded (fused) path on the WRITE path;
+    // smaller values use software copy+checksum. Submitting and polling a
+    // descriptor costs a few microseconds regardless of size, about what the
+    // CPU needs to CRC 16-32 KiB; on a size-diverse (CDN) workload a 16 KiB
+    // gate beat 4 KiB by 4% of process CPU and 32 KiB was indistinguishable.
+    uint32_t checksumOffloadMinSize{16384};
+    // Minimum value size to offload checksum VERIFICATION (lookup, reclaim,
+    // reinsertion, cleanup). 0 = same as checksumOffloadMinSize. The read side
+    // has no CPU work to overlap with the accelerator, so its break-even size
+    // is higher than the fused write; ~UINT32_MAX disables read-side offload.
+    uint32_t checksumOffloadReadMinSize{0};
+    // Cache-control hint on the fused write-path copy: true steers the value
+    // bytes toward the CPU cache (right when in-memory lookup hits or a CPU
+    // flush copy read them soon), false keeps them out (right when the next
+    // reader is the device's DMA engine, e.g. directFlush/flushCopyOffload).
+    bool checksumOffloadCacheControl{true};
     // Base offset and size (in bytes) of cache on the device
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
@@ -115,6 +135,11 @@ class BlockCache final : public Engine {
     // allocating an intermediate IO buffer and copying. Default false preserves
     // old behavior for safe rollout. When true, avoids redundant copy.
     bool directFlush{false};
+
+    // When not directFlush: copy the region buffer into the flush write
+    // buffer on Intel DSA (DTO batch descriptor) instead of memcpy. Requires
+    // a DTO build; verified at runtime, falls back to memcpy.
+    bool flushCopyOffload{false};
 
     // name of this BC instance
     std::string name{};
@@ -289,7 +314,10 @@ class BlockCache final : public Engine {
 
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 13;
+  // Version 14: navy::checksum switched from CRC-32 (IEEE) to CRC-32C
+  // (Castagnoli) for DSA offload compatibility. Entries written by prior
+  // versions would fail checksum verification.
+  static constexpr uint32_t kFormatVersion = 14;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache
@@ -538,6 +566,18 @@ class BlockCache final : public Engine {
   const ExpiredCheck checkExpired_;
   const DestructorCallback destructorCb_;
   const bool checksumData_{};
+
+  // Whether to offload value checksum+copy to DSA on the write path, and the
+  // minimum value size for which to do so. See Config::checksumOffload.
+  const bool checksumOffload_{};
+  const uint32_t checksumOffloadMinSize_{};
+  const uint32_t checksumOffloadReadMinSize_{};
+  const bool checksumOffloadCacheControl_{};
+
+  // Computes the checksum of @value for verification (lookup, reclaim and
+  // cleanup paths), offloading to DSA when checksum offload is enabled and
+  // the value meets the size gate.
+  uint32_t valueChecksum(BufferView value) const;
   // reference to the under-lying device.
   const Device& device_;
   // alloc alignment size indicates the granularity of entry sizes on device.

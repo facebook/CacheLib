@@ -51,6 +51,15 @@ target_link_libraries(cachelib_common PUBLIC
   ${XXHASH_LIBRARY}
 )
 
+if (BUILD_WITH_DTO)
+  # PUBLIC so the DTO headers/link dependency and the compile definition
+  # propagate to every cachelib library and to installed-package consumers.
+  # DTO itself is resolved (installed package or pinned fetch) in the
+  # top-level CMakeLists.txt.
+  target_link_libraries(cachelib_common PUBLIC DTO::dto)
+  target_compile_definitions(cachelib_common PUBLIC CACHELIB_BUILD_WITH_DTO)
+endif()
+
 install(TARGETS cachelib_common
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
