@@ -540,9 +540,10 @@ class BlockCacheConfig {
   // to Intel DSA via the DTO library. Requires data checksum to be enabled
   // and CacheLib built with BUILD_WITH_DTO. @minSize is the minimum value
   // size to use the offloaded path; smaller values are checksummed in
-  // software to avoid accelerator submission overhead.
+  // software, since submitting and polling a descriptor costs about what the
+  // CPU needs to CRC 16-32 KiB (16 KiB measured as the break-even).
   BlockCacheConfig& setChecksumOffload(bool checksumOffload,
-                                       uint32_t minSize = 4096) noexcept {
+                                       uint32_t minSize = 16384) noexcept {
     checksumOffload_ = checksumOffload;
     checksumOffloadMinSize_ = minSize;
     return *this;
@@ -716,7 +717,7 @@ class BlockCacheConfig {
   // Whether to offload data checksumming to Intel DSA (fused with the value
   // copy on the write path), and the minimum value size to do so.
   bool checksumOffload_{false};
-  uint32_t checksumOffloadMinSize_{4096};
+  uint32_t checksumOffloadMinSize_{16384};
   uint32_t checksumOffloadReadMinSize_{0};
   bool checksumOffloadCacheControl_{true};
   // Whether to remove an item by checking the key (true) or only the hash value

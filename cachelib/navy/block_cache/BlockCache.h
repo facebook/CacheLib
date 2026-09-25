@@ -61,9 +61,11 @@ class BlockCache final : public Engine {
     // checksum to be enabled. No effect when built without DTO support.
     bool checksumOffload{false};
     // Minimum value size to use the offloaded (fused) path on the WRITE path;
-    // smaller values use software copy+checksum to avoid accelerator
-    // submission overhead.
-    uint32_t checksumOffloadMinSize{4096};
+    // smaller values use software copy+checksum. Submitting and polling a
+    // descriptor costs a few microseconds regardless of size, about what the
+    // CPU needs to CRC 16-32 KiB; on a size-diverse (CDN) workload a 16 KiB
+    // gate beat 4 KiB by 4% of process CPU and 32 KiB was indistinguishable.
+    uint32_t checksumOffloadMinSize{16384};
     // Minimum value size to offload checksum VERIFICATION (lookup, reclaim,
     // reinsertion, cleanup). 0 = same as checksumOffloadMinSize. The read side
     // has no CPU work to overlap with the accelerator, so its break-even size

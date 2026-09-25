@@ -280,7 +280,7 @@ struct CacheConfig : public JSONConfig {
   // (no intermediate copy), or do that copy on Intel DSA.
   bool navyBlockCacheDirectFlush{false};
   bool navyBlockCacheFlushCopyOffload{false};
-  uint32_t navyChecksumOffloadMinSize{4096};
+  uint32_t navyChecksumOffloadMinSize{16384};
   // separate gate for read-side verification (0 = same as the write gate;
   // 4294967295 disables read-side offload), and the cache-control hint on the
   // fused write copy. See BlockCache::Config.

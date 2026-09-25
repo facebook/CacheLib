@@ -186,7 +186,7 @@ if isTraceReplay:
         cc["navyDataChecksum"] = True
         cc["navyChecksumOffload"] = offload == "on"
         # only a default: a base config that sets the gate (a size sweep) wins
-        cc.setdefault("navyChecksumOffloadMinSize", 4096)
+        cc.setdefault("navyChecksumOffloadMinSize", 16384)
 elif offload != "none":
     # Synthetic workloads (CDN): the base config is DRAM-only; add the
     # hybrid Navy tier the offload applies to.
@@ -199,7 +199,7 @@ elif offload != "none":
     cc.setdefault("navyWriterThreads", 32)
     cc["navyDataChecksum"] = True
     cc["navyChecksumOffload"] = offload == "on"
-    cc.setdefault("navyChecksumOffloadMinSize", 4096)
+    cc.setdefault("navyChecksumOffloadMinSize", 16384)
 
 huge = int(os.environ.get("HUGE_BYTES", "0"))
 # DRAM cache (slabs + hash table) on SysV shm so the page-size knob actually
