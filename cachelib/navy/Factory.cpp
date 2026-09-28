@@ -54,9 +54,10 @@ bool verifyChecksumOffload(folly::StringPiece engine) {
   }
   if (!checksumOffloadSelfCheck()) {
     XLOGF(ERR,
-          "{}: DSA checksum offload self-check failed (accelerator checksum "
-          "does not match CPU checksum on this machine). Falling back to "
-          "software checksums.",
+          "{}: DSA checksum offload self-check failed (no usable DSA work "
+          "queue - descriptors did not complete on the device - or the "
+          "accelerator checksum does not match the CPU checksum). Falling "
+          "back to software checksums.",
           engine);
     return false;
   }
