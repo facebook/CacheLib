@@ -122,8 +122,11 @@ if [ "$SKIP_DSA" = 0 ]; then
   done
   sudo chmod 0666 /dev/dsa/wq*.0
 fi
-ls /dev/dsa/wq*.0 >/dev/null 2>&1 || { echo "no enabled DSA WQs under /dev/dsa" >&2; exit 1; }
-echo "DSA WQs: $(ls /dev/dsa/)"
+# only the offload arm needs a device; software arms run anywhere
+if [ "$OFFLOAD" = on ]; then
+  ls /dev/dsa/wq*.0 >/dev/null 2>&1 || { echo "no enabled DSA WQs under /dev/dsa" >&2; exit 1; }
+  echo "DSA WQs: $(ls /dev/dsa/)"
+fi
 
 # ------------------------------------------------------- derive config -----
 case "$PAGE_SIZE" in
