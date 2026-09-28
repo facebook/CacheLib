@@ -190,6 +190,13 @@ if isTraceReplay:
         cc["navyChecksumOffload"] = offload == "on"
         # only a default: a base config that sets the gate (a size sweep) wins
         cc.setdefault("navyChecksumOffloadMinSize", 16384)
+    else:
+        # "no checksum" arm: override whatever the base config says, so a
+        # config saved from an offload run does not silently keep checksums
+        # (and a DSA self-check) on
+        cc["navyDataChecksum"] = False
+        cc["navyChecksumOffload"] = False
+        cc["navyBlockCacheFlushCopyOffload"] = False
 elif offload != "none":
     # Synthetic workloads (CDN): the base config is DRAM-only; add the
     # hybrid Navy tier the offload applies to.
