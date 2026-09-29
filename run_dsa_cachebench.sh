@@ -272,6 +272,12 @@ echo "   log: $LOG"
 WATCHDOG_SILENCE="${WATCHDOG_SILENCE:-330}"
 attempt_run() {
   rm -f "$OUT/navy_cache_file"
+  # PREFILL_NAVY=1: populate the Navy file before the run (tmpfs stores: a
+  # fresh file is 100 GB of first-touch page allocation inside the measured
+  # window, which stalls flushes and inflates insert latency for every arm)
+  if [ -n "${PREFILL_NAVY:-}" ]; then
+    dd if=/dev/zero of="$OUT/navy_cache_file" bs=1M count="$NVM_SIZE_MB" status=none
+  fi
   rm -rf "$SHM_CACHE_DIR"
   # reap orphaned SysV segments (>100MB, ours) from earlier killed runs;
   # a clean cachelib exit persists them for warm restart, which would pin
