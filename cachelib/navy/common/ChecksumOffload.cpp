@@ -446,11 +446,11 @@ bool copyLargeWithOffload(uint8_t* dest,
 #endif
 }
 
-bool copyOffloadSelfCheck() {
+bool copyOffloadSelfCheck(size_t size) {
   if (!checksumOffloadSupported()) {
     return false;
   }
-  constexpr size_t kSize = 1024 * 1024;
+  const size_t kSize = std::max<size_t>(size, 4096);
   std::vector<uint8_t> src(kSize);
   std::vector<uint8_t> dst(kSize, 0);
   std::mt19937 gen{54321};
@@ -459,8 +459,11 @@ bool copyOffloadSelfCheck() {
   }
   const bool offloaded = copyWithOffload(dst.data(), src.data(), kSize);
   if (!offloaded || std::memcmp(dst.data(), src.data(), kSize) != 0) {
-    XLOG(WARN) << "copyOffloadSelfCheck: single DSA Memory Move did not "
-                  "complete on the device or did not verify";
+    XLOGF(WARN,
+          "copyOffloadSelfCheck: a {}-byte DSA Memory Move did not complete on "
+          "the device or did not verify (a work queue whose max_transfer_size "
+          "is below this size rejects it with XFER_ERANGE)",
+          kSize);
     return false;
   }
   // The flush call site uses a single descriptor (parts = 1); require exactly
@@ -477,10 +480,14 @@ bool copyOffloadSelfCheck() {
   const bool batched = copyLargeWithOffload(dst.data(), src.data(), kSize, 4);
   const bool batchOk =
       batched && std::memcmp(dst.data(), src.data(), kSize) == 0;
-  XLOG(INFO) << "copyOffloadSelfCheck: single-descriptor copy OK on DSA; batch "
-             << (batchOk ? "descriptor OK" : "descriptor unavailable on this "
-                                             "device (single-descriptor "
-                                             "copies will be used)");
+  // A refused Batch degrades to one descriptor inside copyLargeWithOffload,
+  // so "OK" here means the multi-part path works, not that the device has
+  // the Batch opcode.
+  XLOGF(INFO,
+        "copyOffloadSelfCheck: {}-byte single-descriptor copy OK on DSA; "
+        "multi-part path {}",
+        kSize, batchOk ? "OK (Batch opcode or single-descriptor degrade)"
+                       : "unavailable (single-descriptor copies will be used)");
   return true;
 }
 

@@ -96,7 +96,8 @@ RegionManager::RegionManager(uint32_t numRegions,
     flushCopyOffload_ = false;
   }
   if (flushCopyOffload_) {
-    flushCopyOffload_ = copyOffloadSelfCheck();
+    // probe at the size the flush will actually submit
+    flushCopyOffload_ = copyOffloadSelfCheck(regionSize_);
     if (flushCopyOffload_) {
       XLOG(INFO) << "RegionManager: flush copy offload to DSA active";
     } else {

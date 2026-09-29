@@ -142,7 +142,11 @@ bool copyWithOffload(uint8_t* dest, const uint8_t* src, size_t n);
 
 // Runtime check that a DSA copy is faithful; false when built without DTO or
 // when DSA is unusable. Callers should enable copy offload only if true.
-bool copyOffloadSelfCheck();
+// @size is the largest copy the caller will submit: a work queue's maximum
+// transfer size (a WQ attribute, 2 MiB by default on some configurations)
+// rejects bigger descriptors with XFER_ERANGE, so a self-check at a smaller
+// size would pass and every real copy would then fail on the device.
+bool copyOffloadSelfCheck(size_t size = 1024 * 1024);
 
 // Large copy offload (e.g. a 16 MiB region buffer). With @parts == 1 the
 // range is one DSA Memory Move descriptor; with @parts > 1 it is split into
