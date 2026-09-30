@@ -111,7 +111,7 @@ ClassId RebalanceStrategy::pickVictimByFreeMem(const std::set<ClassId>& victims,
       [&](ClassId id) { return prevState.at(id).getDeltaEvictions(stats) > 0; },
       "filtering evicting classes for free-mem");
 
-  if (victims.empty()) {
+  if (nonEvicting.empty()) {
     return Slab::kInvalidClassId;
   }
 
