@@ -131,6 +131,95 @@ uint32_t copyAndChecksum(uint8_t* dest,
 uint32_t checksumWithOverlap(BufferView src,
                              folly::FunctionRef<void()> overlap);
 
+/**
+ * Up to kMax checksum / copy+checksum operations submitted as ONE DSA batch
+ * descriptor (one ENQCMD, one completion record to poll). Caller-owned, like
+ * AsyncChecksumOp; results are read back per member after poll()/wait().
+ * Members the device failed are repaired on the CPU before wait() returns
+ * (copy redone, CRC computed in software), so crc(i) is always valid.
+ */
+class BatchChecksumOp {
+ public:
+  static constexpr size_t kMax = 64;
+
+  BatchChecksumOp();
+  BatchChecksumOp(const BatchChecksumOp&) = delete;
+  BatchChecksumOp& operator=(const BatchChecksumOp&) = delete;
+  ~BatchChecksumOp();
+
+  // Returns the member's index. Must not be called when full().
+  size_t addChecksum(BufferView src);
+  size_t addCopyAndChecksum(uint8_t* dest, BufferView src, bool cacheControl);
+
+  size_t size() const { return count_; }
+  bool empty() const { return count_ == 0; }
+  bool full() const { return count_ == kMax; }
+
+  // Submits everything added so far. Returns true when the device took the
+  // batch (poll()/wait() required), false when it was done on the CPU
+  // instead (results already available).
+  bool submit();
+  // True once complete. After completion every member has a valid crc().
+  bool poll();
+  // Waits like AsyncChecksumOp::wait(): yields to ready fibers, blocks
+  // through DTO when its wait method parks, otherwise pause-polls.
+  void wait();
+
+  uint32_t crc(size_t i) const { return crc_[i]; }
+  bool completedOnDevice() const { return onDevice_; }
+  // Members the device failed and the CPU redid (0 when all completed).
+  size_t fallbacks() const { return fallbacks_; }
+  // Reuse for another batch once complete.
+  void reset();
+
+ private:
+  struct Member {
+    uint8_t* dest{nullptr};
+    BufferView src;
+    bool copy{false};
+    bool cacheControl{false};
+  };
+  void finish();
+
+  Member members_[kMax];
+  uint32_t crc_[kMax]{};
+  size_t count_{0};
+  size_t fallbacks_{0};
+  bool submitted_{false};
+  bool onDevice_{false};
+  bool done_{false};
+  void* op_{nullptr}; // dto_batch_op*, owned
+};
+
+/**
+ * Fiber-coalesced checksum: when called on a fiber, the request joins the
+ * batch that this NavyThread is currently filling, yields once so sibling
+ * fibers can add theirs, and the fiber that finds the batch still open after
+ * its yield submits it for everyone (one descriptor and one wait per batch;
+ * the others park on fiber batons). The yield happens only when the fiber
+ * manager has runnable fibers - with nothing to coalesce the request is
+ * submitted at once, as one member, which DTO sends as a plain descriptor.
+ * Off a fiber this is exactly checksumWithOverlap / copyAndChecksum. The
+ * caller decides whether to use it (BlockCache::Config::checksumOffloadBatch).
+ */
+uint32_t checksumBatched(BufferView src, folly::FunctionRef<void()> overlap);
+uint32_t copyAndChecksumBatched(uint8_t* dest,
+                                BufferView src,
+                                folly::FunctionRef<void()> overlap,
+                                bool cacheControl = true);
+
+struct ChecksumBatchStats {
+  uint64_t batches{0};   // batches submitted (device or CPU)
+  uint64_t members{0};   // operations carried by those batches
+  uint64_t singles{0};   // batches that ended up with one member
+  uint64_t leaders{0};   // requests that submitted and waited for a batch
+  uint64_t waiters{0};   // requests that parked on a baton instead
+  uint64_t deferred{0};  // members computed at region flush (BlockCache)
+  uint64_t fallbacks{0}; // members the device failed, redone on the CPU
+};
+ChecksumBatchStats getChecksumBatchStats();
+void addDeferredChecksumStats(uint64_t members);
+
 // Plain copy offload (no checksum). copyWithOffload() copies @n bytes from
 // @src to @dest, on DSA when the build has DTO support, the size passes DTO's
 // gate and submission succeeds, otherwise with memcpy; it returns true iff

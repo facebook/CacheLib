@@ -24,9 +24,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <thread>
+#include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <random>
+#include <thread>
 #include <vector>
 
 #include "cachelib/navy/common/Hash.h"
@@ -285,6 +287,299 @@ std::atomic<uint64_t> gCopyLargeCalls{0};
 std::atomic<uint64_t> gCopyLargeSubmitUs{0};
 std::atomic<uint64_t> gCopyLargeWaitUs{0};
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Batched checksums
+// ---------------------------------------------------------------------------
+namespace {
+std::atomic<uint64_t> gBatchBatches{0}, gBatchMembers{0}, gBatchSingles{0},
+    gBatchLeaders{0}, gBatchWaiters{0}, gBatchDeferred{0}, gBatchFallbacks{0};
+} // namespace
+
+BatchChecksumOp::BatchChecksumOp() {
+#ifdef CACHELIB_BUILD_WITH_DTO
+  op_ = dto_batch_op_new();
+#endif
+}
+
+BatchChecksumOp::~BatchChecksumOp() {
+  if (submitted_ && !done_) {
+    wait();
+  }
+#ifdef CACHELIB_BUILD_WITH_DTO
+  if (op_) {
+    dto_batch_op_free(static_cast<dto_batch_op*>(op_));
+  }
+#endif
+}
+
+size_t BatchChecksumOp::addChecksum(BufferView src) {
+  XDCHECK(!full());
+  XDCHECK(!submitted_);
+  members_[count_] = Member{nullptr, src, false, false};
+  return count_++;
+}
+
+size_t BatchChecksumOp::addCopyAndChecksum(uint8_t* dest,
+                                           BufferView src,
+                                           bool cacheControl) {
+  XDCHECK(!full());
+  XDCHECK(!submitted_);
+  XDCHECK(dest);
+  members_[count_] = Member{dest, src, true, cacheControl};
+  return count_++;
+}
+
+void BatchChecksumOp::reset() {
+  XDCHECK(!submitted_ || done_);
+  count_ = 0;
+  fallbacks_ = 0;
+  submitted_ = false;
+  onDevice_ = false;
+  done_ = false;
+}
+
+bool BatchChecksumOp::submit() {
+  XDCHECK(!submitted_);
+  submitted_ = true;
+  gBatchBatches.fetch_add(1, std::memory_order_relaxed);
+  gBatchMembers.fetch_add(count_, std::memory_order_relaxed);
+  if (count_ == 1) {
+    gBatchSingles.fetch_add(1, std::memory_order_relaxed);
+  }
+#ifdef CACHELIB_BUILD_WITH_DTO
+  // A zero-length member makes DTO refuse the whole batch, and an empty
+  // buffer has nothing to accelerate anyway: such batches go to the CPU.
+  bool allNonEmpty = count_ > 0;
+  for (size_t i = 0; i < count_ && allNonEmpty; ++i) {
+    allNonEmpty = members_[i].src.size() > 0;
+  }
+  if (op_ && allNonEmpty) {
+    dto_batch_member m[kMax];
+    for (size_t i = 0; i < count_; ++i) {
+      m[i].dst = members_[i].dest;
+      m[i].src = members_[i].src.data();
+      m[i].n = members_[i].src.size();
+      m[i].kind = members_[i].copy ? DTO_BATCH_MEMCPY_CRC : DTO_BATCH_CRC;
+      m[i].cache_control = members_[i].cacheControl ? 1 : 0;
+    }
+    if (dto_submit_batch(static_cast<dto_batch_op*>(op_), m,
+                         static_cast<int>(count_)) == DTO_ASYNC_SUBMITTED) {
+      onDevice_ = true;
+      return true;
+    }
+  }
+#endif
+  // Refused (no DTO, no WQ, oversized member, submit failure): CPU for all.
+  for (size_t i = 0; i < count_; ++i) {
+    if (members_[i].copy) {
+      std::memcpy(members_[i].dest, members_[i].src.data(),
+                  members_[i].src.size());
+    }
+    crc_[i] = checksum(members_[i].src);
+  }
+  onDevice_ = false;
+  done_ = true;
+  return false;
+}
+
+void BatchChecksumOp::finish() {
+#ifdef CACHELIB_BUILD_WITH_DTO
+  auto* op = static_cast<dto_batch_op*>(op_);
+  for (size_t i = 0; i < count_; ++i) {
+    if (dto_batch_member_done(op, static_cast<int>(i))) {
+      crc_[i] = dto_batch_crc_val(op, static_cast<int>(i));
+    } else {
+      // DTO already redid the copy of a failed copy+CRC member; only the
+      // CRC is still owed (see dto_batch_member_done).
+      ++fallbacks_;
+      crc_[i] = checksum(members_[i].src);
+    }
+  }
+  if (fallbacks_) {
+    gBatchFallbacks.fetch_add(fallbacks_, std::memory_order_relaxed);
+    gCsumFallbacks.fetch_add(fallbacks_, std::memory_order_relaxed);
+  }
+#endif
+  done_ = true;
+}
+
+bool BatchChecksumOp::poll() {
+  if (done_) {
+    return true;
+  }
+#ifdef CACHELIB_BUILD_WITH_DTO
+  if (dto_batch_poll(static_cast<dto_batch_op*>(op_)) == DTO_ASYNC_PENDING) {
+    return false;
+  }
+  finish();
+  return true;
+#else
+  done_ = true;
+  return true;
+#endif
+}
+
+void BatchChecksumOp::wait() {
+  if (done_) {
+    return;
+  }
+#ifdef CACHELIB_BUILD_WITH_DTO
+  auto* op = static_cast<dto_batch_op*>(op_);
+  // Same policy as AsyncChecksumOp::wait(): yield when a sibling fiber is
+  // runnable, park through DTO when its wait method blocks, else pause-poll.
+  auto* fm = folly::fibers::onFiber()
+                 ? folly::fibers::FiberManager::getFiberManagerUnsafe()
+                 : nullptr;
+  const auto t0 = std::chrono::steady_clock::now();
+  uint64_t yields = 0, polls = 0, blocks = 0;
+  while (dto_batch_poll(op) == DTO_ASYNC_PENDING) {
+    if (fm && fm->hasReadyTasks()) {
+      ++yields;
+      folly::fibers::yield();
+    } else if (dtoWaitBlocks()) {
+      ++blocks;
+      dto_batch_wait(op);
+    } else {
+      ++polls;
+      folly::asm_volatile_pause();
+    }
+  }
+  // One wait per batch, in the same counters the per-op path uses, so
+  // csum_wait_ops / polls / us keep describing what the thread really did.
+  gCsumOps.fetch_add(1, std::memory_order_relaxed);
+  gCsumYields.fetch_add(yields, std::memory_order_relaxed);
+  gCsumPolls.fetch_add(polls, std::memory_order_relaxed);
+  gCsumBlocks.fetch_add(blocks, std::memory_order_relaxed);
+  gCsumWaitUs.fetch_add(std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - t0)
+                            .count(),
+                        std::memory_order_relaxed);
+  finish();
+#else
+  done_ = true;
+#endif
+}
+
+namespace {
+// One batch being filled by the fibers of a NavyThread. Everything below runs
+// on that thread only (fibers are cooperatively scheduled), so no locking.
+struct OpenBatch {
+  BatchChecksumOp op;
+  folly::fibers::Baton batons[BatchChecksumOp::kMax];
+  bool submitted{false};
+  size_t outstanding{0}; // members that have not read their result yet
+};
+
+struct ThreadBatcher {
+  OpenBatch* open{nullptr};
+  std::vector<std::unique_ptr<OpenBatch>> pool;
+
+  OpenBatch* acquire() {
+    if (pool.empty()) {
+      return new OpenBatch();
+    }
+    auto* b = pool.back().release();
+    pool.pop_back();
+    return b;
+  }
+  void release(OpenBatch* b) {
+    b->op.reset();
+    b->submitted = false;
+    for (auto& baton : b->batons) {
+      baton.reset();
+    }
+    pool.emplace_back(b);
+  }
+  ~ThreadBatcher() {
+    delete open;
+  }
+};
+
+thread_local ThreadBatcher tlBatcher;
+
+uint32_t batched(uint8_t* dest,
+                 BufferView src,
+                 bool copy,
+                 bool cacheControl,
+                 folly::FunctionRef<void()> overlap) {
+  if (!folly::fibers::onFiber() || src.size() == 0) {
+    return copy ? copyAndChecksum(dest, src, overlap, cacheControl)
+                : checksumWithOverlap(src, overlap);
+  }
+  auto& tb = tlBatcher;
+  if (tb.open == nullptr) {
+    tb.open = tb.acquire();
+  }
+  OpenBatch* b = tb.open;
+  const size_t idx = copy ? b->op.addCopyAndChecksum(dest, src, cacheControl)
+                          : b->op.addChecksum(src);
+  ++b->outstanding;
+  overlap();
+  if (!b->op.full()) {
+    // Give sibling fibers one scheduler turn to add their requests - but only
+    // when there are any runnable: an unconditional yield cost +2-4% CPU and
+    // +1 us insert p50 on 24-48 client threads, where a sibling was ready
+    // 1.5-17% of the time. Alone, submit at once (one member = DTO sends a
+    // plain descriptor: the per-op path).
+    auto* fm = folly::fibers::FiberManager::getFiberManagerUnsafe();
+    if (fm && fm->hasReadyTasks()) {
+      folly::fibers::yield();
+    }
+  }
+  if (!b->submitted) {
+    // Nobody submitted while we yielded (or we filled it): we are the
+    // leader. Close the batch to new members, submit, wait, wake the rest.
+    b->submitted = true;
+    if (tb.open == b) {
+      tb.open = nullptr;
+    }
+    gBatchLeaders.fetch_add(1, std::memory_order_relaxed);
+    b->op.submit();
+    b->op.wait();
+    for (size_t i = 0; i < b->op.size(); ++i) {
+      if (i != idx) {
+        b->batons[i].post();
+      }
+    }
+  } else {
+    gBatchWaiters.fetch_add(1, std::memory_order_relaxed);
+    b->batons[idx].wait();
+  }
+  const uint32_t crc = b->op.crc(idx);
+  if (--b->outstanding == 0) {
+    tb.release(b);
+  }
+  return crc;
+}
+} // namespace
+
+uint32_t checksumBatched(BufferView src, folly::FunctionRef<void()> overlap) {
+  return batched(nullptr, src, false, false, overlap);
+}
+
+uint32_t copyAndChecksumBatched(uint8_t* dest,
+                                BufferView src,
+                                folly::FunctionRef<void()> overlap,
+                                bool cacheControl) {
+  return batched(dest, src, true, cacheControl, overlap);
+}
+
+ChecksumBatchStats getChecksumBatchStats() {
+  ChecksumBatchStats st;
+  st.batches = gBatchBatches.load();
+  st.members = gBatchMembers.load();
+  st.singles = gBatchSingles.load();
+  st.leaders = gBatchLeaders.load();
+  st.waiters = gBatchWaiters.load();
+  st.deferred = gBatchDeferred.load();
+  st.fallbacks = gBatchFallbacks.load();
+  return st;
+}
+
+void addDeferredChecksumStats(uint64_t members) {
+  gBatchDeferred.fetch_add(members, std::memory_order_relaxed);
+}
 
 CopyLargeWaitStats getChecksumWaitStats() {
   CopyLargeWaitStats st;

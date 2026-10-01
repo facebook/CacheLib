@@ -232,4 +232,88 @@ TEST(ChecksumOffload, WaitStatsExposeFallbacks) {
   EXPECT_LE(copyOut.fallbacks, copyOut.calls);
   EXPECT_LE(large.fallbacks, large.calls);
 }
+
+// BatchChecksumOp: every member's crc(i) equals navy::checksum() of its
+// source, copy members land faithfully, failed/absent device members are
+// repaired on the CPU - with or without a work queue.
+TEST(ChecksumOffload, BatchChecksumOpParity) {
+  std::mt19937 gen{777};
+  std::vector<std::vector<uint8_t>> srcs;
+  std::vector<std::vector<uint8_t>> dsts;
+  const size_t sizes[] = {13, 4096, 16 * 1024, 65 * 1024, 300 * 1024};
+  for (size_t s : sizes) {
+    srcs.emplace_back(s);
+    for (auto& b : srcs.back()) {
+      b = static_cast<uint8_t>(gen());
+    }
+    dsts.emplace_back(s, 0);
+  }
+  BatchChecksumOp op;
+  for (size_t i = 0; i < srcs.size(); ++i) {
+    BufferView v{srcs[i].size(), srcs[i].data()};
+    if (i % 2 == 0) {
+      op.addChecksum(v);
+    } else {
+      op.addCopyAndChecksum(dsts[i].data(), v, true);
+    }
+  }
+  EXPECT_EQ(srcs.size(), op.size());
+  op.submit();
+  op.wait();
+  for (size_t i = 0; i < srcs.size(); ++i) {
+    BufferView v{srcs[i].size(), srcs[i].data()};
+    EXPECT_EQ(checksum(v), op.crc(i)) << "member " << i;
+    if (i % 2 == 1) {
+      EXPECT_EQ(0, std::memcmp(dsts[i].data(), srcs[i].data(), srcs[i].size()))
+          << "copy member " << i;
+    }
+  }
+  // reset + reuse up to kMax members
+  op.reset();
+  std::vector<uint8_t> big(64 * 1024);
+  for (auto& b : big) {
+    b = static_cast<uint8_t>(gen());
+  }
+  for (size_t i = 0; i < BatchChecksumOp::kMax; ++i) {
+    op.addChecksum(BufferView{big.size(), big.data()});
+  }
+  EXPECT_TRUE(op.full());
+  op.submit();
+  op.wait();
+  const uint32_t expected = checksum(BufferView{big.size(), big.data()});
+  for (size_t i = 0; i < BatchChecksumOp::kMax; ++i) {
+    EXPECT_EQ(expected, op.crc(i)) << "member " << i;
+  }
+}
+
+// checksumBatched / copyAndChecksumBatched return navy::checksum() both off a
+// fiber (plain path) and on fibers sharing a thread (coalesced path).
+TEST(ChecksumOffload, BatchedCallsMatchSoftware) {
+  std::mt19937 gen{4242};
+  std::vector<uint8_t> src(96 * 1024);
+  for (auto& b : src) {
+    b = static_cast<uint8_t>(gen());
+  }
+  BufferView v{src.size(), src.data()};
+  const uint32_t expected = checksum(v);
+  EXPECT_EQ(expected, checksumBatched(v, [] {}));
+  std::vector<uint8_t> dst(src.size(), 0);
+  EXPECT_EQ(expected, copyAndChecksumBatched(dst.data(), v, [] {}, true));
+  EXPECT_EQ(0, std::memcmp(dst.data(), src.data(), src.size()));
+
+  folly::EventBase evb;
+  auto& fm = folly::fibers::getFiberManager(evb);
+  std::vector<uint32_t> got(8, 0);
+  std::vector<std::vector<uint8_t>> dsts(8, std::vector<uint8_t>(src.size()));
+  for (size_t i = 0; i < 8; ++i) {
+    fm.addTask([&, i] {
+      got[i] = copyAndChecksumBatched(dsts[i].data(), v, [] {}, true);
+    });
+  }
+  evb.loop();
+  for (size_t i = 0; i < 8; ++i) {
+    EXPECT_EQ(expected, got[i]) << "fiber " << i;
+    EXPECT_EQ(0, std::memcmp(dsts[i].data(), src.data(), src.size()));
+  }
+}
 } // namespace facebook::cachelib::navy::tests
