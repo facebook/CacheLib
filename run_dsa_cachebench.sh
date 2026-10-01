@@ -244,6 +244,12 @@ ulimit -n 65536 2>/dev/null || true
 
 export DTO_USESTDC_CALLS=0
 export DTO_CRC_MIN_BYTES=4096
+# DTO's per-call statistics (the "Number of Memory Operations" table) cost two
+# clock_gettime calls and bookkeeping on EVERY interposed memcpy/memmove in the
+# process - cachebench's startup parallel key sort alone went from 1 s to
+# 13-138 s of CPU with them on. They are off unless asked for; the harness
+# reports the offload counters from Navy instead.
+export DTO_COLLECT_STATS="${DTO_COLLECT_STATS:-0}"
 # Keep freed memory mapped. Navy populates its region and flush buffers
 # itself (RegionManager), which is what keeps a DSA using shared virtual
 # addressing from stalling on IOMMU page requests; these tunables remove the
