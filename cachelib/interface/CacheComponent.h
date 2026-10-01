@@ -19,8 +19,13 @@
 #include <folly/coro/AsyncGenerator.h>
 #include <folly/coro/Task.h>
 
+#include <memory>
+#include <utility>
+
+#include "cachelib/common/Time.h"
 #include "cachelib/interface/CacheItem.h"
 #include "cachelib/interface/Descriptor.h"
+#include "cachelib/interface/EvictionCallback.h"
 #include "cachelib/interface/Handle.h"
 #include "cachelib/interface/Result.h"
 #include "cachelib/interface/Stats.h"
@@ -177,6 +182,32 @@ class CacheComponent {
   virtual CacheComponentStats getStats() const noexcept = 0;
 
  protected:
+  explicit CacheComponent(EvictionCallback evictionCallback)
+      : evictionCallback_(evictionCallback
+                              ? std::make_shared<const EvictionCallback>(
+                                    std::move(evictionCallback))
+                              : nullptr) {}
+
+  /**
+   * Report a live capacity eviction to the framework. Expired items are not
+   * reported.
+   */
+  void onEviction(const CacheItem& item) const noexcept {
+    onEviction(evictionCallback_, item);
+  }
+
+  /**
+   * Create a move-safe adapter for implementation-specific eviction hooks.
+   */
+  EvictionCallback makeOnEvictionCallback() const {
+    if (!evictionCallback_) {
+      return {};
+    }
+    return [callback = evictionCallback_](const CacheItem& item) noexcept {
+      CacheComponent::onEviction(callback, item);
+    };
+  }
+
   /**
    * Mark an item as inserted into cache.
    * @param handle handle to the cache item
@@ -201,6 +232,19 @@ class CacheComponent {
   static void* getInlineBuf(Handle& handle) noexcept { return handle.buf_; }
 
  private:
+  using SharedEvictionCallback = std::shared_ptr<const EvictionCallback>;
+
+  static void onEviction(const SharedEvictionCallback& callback,
+                         const CacheItem& item) noexcept {
+    if (callback && !util::isExpired(item.getExpiryTime())) {
+      (*callback)(item);
+    }
+  }
+
+  // Shared storage keeps implementation-specific callback adapters valid when
+  // a CacheComponent is moved.
+  SharedEvictionCallback evictionCallback_;
+
   // ------------------------------ Interface ------------------------------ //
 
   /**
@@ -237,9 +281,11 @@ class CacheComponent {
  */
 class CacheComponentWithStats : public CacheComponent {
  public:
-  CacheComponentWithStats(
+  explicit CacheComponentWithStats(
+      EvictionCallback evictionCallback,
       const CacheComponentStatsCollector::LatencySamplingConfig& config = {})
-      : stats_(std::make_unique<CacheComponentStatsCollector>(config)) {}
+      : CacheComponent(std::move(evictionCallback)),
+        stats_(std::make_unique<CacheComponentStatsCollector>(config)) {}
 
   CacheComponentStats getStats() const noexcept override {
     return CacheComponentStats(*stats_);

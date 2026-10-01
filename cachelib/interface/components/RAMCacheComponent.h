@@ -21,6 +21,7 @@
 #include "cachelib/allocator/MMLru.h"
 #include "cachelib/interface/CacheComponent.h"
 #include "cachelib/interface/Descriptor.h"
+#include "cachelib/interface/EvictionCallback.h"
 #include "cachelib/interface/utils/Persistence.h"
 
 namespace facebook::cachelib {
@@ -60,14 +61,13 @@ class RAMCacheComponent : public CacheComponentWithStats {
     static PersistenceConfig persistenceButNoRecovery(std::string cacheDir,
                                                       void* baseAddr = nullptr);
 
-    // Note: make return val non-const so we can move cacheDir out
-    FOLLY_ALWAYS_INLINE std::string& cacheDir() const noexcept {
+    FOLLY_ALWAYS_INLINE const std::string& cacheDir() const noexcept {
       return cacheDir_;
     }
     FOLLY_ALWAYS_INLINE void* baseAddr() const noexcept { return baseAddr_; }
 
    private:
-    mutable std::string cacheDir_;
+    std::string cacheDir_;
     void* baseAddr_;
 
     PersistenceConfig(bool persist,
@@ -104,15 +104,22 @@ class RAMCacheComponent : public CacheComponentWithStats {
    * @param allocConfig the LruAllocatorConfig to use for the cache
    * @param poolConfig the pool configuration for the cache's only pool
    * @param latencySamplingConfig the sampling config for latency cache counters
+   * @param evictionCallback callback for live capacity evictions. The item is
+   * borrowed and valid only for the duration of the callback. The callback may
+   * run on allocator-internal threads, must be thread-safe, and must not throw.
+   * Expired items are not reported. Any configured itemDestructor is preserved,
+   * must not throw, and runs after the eviction callback. An eviction callback
+   * cannot be combined with allocConfig.removeCb.
    * @return RAMCacheComponent if the config is valid, an error otherwise
    */
   static Result<RAMCacheComponent> create(
       LruAllocatorConfig&& allocConfig,
       PoolConfig&& poolConfig,
-      PersistenceConfig persistenceConfig =
+      const PersistenceConfig& persistenceConfig =
           PersistenceConfig::noPersistenceOrRecovery(),
-      const LatencySamplingConfig& latencySamplingConfig = {
-          .find_ = 100, .findToWrite_ = 100}) noexcept;
+      const LatencySamplingConfig& latencySamplingConfig =
+          {.find_ = 100, .findToWrite_ = 100},
+      EvictionCallback evictionCallback = {}) noexcept;
 
   /**
    * Escape hatch to allow users to get the underlying LruAllocator. Should be
@@ -148,7 +155,8 @@ class RAMCacheComponent : public CacheComponentWithStats {
 
   RAMCacheComponent(LruAllocatorConfig&& config,
                     const PersistenceConfig& persistenceConfig,
-                    const LatencySamplingConfig& latencySamplingConfig);
+                    const LatencySamplingConfig& latencySamplingConfig,
+                    EvictionCallback evictionCallback);
 
   // ------------------------------ Interface ------------------------------ //
 

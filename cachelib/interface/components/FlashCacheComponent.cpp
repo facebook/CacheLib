@@ -615,7 +615,8 @@ FlashCacheComponent::FlashCacheComponent(
     std::unique_ptr<Device> device,
     const utils::CoroFiberAdapter::Config& executorConfig,
     PersistenceConfig persistenceConfig)
-    : name_(std::move(name)),
+    : CacheComponentWithStats(EvictionCallback{}),
+      name_(std::move(name)),
       device_(std::move(device)),
       cache_(std::make_unique<navy::BlockCache>(std::move(config))),
       fiberWorkers_(std::make_unique<utils::CoroFiberAdapter>(executorConfig)),

@@ -74,6 +74,8 @@ class TestCacheItem : public CacheItem {
 
 class TestCacheComponent : public CacheComponent {
  public:
+  TestCacheComponent() : CacheComponent(EvictionCallback{}) {}
+
   const std::string& getName() const noexcept override {
     static const std::string name_{"TestCacheComponent"};
     return name_;

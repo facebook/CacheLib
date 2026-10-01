@@ -43,7 +43,7 @@ class RAMCacheFactory : public CacheFactory {
   folly::test::TemporaryDirectory tmpDir_;
 
   Result<RAMCacheComponent> createWithPersistence(
-      RAMCacheComponent::PersistenceConfig pc);
+      const RAMCacheComponent::PersistenceConfig& pc);
   static LruAllocatorConfig createConfig();
   static RAMCacheComponent::PoolConfig createPoolConfig();
 };

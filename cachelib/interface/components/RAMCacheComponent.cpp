@@ -128,9 +128,40 @@ static_assert(sizeof(RAMCacheItem) == sizeof(void*) + sizeof(ptrdiff_t));
 
 namespace {
 
+template <typename HandleT>
+LruCacheItem* getImplItemFromHandle(HandleT& handle) {
+  return reinterpret_cast<const RAMCacheItem*>(handle.get())->item();
+}
+
+RAMCacheItem& getRAMCacheItem(LruCacheItem* implItem) {
+  return *implItem->getMemoryAs<RAMCacheItem>();
+}
+
+void installEvictionCallback(LruAllocatorConfig& config,
+                             EvictionCallback evictionCallback) {
+  if (!evictionCallback) {
+    return;
+  }
+
+  auto previousDestructor = std::move(config.itemDestructor);
+  config.setItemDestructor([evictionCallback = std::move(evictionCallback),
+                            previousDestructor = std::move(previousDestructor)](
+                               const LruAllocator::DestructorData& data) {
+    if (data.context == DestructorContext::kEvictedFromRAM) {
+      evictionCallback(getRAMCacheItem(&data.item));
+    }
+
+    if (previousDestructor) {
+      previousDestructor(data);
+    }
+  });
+}
+
 std::unique_ptr<LruAllocator> getCache(
     LruAllocatorConfig&& config,
-    const RAMCacheComponent::PersistenceConfig& persistenceConfig) {
+    const RAMCacheComponent::PersistenceConfig& persistenceConfig,
+    EvictionCallback evictionCallback) {
+  installEvictionCallback(config, std::move(evictionCallback));
   if (persistenceConfig.recover()) {
     try {
       return std::make_unique<LruAllocator>(LruAllocator::SharedMemAttach,
@@ -147,15 +178,6 @@ std::unique_ptr<LruAllocator> getCache(
   } else {
     return std::make_unique<LruAllocator>(std::move(config));
   }
-}
-
-template <typename HandleT>
-LruCacheItem* getImplItemFromHandle(HandleT& handle) {
-  return reinterpret_cast<const RAMCacheItem*>(handle.get())->item();
-}
-
-RAMCacheItem& getRAMCacheItem(LruCacheItem* implItem) {
-  return *implItem->getMemoryAs<RAMCacheItem>();
 }
 
 // Adopt an existing refcount from the impl handle without inc/dec
@@ -190,11 +212,17 @@ RAMCacheComponent::PersistenceConfig::persistenceButNoRecovery(
 /* static */ Result<RAMCacheComponent> RAMCacheComponent::create(
     LruAllocatorConfig&& allocConfig,
     PoolConfig&& poolConfig,
-    PersistenceConfig persistenceConfig,
-    const LatencySamplingConfig& latencySamplingConfig) noexcept {
+    const PersistenceConfig& persistenceConfig,
+    const LatencySamplingConfig& latencySamplingConfig,
+    EvictionCallback evictionCallback) noexcept {
   if (allocConfig.nvmConfig) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "RAMCacheComponent does not support NVM cache");
+  } else if (evictionCallback && allocConfig.removeCb) {
+    return makeError(
+        Error::Code::INVALID_CONFIG,
+        "eviction callback cannot be combined with an allocator remove "
+        "callback");
   } else if (allocConfig.poolRebalancingEnabled()) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "RAMCacheComponent does not support pool rebalancing");
@@ -203,12 +231,13 @@ RAMCacheComponent::PersistenceConfig::persistenceButNoRecovery(
       return makeError(Error::Code::INVALID_CONFIG,
                        "cacheDir must be set for persistence/recovery");
     }
-    allocConfig.enableCachePersistence(std::move(persistenceConfig.cacheDir()),
+    allocConfig.enableCachePersistence(persistenceConfig.cacheDir(),
                                        persistenceConfig.baseAddr());
   }
   try {
-    auto cache = RAMCacheComponent(std::move(allocConfig), persistenceConfig,
-                                   latencySamplingConfig);
+    auto cache =
+        RAMCacheComponent(std::move(allocConfig), persistenceConfig,
+                          latencySamplingConfig, std::move(evictionCallback));
     auto ids = cache.cache_->getPoolIds();
     if (!ids.empty()) {
       // Pool was restored from shared memory, just look up its ID
@@ -442,9 +471,12 @@ folly::coro::Task<UnitResult> RAMCacheComponent::remove(ReadHandle&& handle) {
 RAMCacheComponent::RAMCacheComponent(
     LruAllocatorConfig&& config,
     const PersistenceConfig& persistenceConfig,
-    const LatencySamplingConfig& latencySamplingConfig)
-    : CacheComponentWithStats(latencySamplingConfig),
-      cache_(getCache(std::move(config), persistenceConfig)),
+    const LatencySamplingConfig& latencySamplingConfig,
+    EvictionCallback evictionCallback)
+    : CacheComponentWithStats(std::move(evictionCallback),
+                              latencySamplingConfig),
+      cache_(getCache(
+          std::move(config), persistenceConfig, makeOnEvictionCallback())),
       defaultPool_(Slab::kInvalidPoolId),
       persist_(persistenceConfig.persist()),
       lastStatsCollectionTime_(std::chrono::steady_clock::now()) {}

@@ -17,8 +17,14 @@
 #include <folly/coro/GtestHelpers.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <cstring>
+#include <optional>
+#include <vector>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/Time.h"
+#include "cachelib/interface/DetachedItem.h"
 #include "cachelib/interface/components/tests/CacheComponentFactory.h"
 #include "cachelib/interface/tests/Utils.h"
 
@@ -26,6 +32,38 @@ using namespace facebook::cachelib::interface;
 using namespace facebook::cachelib::interface::test;
 
 namespace {
+
+constexpr uint32_t kEvictionAllocSize{8 * 1024};
+constexpr uint32_t kEvictionValueSize{7 * 1024};
+
+Result<RAMCacheComponent> createSmallRAMCache(
+    EvictionCallback evictionCallback,
+    facebook::cachelib::LruAllocator::ItemDestructor itemDestructor = {},
+    facebook::cachelib::LruAllocator::RemoveCb removeCallback = {}) {
+  facebook::cachelib::LruAllocatorConfig config;
+  config.setCacheName("RAMCacheComponentEvictionTest");
+  config.setCacheSize(2 * facebook::cachelib::Slab::kSize);
+  config.defaultPoolRebalanceStrategy = nullptr;
+  if (itemDestructor) {
+    config.setItemDestructor(std::move(itemDestructor));
+  }
+  if (removeCallback) {
+    config.setRemoveCallback(std::move(removeCallback));
+  }
+
+  return RAMCacheComponent::create(
+      std::move(config),
+      RAMCacheComponent::PoolConfig{
+          .name_ = "eviction_pool",
+          .size_ = facebook::cachelib::Slab::kSize,
+          .allocSizes_ = std::set<uint32_t>{kEvictionAllocSize},
+          .mmConfig_ = {},
+          .ensureProvisionable_ = true,
+      },
+      RAMCacheComponent::PersistenceConfig::noPersistenceOrRecovery(),
+      RAMCacheComponent::LatencySamplingConfig{},
+      std::move(evictionCallback));
+}
 
 class RAMCacheComponentTest : public ::testing::Test {
  protected:
@@ -187,6 +225,101 @@ CO_TEST_F(RAMCacheComponentTest, IteratorEarlyTerminationReleasesRefcounts) {
   }
 
   checkNoOutstandingRefs(keys);
+}
+
+CO_TEST(RAMCacheComponentEvictionTest, ReportsCapacityEviction) {
+  // Capacity eviction is synchronous in this configuration, so the callback
+  // and allocation loop run on the test thread.
+  std::optional<DetachedItem> evicted;
+  auto cache =
+      std::make_unique<RAMCacheComponent>(ASSERT_OK(createSmallRAMCache(
+          [&](const CacheItem& item) { evicted.emplace(item); })));
+
+  const auto creationTime = facebook::cachelib::util::getCurrentTimeSec();
+  constexpr uint32_t kTtlSecs{3600};
+  const std::string value(kEvictionValueSize, 'x');
+  const auto maxItems =
+      facebook::cachelib::Slab::kSize / kEvictionAllocSize + 2;
+  for (size_t i = 0; !evicted.has_value() && i < maxItems; ++i) {
+    auto key = "eviction_key_" + std::to_string(i);
+    auto allocated = CO_ASSERT_OK(
+        co_await cache->allocate(key, value.size(), creationTime, kTtlSecs));
+    std::memcpy(allocated.mutableData(), value.data(), value.size());
+    CO_ASSERT_OK(co_await cache->insert(std::move(allocated).release()));
+  }
+
+  CO_ASSERT_TRUE(evicted.has_value());
+  EXPECT_EQ(evicted->getCreationTime(), creationTime);
+  EXPECT_EQ(evicted->getExpiryTime(), creationTime + kTtlSecs);
+  EXPECT_EQ(evicted->getMemorySize(), value.size());
+  EXPECT_EQ(std::string(static_cast<const char*>(evicted->getMemory()),
+                        evicted->getMemorySize()),
+            value);
+  EXPECT_OK(cache->shutdown());
+}
+
+CO_TEST(RAMCacheComponentEvictionTest, IgnoresExpiredCapacityEviction) {
+  std::atomic<bool> expiredItemEvicted{false};
+  std::atomic<bool> expiredItemReported{false};
+  auto cache =
+      std::make_unique<RAMCacheComponent>(ASSERT_OK(createSmallRAMCache(
+          [&expiredItemReported](const CacheItem& item) {
+            if (item.getKey() == "expired") {
+              expiredItemReported = true;
+            }
+          },
+          [&expiredItemEvicted](
+              const facebook::cachelib::LruAllocator::DestructorData& data) {
+            if (data.context ==
+                    facebook::cachelib::DestructorContext::kEvictedFromRAM &&
+                data.item.getKey() == "expired") {
+              expiredItemEvicted = true;
+            }
+          })));
+
+  const auto now = facebook::cachelib::util::getCurrentTimeSec();
+  const std::string value(kEvictionValueSize, 'x');
+  auto expired = CO_ASSERT_OK(
+      co_await cache->allocate("expired", value.size(), now - 2, 1));
+  CO_ASSERT_OK(co_await cache->insert(std::move(expired).release()));
+
+  const auto maxItems =
+      facebook::cachelib::Slab::kSize / kEvictionAllocSize + 2;
+  for (size_t i = 0; !expiredItemEvicted.load() && i < maxItems; ++i) {
+    auto allocated = CO_ASSERT_OK(co_await cache->allocate(
+        "live_" + std::to_string(i), value.size(), now, 3600));
+    CO_ASSERT_OK(co_await cache->insert(std::move(allocated).release()));
+  }
+
+  CO_ASSERT_TRUE(expiredItemEvicted.load());
+  EXPECT_FALSE(expiredItemReported.load());
+  EXPECT_OK(cache->shutdown());
+}
+
+CO_TEST(RAMCacheComponentEvictionTest, IgnoresExplicitRemoval) {
+  std::atomic<size_t> evictionCount{0};
+  std::atomic<size_t> destructorCount{0};
+  auto cache =
+      std::make_unique<RAMCacheComponent>(ASSERT_OK(createSmallRAMCache(
+          [&evictionCount](const CacheItem&) { ++evictionCount; },
+          [&destructorCount](const auto&) { ++destructorCount; })));
+
+  auto allocated = CO_ASSERT_OK(co_await cache->allocate(
+      "removed", 16, facebook::cachelib::util::getCurrentTimeSec(), 0));
+  CO_ASSERT_OK(co_await cache->insert(std::move(allocated).release()));
+  CO_ASSERT_TRUE(CO_ASSERT_OK(co_await cache->remove("removed")));
+
+  EXPECT_EQ(evictionCount.load(), 0);
+  EXPECT_EQ(destructorCount.load(), 1);
+  EXPECT_OK(cache->shutdown());
+}
+
+TEST(RAMCacheComponentEvictionTest, RejectsAllocatorRemoveCallback) {
+  EXPECT_ERROR(
+      createSmallRAMCache(
+          [](const CacheItem&) {}, {},
+          [](const facebook::cachelib::LruAllocator::RemoveCbData&) {}),
+      Error::Code::INVALID_CONFIG);
 }
 
 } // namespace
