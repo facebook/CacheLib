@@ -60,6 +60,14 @@ class BlockCacheProto {
   // write-path copy (default on). See BlockCache::Config.
   virtual void setChecksumOffloadReadMinSize(uint32_t minSize) = 0;
   virtual void setChecksumOffloadCacheControl(bool enable) = 0;
+  // (Optional) Batched value verification in reclaim/cleanup (default on),
+  // fiber-coalesced write batching (default off), deferred small-value
+  // checksums (default off), skipping value verification for in-memory hits
+  // (default off). See BlockCache::Config.
+  virtual void setChecksumOffloadBatchReclaim(bool enable) = 0;
+  virtual void setChecksumOffloadBatch(bool enable) = 0;
+  virtual void setChecksumDeferSmall(bool enable) = 0;
+  virtual void setSkipInMemValueVerify(bool enable) = 0;
 
   // set*EvictionPolicy function family: sets eviction policy. Supports LRU,
   // LRU with deferred insert and FIFO. Must set up one of them.

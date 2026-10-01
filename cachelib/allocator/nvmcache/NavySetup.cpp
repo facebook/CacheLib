@@ -204,6 +204,12 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
       blockCacheConfig.getChecksumOffloadReadMinSize());
   blockCache->setChecksumOffloadCacheControl(
       blockCacheConfig.getChecksumOffloadCacheControl());
+  blockCache->setChecksumOffloadBatchReclaim(
+      blockCacheConfig.getChecksumOffloadBatchReclaim());
+  blockCache->setChecksumOffloadBatch(blockCacheConfig.getChecksumOffloadBatch());
+  blockCache->setChecksumDeferSmall(blockCacheConfig.getChecksumDeferSmall());
+  blockCache->setSkipInMemValueVerify(
+      blockCacheConfig.getSkipInMemValueVerify());
 
   // set eviction policy
   auto segmentRatio = blockCacheConfig.getSFifoSegmentRatio();

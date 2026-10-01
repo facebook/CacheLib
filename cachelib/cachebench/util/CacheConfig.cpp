@@ -122,6 +122,10 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyChecksumOffloadMinSize);
   JSONSetVal(configJson, navyChecksumOffloadReadMinSize);
   JSONSetVal(configJson, navyChecksumOffloadCacheControl);
+  JSONSetVal(configJson, navyChecksumOffloadBatchReclaim);
+  JSONSetVal(configJson, navyChecksumOffloadBatch);
+  JSONSetVal(configJson, navyChecksumDeferSmall);
+  JSONSetVal(configJson, navySkipInMemValueVerify);
   JSONSetVal(configJson, navyBigHashChecksumOffload);
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);

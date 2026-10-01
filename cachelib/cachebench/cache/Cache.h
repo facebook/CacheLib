@@ -777,6 +777,11 @@ Cache<Allocator>::Cache(const CacheConfig& config,
                 config_.navyChecksumOffloadReadMinSize)
             .setChecksumOffloadCacheControl(
                 config_.navyChecksumOffloadCacheControl)
+            .setChecksumOffloadBatchReclaim(
+                config_.navyChecksumOffloadBatchReclaim)
+            .setChecksumOffloadBatch(config_.navyChecksumOffloadBatch)
+            .setChecksumDeferSmall(config_.navyChecksumDeferSmall)
+            .setSkipInMemValueVerify(config_.navySkipInMemValueVerify)
             .setDirectFlush(config_.navyBlockCacheDirectFlush)
             .setFlushCopyOffload(config_.navyBlockCacheFlushCopyOffload)
             .setCleanRegions(config_.navyCleanRegions,

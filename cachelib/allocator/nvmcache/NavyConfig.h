@@ -566,6 +566,38 @@ class BlockCacheConfig {
     return *this;
   }
 
+  // Region reclaim/cleanup verify values as DSA Batch descriptors (<= 64 per
+  // submission) instead of one descriptor each. Default true; needs the
+  // checksum offload. See BlockCache::Config::checksumOffloadBatchReclaim.
+  BlockCacheConfig& setChecksumOffloadBatchReclaim(bool enable) noexcept {
+    checksumOffloadBatchReclaim_ = enable;
+    return *this;
+  }
+
+  // Coalesce write-path fused copy+CRC descriptors across the fibers of a
+  // NavyThread (yielding only when siblings are runnable). Default false;
+  // measured neutral to slightly negative. See BlockCache::Config.
+  BlockCacheConfig& setChecksumOffloadBatch(bool enable) noexcept {
+    checksumOffloadBatch_ = enable;
+    return *this;
+  }
+
+  // Defer the checksum of values below the offload gate to region flush,
+  // where they are batched on DSA (implies skipInMemValueVerify). Default
+  // false. See BlockCache::Config::checksumDeferSmall.
+  BlockCacheConfig& setChecksumDeferSmall(bool enable) noexcept {
+    checksumDeferSmall_ = enable;
+    return *this;
+  }
+
+  // Lookups served from the in-memory region buffer skip the value checksum
+  // (the bytes never left DRAM; the header checksum still covers the
+  // descriptor). Default false. See BlockCache::Config::skipInMemValueVerify.
+  BlockCacheConfig& setSkipInMemValueVerify(bool enable) noexcept {
+    skipInMemValueVerify_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setPreciseRemove(bool preciseRemove) noexcept {
     preciseRemove_ = preciseRemove;
     return *this;
@@ -670,6 +702,13 @@ class BlockCacheConfig {
     return checksumOffloadCacheControl_;
   }
 
+  bool getChecksumOffloadBatchReclaim() const {
+    return checksumOffloadBatchReclaim_;
+  }
+  bool getChecksumOffloadBatch() const { return checksumOffloadBatch_; }
+  bool getChecksumDeferSmall() const { return checksumDeferSmall_; }
+  bool getSkipInMemValueVerify() const { return skipInMemValueVerify_; }
+
   uint64_t getSize() const { return size_; }
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
@@ -720,6 +759,10 @@ class BlockCacheConfig {
   uint32_t checksumOffloadMinSize_{16384};
   uint32_t checksumOffloadReadMinSize_{0};
   bool checksumOffloadCacheControl_{true};
+  bool checksumOffloadBatchReclaim_{true};
+  bool checksumOffloadBatch_{false};
+  bool checksumDeferSmall_{false};
+  bool skipInMemValueVerify_{false};
   // Whether to remove an item by checking the key (true) or only the hash value
   // (false).
   bool preciseRemove_{false};

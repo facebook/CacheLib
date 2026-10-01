@@ -286,6 +286,13 @@ struct CacheConfig : public JSONConfig {
   // fused write copy. See BlockCache::Config.
   uint32_t navyChecksumOffloadReadMinSize{0};
   bool navyChecksumOffloadCacheControl{true};
+  // batched value verification in region reclaim/cleanup (default on),
+  // fiber-coalesced write batching, deferred small-value checksums, and
+  // skipping value verification for in-memory hits. See BlockCache::Config.
+  bool navyChecksumOffloadBatchReclaim{true};
+  bool navyChecksumOffloadBatch{false};
+  bool navyChecksumDeferSmall{false};
+  bool navySkipInMemValueVerify{false};
 
   // offloads navy BigHash bucket checksumming to Intel DSA. Most beneficial
   // with large buckets (navyBigHashBucketSize of 16KB+).

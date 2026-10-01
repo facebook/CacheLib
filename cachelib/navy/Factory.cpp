@@ -96,6 +96,22 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.checksumOffloadCacheControl = enable;
   }
 
+  void setChecksumOffloadBatchReclaim(bool enable) override {
+    config_.checksumOffloadBatchReclaim = enable;
+  }
+
+  void setChecksumOffloadBatch(bool enable) override {
+    config_.checksumOffloadBatch = enable;
+  }
+
+  void setChecksumDeferSmall(bool enable) override {
+    config_.checksumDeferSmall = enable;
+  }
+
+  void setSkipInMemValueVerify(bool enable) override {
+    config_.skipInMemValueVerify = enable;
+  }
+
   void setLruEvictionPolicy() override {
     if (!(config_.cacheSize > 0 && config_.regionSize > 0)) {
       throw std::logic_error("layout is not set");
