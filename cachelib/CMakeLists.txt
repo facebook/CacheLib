@@ -324,13 +324,14 @@ if (BUILD_WITH_DTO)
   # consumers of the installed package.
   #
   # The DSA checksum offload code requires a DTO with the caller-allocated
-  # async submit/poll API and the raw-CRC32C convention, which upstream
-  # intel/DTO does not have — so when no installed DTO cmake package is
-  # found, fetch and build the pinned revision in-tree rather than linking
-  # whatever libdto happens to be on the system.
+  # async submit/poll API, the mixed-member batch API (dto_submit_batch) and
+  # the raw-CRC32C convention, which upstream intel/DTO does not have — so
+  # when no installed DTO cmake package is found, fetch and build the pinned
+  # revision in-tree rather than linking whatever libdto happens to be on
+  # the system.
   set(CACHELIB_DTO_GIT_REPOSITORY "https://github.com/byrnedj/DTO.git"
       CACHE STRING "Git repository for DTO when no installed copy is found")
-  set(CACHELIB_DTO_GIT_TAG "af84a043f0c11ce33d7f01a359608624652abc17"
+  set(CACHELIB_DTO_GIT_TAG "5b98ab5c33b33af814b839b7b4efd360a2e41889"
       CACHE STRING "DTO revision to fetch when no installed copy is found")
 
   find_package(DTO CONFIG QUIET)
