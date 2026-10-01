@@ -208,9 +208,37 @@ void RegionManager::releaseWriteBuffer(Buffer buf) {
   // else: drop it; the cap bounds memory kept after a flush burst
 }
 
+void RegionManager::drainPendingChecksums(Region& region) {
+  auto pending = region.takePendingChecksums();
+  if (pending.empty()) {
+    return;
+  }
+  const auto view = region.bufferView();
+  BatchChecksumOp op;
+  size_t i = 0;
+  while (i < pending.size()) {
+    op.reset();
+    const size_t first = i;
+    for (; i < pending.size() && !op.full(); ++i) {
+      op.addChecksum(view.slice(pending[i].valueOffset, pending[i].valueSize));
+    }
+    op.submit();
+    op.wait();
+    for (size_t j = first; j < i; ++j) {
+      region.storeU32(pending[j].csOffset, op.crc(j - first));
+    }
+    deferredChecksumBatches_.inc();
+  }
+  deferredChecksumCount_.add(pending.size());
+  addDeferredChecksumStats(pending.size());
+}
+
 Region::FlushRes RegionManager::flushBuffer(const RegionId& rid) {
   auto& region = getRegion(rid);
-  auto callBack = [this](RelAddress addr, BufferView view) {
+  auto callBack = [this, &region](RelAddress addr, BufferView view) {
+    // Deferred value checksums must be in the buffer before it is copied
+    // or written; no writer is active once Region::flushBuffer calls us.
+    drainPendingChecksums(region);
     if (directFlush_) {
       XDCHECK_EQ(0u, reinterpret_cast<uintptr_t>(view.data()) %
                          device_.getIOAlignmentSize());
@@ -268,7 +296,10 @@ void RegionManager::detachBuffer(const RegionId& rid) {
 
 void RegionManager::cleanupBufferOnFlushFailure(const RegionId& regionId) {
   auto& region = getRegion(regionId);
-  auto callBack = [this](RegionId rid, BufferView buffer) {
+  auto callBack = [this, &region](RegionId rid, BufferView buffer) {
+    // The cleanup callback verifies value checksums; patch the deferred
+    // ones first (the region has no active writers here either).
+    drainPendingChecksums(region);
     cleanupCb_(rid, buffer);
     numInMemBufWaitingFlush_.dec();
     numInMemBufFlushFailures_.inc();
@@ -890,6 +921,16 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
     visitor("navy_bc_csum_wait_polls", c.polls);
     visitor("navy_bc_csum_wait_us", c.waitUs);
     visitor("navy_bc_csum_wait_blocks", c.sleeps);
+    visitor("navy_bc_csum_wait_yields", c.yields);
+    const auto bs = getChecksumBatchStats();
+    visitor("navy_bc_csum_batches", bs.batches);
+    visitor("navy_bc_csum_batch_members", bs.members);
+    visitor("navy_bc_csum_batch_singles", bs.singles);
+    visitor("navy_bc_csum_batch_leaders", bs.leaders);
+    visitor("navy_bc_csum_batch_waiters", bs.waiters);
+    visitor("navy_bc_csum_batch_fallbacks", bs.fallbacks);
+    visitor("navy_bc_csum_deferred", deferredChecksumCount_.get());
+    visitor("navy_bc_csum_deferred_batches", deferredChecksumBatches_.get());
     const auto o = getCopyOutWaitStats();
     visitor("navy_bc_copyout_wait_ops", o.calls);
     visitor("navy_bc_copyout_wait_polls", o.polls);

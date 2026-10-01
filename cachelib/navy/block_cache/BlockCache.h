@@ -20,6 +20,7 @@
 #include <folly/Range.h>
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
@@ -76,6 +77,29 @@ class BlockCache final : public Engine {
     // flush copy read them soon), false keeps them out (right when the next
     // reader is the device's DMA engine, e.g. directFlush/flushCopyOffload).
     bool checksumOffloadCacheControl{true};
+    // Region reclaim and cleanup verify every entry of a region. With this on
+    // (and checksumOffload) the values are checksummed as DSA Batch
+    // descriptors - up to 64 per submission, one completion to poll - instead
+    // of one descriptor each; values under checksumOffloadReadMinSize are
+    // checksummed on the CPU as before.
+    bool checksumOffloadBatchReclaim{true};
+    // Coalesce the write path's fused copy+CRC descriptors across the fibers
+    // of a NavyThread into one Batch descriptor. A fiber yields to let
+    // siblings join only when the scheduler has runnable fibers. Measured
+    // neutral to slightly negative (+2-4% CPU) with 24-48 client threads -
+    // siblings are rarely ready - so off by default.
+    bool checksumOffloadBatch{false};
+    // Values below checksumOffloadMinSize are copied by the CPU at insert and
+    // checksummed at region flush in DSA batches with the region's other small
+    // values (Region::PendingChecksum; RegionManager::drainPendingChecksums
+    // patches EntryDesc::cs before the buffer is written). Implies
+    // skipInMemValueVerify. Measured neutral (the copy stays on the CPU), so
+    // off by default.
+    bool checksumDeferSmall{false};
+    // Lookups served from the in-memory region buffer skip the value checksum:
+    // the bytes never left DRAM and the header checksum still covers the
+    // descriptor. Everything read back from the device is verified as before.
+    bool skipInMemValueVerify{false};
     // Base offset and size (in bytes) of cache on the device
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
@@ -420,6 +444,7 @@ class BlockCache final : public Engine {
   // @param combinedEntry whether it's combined entry block or not
   //
   void writeEntry(MutableBufferView buffer,
+                  RelAddress addr,
                   std::optional<HashedKey> hk,
                   BufferView value,
                   bool combinedEntry,
@@ -535,11 +560,21 @@ class BlockCache final : public Engine {
                    uint32_t size,
                    const NvmItem* nvmItem = nullptr);
 
-  AllocatorApiResult reinsertOrRemoveItem(HashedKey hk,
-                                          BufferView value,
-                                          uint32_t entrySize,
-                                          RelAddress currAddr,
-                                          const EntryDesc& entryDesc);
+  // @valueCs  the value's checksum when the caller already computed it (the
+  //           batched reclaim path); computed here otherwise.
+  AllocatorApiResult reinsertOrRemoveItem(
+      HashedKey hk,
+      BufferView value,
+      uint32_t entrySize,
+      RelAddress currAddr,
+      const EntryDesc& entryDesc,
+      std::optional<uint32_t> valueCs = std::nullopt);
+
+  // Checksums of @values, in order. With checksum offload and
+  // checksumOffloadBatchReclaim_ the values at or above the read gate go to
+  // DSA as Batch descriptors of up to BatchChecksumOp::kMax members; the rest
+  // (and everything without DSA) use navy::checksum() on the CPU.
+  std::vector<uint32_t> checksumValues(const std::vector<BufferView>& values) const;
 
   // Removes an entry key from the index.
   // @return true if the item is successfully removed; false if the item
@@ -573,6 +608,13 @@ class BlockCache final : public Engine {
   const uint32_t checksumOffloadMinSize_{};
   const uint32_t checksumOffloadReadMinSize_{};
   const bool checksumOffloadCacheControl_{};
+  // See Config::checksumOffloadBatchReclaim / checksumOffloadBatch /
+  // checksumDeferSmall / skipInMemValueVerify. All resolved against
+  // checksum/checksumOffload in the constructor.
+  const bool checksumOffloadBatchReclaim_{};
+  const bool checksumOffloadBatch_{};
+  const bool checksumDeferSmall_{};
+  const bool skipInMemValueVerify_{};
 
   // Computes the checksum of @value for verification (lookup, reclaim and
   // cleanup paths), offloading to DSA when checksum offload is enabled and

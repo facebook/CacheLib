@@ -225,6 +225,11 @@ class RegionManager {
   // multiple times until detachBuffer is done.
   Region::FlushRes flushBuffer(const RegionId& rid);
 
+  // Records a value whose checksum is computed at flush time (BlockCache).
+  void addPendingChecksum(const RegionId& rid, Region::PendingChecksum p) {
+    getRegion(rid).addPendingChecksum(p);
+  }
+
   // Detaches the buffer from the region and returns the buffer to pool.
   // This could block if there are active readers
   void detachBuffer(const RegionId& rid);
@@ -393,6 +398,15 @@ class RegionManager {
   bool flushCopyOffload_{false};
   mutable AtomicCounter flushCopyOffloadCount_;
   mutable AtomicCounter flushCopyFallbackCount_;
+  // Value checksums BlockCache deferred to flush time and the DSA batches
+  // that computed them (see drainPendingChecksums).
+  mutable AtomicCounter deferredChecksumCount_;
+  mutable AtomicCounter deferredChecksumBatches_;
+
+  // Computes every checksum a region deferred and patches it into the
+  // buffer. Runs on the flush path once the region has no active writers,
+  // before the buffer is copied or written.
+  void drainPendingChecksums(Region& region);
 
   // Pool of device-aligned write buffers for the non-direct flush path.
   // Without it every flush allocates a fresh regionSize_ buffer (16 MiB by
