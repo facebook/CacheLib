@@ -81,8 +81,10 @@ class BlockCache final : public Engine {
     // (and checksumOffload) the values are checksummed as DSA Batch
     // descriptors - up to 64 per submission, one completion to poll - instead
     // of one descriptor each; values under checksumOffloadReadMinSize are
-    // checksummed on the CPU as before.
-    bool checksumOffloadBatchReclaim{true};
+    // checksummed on the CPU as before. Cuts reclaim descriptor traffic ~50x
+    // at equal CPU (measured neutral on both test workloads), so off by
+    // default until a workload shows a gain.
+    bool checksumOffloadBatchReclaim{false};
     // Coalesce the write path's fused copy+CRC descriptors across the fibers
     // of a NavyThread into one Batch descriptor. A fiber yields to let
     // siblings join only when the scheduler has runnable fibers. Measured

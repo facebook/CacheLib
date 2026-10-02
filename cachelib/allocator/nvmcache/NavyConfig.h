@@ -567,7 +567,7 @@ class BlockCacheConfig {
   }
 
   // Region reclaim/cleanup verify values as DSA Batch descriptors (<= 64 per
-  // submission) instead of one descriptor each. Default true; needs the
+  // submission) instead of one descriptor each. Default false; needs the
   // checksum offload. See BlockCache::Config::checksumOffloadBatchReclaim.
   BlockCacheConfig& setChecksumOffloadBatchReclaim(bool enable) noexcept {
     checksumOffloadBatchReclaim_ = enable;
@@ -759,7 +759,7 @@ class BlockCacheConfig {
   uint32_t checksumOffloadMinSize_{16384};
   uint32_t checksumOffloadReadMinSize_{0};
   bool checksumOffloadCacheControl_{true};
-  bool checksumOffloadBatchReclaim_{true};
+  bool checksumOffloadBatchReclaim_{false};
   bool checksumOffloadBatch_{false};
   bool checksumDeferSmall_{false};
   bool skipInMemValueVerify_{false};
