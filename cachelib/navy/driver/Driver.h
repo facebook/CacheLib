@@ -52,6 +52,7 @@ class Driver final : public AbstractCache {
     uint64_t maxParcelMemory{256 << 20}; // 256MB
     uint32_t maxKeySize{255};
     size_t metadataSize{};
+    size_t metadataStagingSize{};
 
     bool useEstimatedWriteSize{false};
 
@@ -194,6 +195,7 @@ class Driver final : public AbstractCache {
   const uint32_t maxConcurrentInserts_{};
   const uint64_t maxParcelMemory_{};
   const size_t metadataSize_{};
+  const size_t metadataStagingSize_{};
   const uint32_t maxKeySize_{};
   const bool useEstimatedWriteSize_;
 

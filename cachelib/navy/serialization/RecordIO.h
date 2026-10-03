@@ -28,8 +28,12 @@ namespace cachelib {
 namespace navy {
 // @param dev           The device the record writer will serialize to
 // @param metadataSize  Reserved space on the device for the serialized metadata
-std::unique_ptr<RecordWriter> createMetadataRecordWriter(Device& dev,
-                                                         size_t metadataSize);
+// @param stagingSize   Bytes buffered in memory before a device write. Rounded
+//                      down to a multiple of the block size, which is
+//                      max(device IO alignment, 4096), and never below one
+//                      block. 0 selects the default.
+std::unique_ptr<RecordWriter> createMetadataRecordWriter(
+    Device& dev, size_t metadataSize, size_t stagingSize = 0);
 
 // @param dev           The device the record reader will deserialize from
 // @param metadataSize  Reserved space on the device for the serialized metadata

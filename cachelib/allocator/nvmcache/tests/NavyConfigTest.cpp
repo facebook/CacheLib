@@ -192,6 +192,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::fileSize"] = "10485760";
   expectedConfigMap["navyConfig::truncateFile"] = "false";
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
+  expectedConfigMap["navyConfig::metadataStagingSize"] = "0";
   expectedConfigMap["navyConfig::ioEngine"] = "io_uring";
   expectedConfigMap["navyConfig::QDepth"] = "64";
   expectedConfigMap["navyConfig::enableFDP"] = "0";

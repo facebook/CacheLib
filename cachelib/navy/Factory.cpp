@@ -296,6 +296,10 @@ class DriverProtoImpl final : public CacheProto {
 
   void setMetadataSize(size_t size) override { config_.metadataSize = size; }
 
+  void setMetadataStagingSize(size_t size) override {
+    config_.metadataStagingSize = size;
+  }
+
   void setMaxKeySize(uint32_t keySize) override {
     config_.maxKeySize = keySize;
   }

@@ -60,6 +60,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
     : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
+      metadataStagingSize_{config.metadataStagingSize},
       maxKeySize_{config.maxKeySize},
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
@@ -263,7 +264,8 @@ void Driver::reset() {
 }
 
 void Driver::persist() const {
-  auto rw = createMetadataRecordWriter(*device_, metadataSize_);
+  auto rw =
+      createMetadataRecordWriter(*device_, metadataSize_, metadataStagingSize_);
   if (rw) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
       enginePairs_[idx].persist(*rw);
@@ -302,7 +304,8 @@ bool Driver::recover() {
     // Read before invalidating, while the reader still holds its position.
     metadataRecoveredBytes_.set(rr->getCurPos());
     // If recovery is successful, invalidate the metadata
-    auto rw = createMetadataRecordWriter(*device_, metadataSize_);
+    auto rw = createMetadataRecordWriter(*device_, metadataSize_,
+                                         metadataStagingSize_);
     if (rw) {
       return rw->invalidate();
     } else {

@@ -180,6 +180,9 @@ class CacheProto {
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
 
+  // Sets the in-memory staging size used to batch metadata writes.
+  virtual void setMetadataStagingSize(size_t metadataStagingSize) = 0;
+
   // Sets maximum key size.
   virtual void setMaxKeySize(uint32_t keySize) = 0;
 

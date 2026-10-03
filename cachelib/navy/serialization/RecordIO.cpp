@@ -66,11 +66,16 @@ class FileRecordReader final : public RecordReader {
 
 class DeviceMetaDataWriter final : public RecordWriter {
  public:
-  explicit DeviceMetaDataWriter(Device& dev, size_t metadataSize)
+  DeviceMetaDataWriter(Device& dev, size_t metadataSize, size_t stagingSize)
       : dev_(dev),
         metadataSize_{metadataSize},
         blockSize_{
-            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)} {}
+            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)},
+        stagingSize_{blockSize_ *
+                     std::max<size_t>(1,
+                                      (stagingSize == 0 ? kStagingSizeDefault
+                                                        : stagingSize) /
+                                          blockSize_)} {}
 
   ~DeviceMetaDataWriter() override {
     // The end-of-metadata marker below claims the region's last block, so a
@@ -172,8 +177,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
   Device& dev_;
   size_t metadataSize_;
   const size_t blockSize_;
-  const size_t stagingSize_{
-      blockSize_ * std::max<size_t>(1, kStagingSizeDefault / blockSize_)};
+  const size_t stagingSize_;
   uint64_t offset_{0};
   size_t bufIndex_{0};
   Buffer buffer_{stagingSize_, blockSize_};
@@ -291,8 +295,9 @@ class DeviceMetaDataReader final : public RecordReader {
 } // namespace
 
 std::unique_ptr<RecordWriter> createMetadataRecordWriter(Device& dev,
-                                                         size_t metadataSize) {
-  return std::make_unique<DeviceMetaDataWriter>(dev, metadataSize);
+                                                         size_t metadataSize,
+                                                         size_t stagingSize) {
+  return std::make_unique<DeviceMetaDataWriter>(dev, metadataSize, stagingSize);
 }
 
 std::unique_ptr<RecordReader> createMetadataRecordReader(Device& dev,

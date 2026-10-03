@@ -369,6 +369,8 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::truncateFile"] = truncateFile_ ? "true" : "false";
   configMap["navyConfig::deviceMaxWriteSize"] =
       folly::to<std::string>(deviceMaxWriteSize_);
+  configMap["navyConfig::metadataStagingSize"] =
+      folly::to<std::string>(metadataStagingSize_);
   configMap["navyConfig::ioEngine"] = getIoEngineName(ioEngine_).str();
   configMap["navyConfig::QDepth"] = folly::to<std::string>(qDepth_);
   configMap["navyConfig::enableFDP"] = folly::to<std::string>(enableFDP_);
