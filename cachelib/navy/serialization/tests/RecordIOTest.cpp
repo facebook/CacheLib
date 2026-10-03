@@ -314,7 +314,11 @@ TEST(RecordIO, StagingSizeBatchesWritesWithoutChangingImage) {
       EXPECT_EQ(oneBlock.first, run(ioAlignSize, stagingSize).first)
           << "align=" << ioAlignSize << " staging=" << stagingSize;
     }
-    EXPECT_LT(run(ioAlignSize, 4 * 1024 * 1024).second, oneBlock.second);
+    // Unset means a block per write, and 1MB is what opts into batching.
+    EXPECT_EQ(oneBlock.second, run(ioAlignSize, 0).second)
+        << "align=" << ioAlignSize;
+    EXPECT_LT(run(ioAlignSize, 1024 * 1024).second, oneBlock.second)
+        << "align=" << ioAlignSize;
   }
 }
 
@@ -388,8 +392,11 @@ TEST(RecordIO, ReadStagingSizeBatchesReadsWithoutChangingRecords) {
       EXPECT_EQ(std::get<1>(oneBlock), std::get<1>(staged))
           << "align=" << ioAlignSize << " staging=" << stagingSize;
     }
-    EXPECT_LT(std::get<2>(run(ioAlignSize, 4 * 1024 * 1024)),
-              std::get<2>(oneBlock));
+    // Unset means a block per read, and 1MB is what opts into batching.
+    EXPECT_EQ(std::get<2>(oneBlock), std::get<2>(run(ioAlignSize, 0)))
+        << "align=" << ioAlignSize;
+    EXPECT_LT(std::get<2>(run(ioAlignSize, 1024 * 1024)), std::get<2>(oneBlock))
+        << "align=" << ioAlignSize;
   }
 }
 

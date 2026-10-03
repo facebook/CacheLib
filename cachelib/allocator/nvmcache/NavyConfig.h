@@ -968,8 +968,8 @@ class NavyConfig {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
   }
 
-  // Configure how much metadata is staged in memory before being flushed to
-  // the device during persist.
+  // Configure how much metadata is staged in memory per device IO, on both
+  // the persist and the recover side. 0 means one block.
   void setMetadataStagingSize(uint32_t metadataStagingSize) noexcept {
     metadataStagingSize_ = metadataStagingSize;
   }
@@ -1104,7 +1104,7 @@ class NavyConfig {
   uint32_t deviceMaxWriteSize_{};
   // Bytes staged in memory per metadata IO. Distinct from deviceMetadataSize,
   // which reserves the partition on the device: this changes the IO
-  // granularity, not how much metadata is written. 0 selects the default.
+  // granularity, not how much metadata is written. 0 means one block.
   uint32_t metadataStagingSize_{0};
   // This controls if device is in bad status (for testing).
   BadDeviceStatus testingBadDevice_{BadDeviceStatus::None};

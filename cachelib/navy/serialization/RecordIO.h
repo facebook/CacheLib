@@ -31,7 +31,7 @@ namespace navy {
 // @param stagingSize   Bytes buffered in memory before a device write. Rounded
 //                      down to a multiple of the block size, which is
 //                      max(device IO alignment, 4096), and never below one
-//                      block. 0 selects the default.
+//                      block. 0 means one block.
 std::unique_ptr<RecordWriter> createMetadataRecordWriter(
     Device& dev, size_t metadataSize, size_t stagingSize = 0);
 
@@ -39,8 +39,8 @@ std::unique_ptr<RecordWriter> createMetadataRecordWriter(
 // @param metadataSize  Reserved space on the device for the serialized metadata
 // @param stagingSize   Bytes read from the device per IO. Rounded down to a
 //                      multiple of the block size, which is max(device IO
-//                      alignment, 4096), and never below one block. 0 selects
-//                      the default.
+//                      alignment, 4096), and never below one block. 0 means
+//                      one block.
 std::unique_ptr<RecordReader> createMetadataRecordReader(
     Device& dev, size_t metadataSize, size_t stagingSize = 0);
 

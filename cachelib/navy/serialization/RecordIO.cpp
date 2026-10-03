@@ -30,11 +30,9 @@ namespace facebook::cachelib::navy {
 constexpr uint32_t kMetadataHeaderFileId = 1;
 namespace {
 constexpr size_t kBlockSizeDefault = 4096;
-constexpr size_t kStagingSizeDefault = 1024 * 1024;
 
 size_t stagingBytes(size_t stagingSize, size_t blockSize) {
-  const size_t requested = stagingSize == 0 ? kStagingSizeDefault : stagingSize;
-  return blockSize * std::max<size_t>(1, requested / blockSize);
+  return blockSize * std::max<size_t>(1, stagingSize / blockSize);
 }
 
 // Device::read takes a uint32_t length, so a staged read cannot exceed it.
