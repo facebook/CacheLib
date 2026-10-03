@@ -20,6 +20,8 @@
 #include <folly/Range.h>
 #include <folly/io/RecordIO.h>
 
+#include <limits>
+
 #include "cachelib/navy/common/Utils.h"
 
 using namespace folly::recordio_helpers;
@@ -27,6 +29,21 @@ using namespace folly::recordio_helpers;
 namespace facebook::cachelib::navy {
 constexpr uint32_t kMetadataHeaderFileId = 1;
 namespace {
+constexpr size_t kBlockSizeDefault = 4096;
+constexpr size_t kStagingSizeDefault = 1024 * 1024;
+
+size_t stagingBytes(size_t stagingSize, size_t blockSize) {
+  const size_t requested = stagingSize == 0 ? kStagingSizeDefault : stagingSize;
+  return blockSize * std::max<size_t>(1, requested / blockSize);
+}
+
+// Device::read takes a uint32_t length, so a staged read cannot exceed it.
+size_t readStagingBytes(size_t stagingSize, size_t blockSize) {
+  const size_t cap =
+      blockSize * (std::numeric_limits<uint32_t>::max() / blockSize);
+  return std::min(stagingBytes(stagingSize, blockSize), cap);
+}
+
 class FileRecordWriter final : public RecordWriter {
  public:
   explicit FileRecordWriter(int fd) : writer_{folly::File(fd)} {}
@@ -71,11 +88,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
         metadataSize_{metadataSize},
         blockSize_{
             std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)},
-        stagingSize_{blockSize_ *
-                     std::max<size_t>(1,
-                                      (stagingSize == 0 ? kStagingSizeDefault
-                                                        : stagingSize) /
-                                          blockSize_)} {}
+        stagingSize_{stagingBytes(stagingSize, blockSize_)} {}
 
   ~DeviceMetaDataWriter() override {
     // The end-of-metadata marker below claims the region's last block, so a
@@ -151,9 +164,6 @@ class DeviceMetaDataWriter final : public RecordWriter {
   }
 
  private:
-  static constexpr size_t kBlockSizeDefault = 4096;
-  static constexpr size_t kStagingSizeDefault = 1024 * 1024;
-
   size_t stagedBlockBytes() const { return powTwoAlign(bufIndex_, blockSize_); }
 
   bool writeStagedBlocks() {
@@ -185,111 +195,129 @@ class DeviceMetaDataWriter final : public RecordWriter {
 
 class DeviceMetaDataReader final : public RecordReader {
  public:
-  explicit DeviceMetaDataReader(Device& dev, size_t metadataSize)
+  DeviceMetaDataReader(Device& dev, size_t metadataSize, size_t stagingSize)
       : dev_{dev},
         metadataSize_{metadataSize},
         blockSize_{
-            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)} {}
+            std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)},
+        stagingSize_{readStagingBytes(stagingSize, blockSize_)} {}
   ~DeviceMetaDataReader() override = default;
 
   std::unique_ptr<folly::IOBuf> readRecord() override {
-    bool readHeader = true;
-    std::unique_ptr<folly::IOBuf> buf = nullptr;
-    uint8_t* bufferData = buffer_.data();
-    uint64_t size = 0;
-    uint8_t* data = nullptr;
-    auto dataOffset = 0;
+    skipBlockTailWithoutRoomForHeader();
+    if (bufIndex_ == staged_) {
+      stageNextChunk(blockSize_);
+    }
 
-    do {
-      // This is true when we have to read a header and there are not
-      // enough bytes in the buffer OR we have to read the next block
-      // in the multi-block read
-      if (bufIndex_ + headerSize() > blockSize_) {
-        // read new block from the device if the number of bytes left from
-        // previous read are less than header size.
-        if (offset_ + blockSize_ > metadataSize_) {
-          throw std::logic_error("exceeding metadata limit");
-        }
-        // read from device to the middle of the buffer 'kReadOffset'
-        if (!dev_.read(offset_, blockSize_, bufferData)) {
-          throw std::invalid_argument(
-              fmt::format("read failed: offset = {}", offset_));
-        }
-        offset_ += blockSize_;
-        bufIndex_ = 0;
+    const uint8_t* bufferData = buffer_.data();
+    if (!validateRecordHeader(
+            folly::ByteRange{&bufferData[bufIndex_], staged_ - bufIndex_},
+            kMetadataHeaderFileId)) {
+      throw std::logic_error("Invalid record header");
+    }
+    const auto* h = reinterpret_cast<const recordio_detail::Header*>(
+        &bufferData[bufIndex_]);
+    // The header is copied into the IOBuf too so that the record can be
+    // validated as a whole below.
+    uint64_t size = headerSize() + h->dataLength;
+    auto buf = folly::IOBuf::create(size);
+    if (buf == nullptr) {
+      return nullptr;
+    }
+    buf->append(size);
+    uint8_t* data = buf->writableData();
+
+    size_t dataOffset = 0;
+    while (size > 0) {
+      if (bufIndex_ == staged_) {
+        stageNextChunk(size);
       }
-
-      // Parse the header if we are expecting header
-      if (readHeader) {
-        readHeader = false;
-        auto valid = validateRecordHeader(
-            folly::Range<unsigned char*>(&bufferData[bufIndex_],
-                                         blockSize_ - bufIndex_),
-            kMetadataHeaderFileId);
-        if (!valid) {
-          throw std::logic_error("Invalid record header");
-        }
-
-        recordio_detail::Header* h =
-            reinterpret_cast<recordio_detail::Header*>(&bufferData[bufIndex_]);
-        size = headerSize() + h->dataLength;
-        // copy the header also to IOBuf so that we can do validation
-        buf = folly::IOBuf::create(size);
-        if (buf == nullptr) {
-          return nullptr;
-        }
-        buf->append(size);
-        data = buf->writableData();
-        dataOffset = 0;
-      }
-      auto cpSize =
-          std::min(static_cast<uint64_t>(blockSize_ - bufIndex_), size);
-      memcpy(data + dataOffset, &bufferData[bufIndex_], cpSize);
+      const auto cpSize = std::min<uint64_t>(staged_ - bufIndex_, size);
+      memcpy(data + dataOffset, buffer_.data() + bufIndex_, cpSize);
       bufIndex_ += cpSize;
       dataOffset += cpSize;
       size -= cpSize;
-    } while (size > 0);
-    // Validate the what we just read from the device
-    auto record =
-        validateRecordData(folly::Range<unsigned char*>(data, buf->length()));
-    if (record.fileId == 0) {
-      throw std::invalid_argument(fmt::format(
-          "Invalid record : offset = {}, length = {}", offset_, buf->length()));
     }
-    // skip the header part and return
+
+    auto record = validateRecordData(folly::ByteRange{data, buf->length()});
+    if (record.fileId == 0) {
+      throw std::invalid_argument(
+          fmt::format("Invalid record : offset = {}, "
+                      "length = {}",
+                      getCurPos(),
+                      buf->length()));
+    }
     buf->trimStart(headerSize());
 
     return buf;
   }
 
   bool isEnd() const override {
+    const size_t idx = nextHeaderIndex();
+    if (idx < staged_) {
+      return !validateRecordHeader(
+          folly::ByteRange{buffer_.data() + idx, staged_ - idx},
+          kMetadataHeaderFileId);
+    }
+    const uint64_t pos = stageBase_ + idx;
+    if (pos + blockSize_ > metadataSize_) {
+      return true;
+    }
     Buffer headerBuf{blockSize_, blockSize_};
-    if (offset_ + blockSize_ > metadataSize_) {
+    if (!dev_.read(pos, static_cast<uint32_t>(blockSize_), headerBuf.data())) {
       return true;
     }
-    auto res = dev_.read(offset_, blockSize_, headerBuf.data());
-    if (!res) {
-      return true;
-    }
-    auto valid = validateRecordHeader(
-        folly::Range<unsigned char*>(headerBuf.data(), blockSize_),
-        kMetadataHeaderFileId);
-
-    return !valid;
+    return !validateRecordHeader(folly::ByteRange{headerBuf.data(), blockSize_},
+                                 kMetadataHeaderFileId);
   }
 
-  // Block-granular: offset_ advances a block at a time, so this rounds up to
-  // the block holding the last record read.
-  uint64_t getCurPos() const override { return offset_; }
+  // Block-granular, so this rounds up to the block holding the last record
+  // read rather than reporting the whole staged chunk as consumed.
+  uint64_t getCurPos() const override {
+    return stageBase_ + powTwoAlign(bufIndex_, blockSize_);
+  }
 
  private:
-  static constexpr size_t kBlockSizeDefault = 4096;
+  // The writer never lets a header straddle a block, so a block tail too
+  // short to hold one is padding.
+  size_t nextHeaderIndex() const {
+    const size_t posInBlock = bufIndex_ % blockSize_;
+    return posInBlock + headerSize() > blockSize_
+               ? bufIndex_ + blockSize_ - posInBlock
+               : bufIndex_;
+  }
+
+  void skipBlockTailWithoutRoomForHeader() { bufIndex_ = nextHeaderIndex(); }
+
+  // Staging never runs past the blocks holding @needed, because the region
+  // beyond the last record the writer flushed may be unwritten: on a sparse
+  // or short-of-full device that reads back as a truncated IO, not zeroes.
+  void stageNextChunk(size_t needed) {
+    const uint64_t pos = stageBase_ + staged_;
+    const size_t regionLeft = pos < metadataSize_ ? metadataSize_ - pos : 0;
+    const size_t wanted =
+        std::min(stagingSize_, powTwoAlign(needed, blockSize_));
+    const size_t readSize =
+        std::min(wanted, regionLeft) / blockSize_ * blockSize_;
+    if (readSize == 0) {
+      throw std::logic_error("exceeding metadata limit");
+    }
+    if (!dev_.read(pos, static_cast<uint32_t>(readSize), buffer_.data())) {
+      throw std::invalid_argument(fmt::format("read failed: offset = {}", pos));
+    }
+    stageBase_ = pos;
+    staged_ = readSize;
+    bufIndex_ = 0;
+  }
+
   Device& dev_;
   size_t metadataSize_;
   const size_t blockSize_;
-  uint64_t offset_{0};
-  uint64_t bufIndex_{blockSize_};
-  Buffer buffer_{blockSize_, blockSize_};
+  const size_t stagingSize_;
+  uint64_t stageBase_{0};
+  size_t staged_{0};
+  size_t bufIndex_{0};
+  Buffer buffer_{stagingSize_, blockSize_};
 };
 
 } // namespace
@@ -301,8 +329,9 @@ std::unique_ptr<RecordWriter> createMetadataRecordWriter(Device& dev,
 }
 
 std::unique_ptr<RecordReader> createMetadataRecordReader(Device& dev,
-                                                         size_t metadataSize) {
-  return std::make_unique<DeviceMetaDataReader>(dev, metadataSize);
+                                                         size_t metadataSize,
+                                                         size_t stagingSize) {
+  return std::make_unique<DeviceMetaDataReader>(dev, metadataSize, stagingSize);
 }
 
 std::unique_ptr<RecordWriter> createFileRecordWriter(int fd) {

@@ -274,7 +274,8 @@ void Driver::persist() const {
 }
 
 bool Driver::recover() {
-  auto rr = createMetadataRecordReader(*device_, metadataSize_);
+  auto rr =
+      createMetadataRecordReader(*device_, metadataSize_, metadataStagingSize_);
   if (!rr) {
     return false;
   }
