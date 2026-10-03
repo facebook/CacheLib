@@ -426,6 +426,7 @@ void SparseMapIndex::recover(
           numBucketMaps_,
           id)};
     }
+    bucketMaps_[id].reserve(bucketMap.entries()->size());
     for (auto& entry : *bucketMap.entries()) {
       bucketMaps_[id].try_emplace(*entry.key(),
                                   *entry.address(),
