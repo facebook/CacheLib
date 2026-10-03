@@ -740,8 +740,8 @@ TEST(BigHash, EstimatePersistSize) {
   const uint64_t written = rw->getCurPos();
 
   EXPECT_GT(written, kBlockSize);
-  // getCurPos() counts only whole-block flushes; the tail is written by the
-  // writer's destructor, so it under-reports by up to one block.
+  // getCurPos() is block-granular; the sub-block tail is written by the
+  // writer's destructor, so it under-reports by less than one block.
   EXPECT_GE(estimated, written);
   EXPECT_LT(estimated - written, kBlockSize);
 }

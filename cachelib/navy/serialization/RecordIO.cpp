@@ -20,6 +20,8 @@
 #include <folly/Range.h>
 #include <folly/io/RecordIO.h>
 
+#include "cachelib/navy/common/Utils.h"
+
 using namespace folly::recordio_helpers;
 
 namespace facebook::cachelib::navy {
@@ -71,16 +73,13 @@ class DeviceMetaDataWriter final : public RecordWriter {
             std::max<size_t>(dev_.getIOAlignmentSize(), kBlockSizeDefault)} {}
 
   ~DeviceMetaDataWriter() override {
-    uint8_t* bufferData = buffer_.data();
-    // Write the last remaining bytes to the device
+    // The end-of-metadata marker below claims the region's last block, so a
+    // tail that reaches the end of the region loses its final block.
+    if (bufIndex_ > 0 && offset_ + stagedBlockBytes() >= metadataSize_) {
+      bufIndex_ = stagedBlockBytes() - blockSize_;
+    }
     if (bufIndex_ > 0) {
-      if (offset_ + blockSize_ < metadataSize_) {
-        Buffer buffer = dev_.makeIOBuffer(blockSize_);
-        memcpy(buffer.data(), bufferData, bufIndex_);
-        memset(buffer.data() + bufIndex_, 0, blockSize_ - bufIndex_);
-        dev_.write(offset_, std::move(buffer));
-        offset_ += blockSize_;
-      }
+      writeStagedBlocks();
     }
     if (offset_ + blockSize_ <= metadataSize_) {
       // Write an additional block of zeroed out memory just to make the end
@@ -106,48 +105,34 @@ class DeviceMetaDataWriter final : public RecordWriter {
     buf->coalesce();
     auto size = buf->length();
     auto data = buf->data();
-    auto dataOffset = 0;
+    size_t dataOffset = 0;
     uint8_t* bufferData = buffer_.data();
 
-    auto flushBuffer = [=, this]() mutable {
-      auto extraBytes = blockSize_ - bufIndex_;
-      // zero the unused bytes in the buffer
-      memset(&bufferData[bufIndex_], 0, extraBytes);
-      Buffer buffer = dev_.makeIOBuffer(blockSize_);
-      memcpy(buffer.data(), bufferData, blockSize_);
-
-      if (!dev_.write(offset_, std::move(buffer))) {
-        throw std::invalid_argument(
-            fmt::format("write failed: offset = {}", offset_));
-      }
-
-      offset_ += blockSize_;
-      bufIndex_ = 0;
-    };
-
-    do {
-      // flush current buffer if it has no room for header
-      if (bufIndex_ + headerSize() > blockSize_) {
+    // The reader locates a header by scanning from a block boundary, so a
+    // header may not straddle one.
+    const size_t posInBlock = bufIndex_ % blockSize_;
+    if (posInBlock + headerSize() > blockSize_) {
+      const size_t skip = blockSize_ - posInBlock;
+      memset(&bufferData[bufIndex_], 0, skip);
+      bufIndex_ += skip;
+    }
+    if (offset_ + bufIndex_ + size > metadataSize_) {
+      if (bufIndex_ != 0) {
         flushBuffer();
       }
+      throw std::logic_error("exceeding metadata limit");
+    }
 
-      // if current input data total size is larger than capped size,
-      // flush current buffer and raise exception.
-      if (offset_ + bufIndex_ + size > metadataSize_) {
-        if (bufIndex_ != 0) {
-          flushBuffer();
-        }
-        throw std::logic_error("exceeding metadata limit");
+    while (size > 0) {
+      if (bufIndex_ == stagingSize_) {
+        flushBuffer();
       }
-
-      // fill local buffer with input data
-      auto cpBytes = std::min(static_cast<uint64_t>(blockSize_ - bufIndex_),
-                              static_cast<uint64_t>(size));
+      const auto cpBytes = std::min<uint64_t>(stagingSize_ - bufIndex_, size);
       memcpy(&bufferData[bufIndex_], data + dataOffset, cpBytes);
       dataOffset += cpBytes;
       bufIndex_ += cpBytes;
       size -= cpBytes;
-    } while (size > 0);
+    }
   }
 
   bool invalidate() override {
@@ -156,16 +141,42 @@ class DeviceMetaDataWriter final : public RecordWriter {
     return dev_.write(0, std::move(invalidateBuffer));
   }
 
-  uint64_t getCurPos() const override { return offset_; }
+  uint64_t getCurPos() const override {
+    return offset_ + bufIndex_ / blockSize_ * blockSize_;
+  }
 
  private:
   static constexpr size_t kBlockSizeDefault = 4096;
+  static constexpr size_t kStagingSizeDefault = 1024 * 1024;
+
+  size_t stagedBlockBytes() const { return powTwoAlign(bufIndex_, blockSize_); }
+
+  bool writeStagedBlocks() {
+    const size_t flushSize = stagedBlockBytes();
+    memset(buffer_.data() + bufIndex_, 0, flushSize - bufIndex_);
+    if (!dev_.write(offset_, buffer_.view().slice(0, flushSize))) {
+      return false;
+    }
+    offset_ += flushSize;
+    bufIndex_ = 0;
+    return true;
+  }
+
+  void flushBuffer() {
+    if (!writeStagedBlocks()) {
+      throw std::invalid_argument(
+          fmt::format("write failed: offset = {}", offset_));
+    }
+  }
+
   Device& dev_;
   size_t metadataSize_;
   const size_t blockSize_;
+  const size_t stagingSize_{
+      blockSize_ * std::max<size_t>(1, kStagingSizeDefault / blockSize_)};
   uint64_t offset_{0};
-  uint32_t bufIndex_{0};
-  Buffer buffer_{blockSize_, blockSize_};
+  size_t bufIndex_{0};
+  Buffer buffer_{stagingSize_, blockSize_};
 };
 
 class DeviceMetaDataReader final : public RecordReader {

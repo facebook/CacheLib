@@ -229,4 +229,38 @@ TEST(RecordIO, MemoryDeviceVariousPayloads) {
   }
 }
 
+// The writer keeps whole blocks that already fit and drops only the final
+// block when the stream reaches the end of the metadata region.
+TEST(RecordIO, PartialTailIsDroppedOneBlock) {
+  constexpr uint32_t ioAlignSize = 4096;
+  constexpr uint64_t metadataSize = 8 * ioAlignSize;
+  const uint32_t fullBlock =
+      ioAlignSize - folly::recordio_helpers::headerSize();
+
+  auto dev = createMemoryDevice(10 * metadataSize, nullptr, ioAlignSize);
+  {
+    auto rw = createMetadataRecordWriter(*dev, metadataSize);
+    for (int i = 0; i < 7; i++) {
+      auto wbuf = folly::IOBuf::create(fullBlock);
+      wbuf->append(fullBlock);
+      memset(wbuf->writableData(), 'A' + i, fullBlock);
+      rw->writeRecord(std::move(wbuf));
+    }
+    auto tail = folly::IOBuf::create(100);
+    tail->append(100);
+    memset(tail->writableData(), 'Z', 100);
+    rw->writeRecord(std::move(tail));
+  }
+
+  auto rr = createMetadataRecordReader(*dev, metadataSize);
+  for (int i = 0; i < 7; i++) {
+    ASSERT_FALSE(rr->isEnd());
+    auto rbuf = rr->readRecord();
+    ASSERT_NE(nullptr, rbuf);
+    EXPECT_EQ(fullBlock, rbuf->length());
+    EXPECT_EQ('A' + i, rbuf->data()[0]);
+  }
+  EXPECT_TRUE(rr->isEnd());
+}
+
 } // namespace facebook::cachelib::navy::tests
