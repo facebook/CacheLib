@@ -4762,6 +4762,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(4, stats.numFreeAllocs());
       ASSERT_EQ(0, stats.numActiveAllocs());
     }
+
+    // A missing chained head reaches the invalid-chain exception.
+    auto missing = alloc.allocate(pid, "missing-chain", size);
+    ASSERT_NE(nullptr, missing);
+    missing->markHasChainedItem();
+    ASSERT_FALSE(alloc.findChainedItem(*missing));
+    auto* item = missing.release();
+    ASSERT_THROW(alloc.release(item, true), exception::ChainedItemInvalid);
+    item->unmarkHasChainedItem();
+    alloc.allocator_->free(item);
+    EXPECT_EQ(0, alloc.getPoolStats(pid).numActiveAllocs());
   }
 
   // Insert some chained items and make sure they're popped in the

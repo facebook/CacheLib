@@ -3665,7 +3665,8 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     // with this parent. So we're free to go through the list and free
     // chained items one by one.
     auto headHandle = findChainedItem(it);
-    ChainedItem* head = &headHandle.get()->asChainedItem();
+    ChainedItem* head =
+        headHandle ? &headHandle.get()->asChainedItem() : nullptr;
     headHandle.reset();
 
     if (head == nullptr || &head->getParentItem(compressor_) != &it) {
