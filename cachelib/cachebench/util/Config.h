@@ -285,9 +285,6 @@ struct StressorConfig : public JSONConfig {
   // number into the item.
   bool populateItem{true};
 
-  // interval in milliseconds between taking a snapshot of the stats
-  uint64_t samplingIntervalMs{1000};
-
   // If enabled, stressor will verify operations' results are consistent.
   bool checkConsistency{false};
 

@@ -19,7 +19,6 @@
     ]
   },
   "test_config": {
-    "preallocateCache": true,
     "numOps": 250000,
     "numThreads": 4,
     "opRatePerSec": 100000,
