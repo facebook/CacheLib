@@ -593,6 +593,12 @@ class BlockCache final : public Engine {
   mutable AtomicCounter allocErrorCount_;
   mutable AtomicCounter allocRetryCount_;
   mutable AtomicCounter logicalWrittenCount_;
+  // Bytes in serialized, allocation-aligned BlockCache slots, including the
+  // value, key, EntryDesc, and alignment padding.
+  mutable AtomicCounter serializedWrittenCount_;
+  // Subset of serializedWrittenCount_ consumed by padding added to satisfy
+  // allocAlignSize_.
+  mutable AtomicCounter alignmentPaddingWrittenCount_;
   // TODO: deprecate hole count and hole size when we have
   //       confirmed usedSizeBytes is working correctly in prod
   mutable AtomicCounter holeCount_;

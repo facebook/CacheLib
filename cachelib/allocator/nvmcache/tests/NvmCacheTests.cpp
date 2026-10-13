@@ -1652,6 +1652,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_alloc_retries"));
   EXPECT_TRUE(cs("navy_bc_alloc_retries_waits"));
   EXPECT_TRUE(cs("navy_bc_logical_written"));
+  EXPECT_TRUE(cs("navy_bc_serialized_written"));
+  EXPECT_TRUE(cs("navy_bc_alignment_padding_written"));
   EXPECT_TRUE(cs("navy_bc_hole_count"));
   EXPECT_TRUE(cs("navy_bc_hole_bytes"));
   EXPECT_TRUE(cs("navy_bc_used_size_bytes"));

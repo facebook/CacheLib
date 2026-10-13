@@ -245,6 +245,50 @@ TEST(BlockCache, InsertLookup) {
   EXPECT_EQ(0, hits[3]);
 }
 
+TEST(BlockCache, WriteEntry_AlignedEntries_TracksSerializedAndPaddingBytes) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  CacheEntry entry1{bg.gen(8), bg.gen(800)};
+  CacheEntry entry2{bg.gen(16), bg.gen(500)};
+  const auto unalignedBytes =
+      entry1.key().key().size() + entry1.value().size() + kSizeOfEntryDesc +
+      entry2.key().key().size() + entry2.value().size() + kSizeOfEntryDesc;
+  constexpr size_t kExpectedSerializedBytes = 2 * 1024;
+  const auto expectedPaddingBytes = kExpectedSerializedBytes - unalignedBytes;
+
+  EXPECT_EQ(Status::Ok,
+            driver->insert(entry1.key(), entry1.value(), 0 /* poolId */,
+                           0 /* expiryTime */));
+  EXPECT_EQ(Status::Ok,
+            driver->insert(entry2.key(), entry2.value(), 0 /* poolId */,
+                           0 /* expiryTime */));
+
+  bool foundSerializedWritten = false;
+  bool foundAlignmentPaddingWritten = false;
+  driver->getCounters({[&](folly::StringPiece name, double count,
+                           CounterVisitor::CounterType type) {
+    if (name == "navy_bc_serialized_written") {
+      foundSerializedWritten = true;
+      EXPECT_EQ(CounterVisitor::CounterType::RATE, type);
+      EXPECT_EQ(kExpectedSerializedBytes, count);
+    }
+    if (name == "navy_bc_alignment_padding_written") {
+      foundAlignmentPaddingWritten = true;
+      EXPECT_EQ(CounterVisitor::CounterType::RATE, type);
+      EXPECT_EQ(expectedPaddingBytes, count);
+    }
+  }});
+  EXPECT_TRUE(foundSerializedWritten);
+  EXPECT_TRUE(foundAlignmentPaddingWritten);
+}
+
 TEST(BlockCache, LookupReturnsLastAccessTime) {
   auto hits = std::make_unique<std::vector<uint32_t>>(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(hits.get());
