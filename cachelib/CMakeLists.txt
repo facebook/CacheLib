@@ -412,6 +412,7 @@ if (BUILD_SHARED_LIBS)
     cachelib_datatype
     cachelib_interface
     cachelib_navy
+    cachelib_nvmitem
     cachelib_shm
     PROPERTIES
     SOVERSION ${CACHELIB_MAJOR_VERSION}
