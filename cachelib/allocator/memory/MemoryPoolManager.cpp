@@ -39,7 +39,8 @@ MemoryPoolManager::MemoryPoolManager(
   }
   // Check if nextPoolid is restored properly or not. If not restored,
   // throw error
-  if (!object.nextPoolId().is_set()) {
+  if (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          object.nextPoolId())) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
         " nextPoolId is not set");
