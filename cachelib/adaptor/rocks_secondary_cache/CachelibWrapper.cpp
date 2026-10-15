@@ -19,7 +19,6 @@
 #include "cachelib/facebook/utils/FbInternalRuntimeUpdateWrapper.h"
 #include "folly/init/Init.h"
 #include "folly/synchronization/Rcu.h"
-#include "rocksdb/version.h"
 
 namespace facebook::rocks_secondary_cache {
 
@@ -179,9 +178,7 @@ RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
                              rocksdb::Cache::CreateContext* create_context,
                              bool wait,
                              bool /*advise_erase*/,
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
                              rocksdb::Statistics* /*stats*/,
-#endif
                              bool& is_in_sec_cache) {
   std::unique_lock guard(GetRcuDomain());
   FbCache* cache = cache_.load();
