@@ -116,7 +116,8 @@ class PersistenceManager {
     // requires plumbing page sizes: saveShm() would need to attach the source
     // at its real page size, and restoreCache() would need to create segments
     // at the destination's configured page size (and hugetlbfs mount).
-    CACHELIB_CHECK_THROW(!config.hugePageSize.isHugePage(),
+    CACHELIB_CHECK_THROW(!config.slabHugePageSize.isHugePage() &&
+                             !config.accessHugePageSize.isHugePage(),
                          "Huge pages are not supported to persist");
 
     if (config.nvmConfig.has_value()) {

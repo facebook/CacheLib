@@ -106,6 +106,22 @@ TEST_F(CacheAllocatorConfigTest, HugePageLargerThanSlabWithoutMonitor) {
   EXPECT_NO_THROW(config.validate());
 }
 
+TEST_F(CacheAllocatorConfigTest, ConflictingHugePageMountDirsThrow) {
+  if (!PageSize::supportedHugePageSizes().contains(
+          PageSize::kHugePageSize2MB)) {
+    GTEST_SKIP() << "2MB huge pages not supported by kernel";
+  }
+  const PageSize huge{PageSize::kHugePageSize2MB};
+
+  AllocatorT::Config config;
+  config.enableSlabHugePages(huge, "/mnt/hugetlbfs-a");
+  EXPECT_THROW(config.enableAccessHugePages(huge, "/mnt/hugetlbfs-b"),
+               std::invalid_argument);
+  EXPECT_NO_THROW(config.enableAccessHugePages(huge, "/mnt/hugetlbfs-a"));
+  EXPECT_NO_THROW(config.enableAccessHugePages(huge));
+  EXPECT_EQ("/mnt/hugetlbfs-a", config.hugePageMountDir);
+}
+
 TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyLru) {
   LruAllocator::Config config;
   auto serialized = config.serialize();

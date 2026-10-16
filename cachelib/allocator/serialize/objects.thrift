@@ -41,6 +41,12 @@ struct CacheAllocatorMetadata {
   9: i64 numChainedChildItems;
   10: i64 ramFormatVersion = 0; // format version of ram cache
   11: i64 numAbortedSlabReleases = 0; // number of times slab release is aborted
+  // Configured page size in bytes backing slab memory; 0 selects normal pages.
+  // Compared on attach; a mismatch forces a cold roll.
+  12: i64 slabPageSize = 0;
+  // Configured page size in bytes backing the access-container hash tables;
+  // 0 selects normal pages. Compared on attach; a mismatch forces a cold roll.
+  13: i64 accessPageSize = 0;
 }
 
 struct NvmCacheMetadata {
