@@ -149,6 +149,7 @@ class NvmAdmissionPolicyTest;
 
 class CacheAllocatorTestWrapper;
 class PersistenceCache;
+class HugePageMatrixTest;
 } // namespace tests
 
 namespace interface {
@@ -2714,6 +2715,7 @@ class CacheAllocator : public CacheBase {
   FRIEND_TEST(CachelibAdminCoreTest, WorkingSetAnalysisLoggingTest);
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
+  friend class facebook::cachelib::tests::HugePageMatrixTest;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::AllocatorHitStatsTest;
   template <typename AllocatorT>

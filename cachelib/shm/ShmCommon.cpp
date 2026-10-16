@@ -156,10 +156,10 @@ bool lineAddressMatches(folly::StringPiece line, uintptr_t addr) {
         fmt::format("Invalid address field {}", tokens[0]));
   }
 
-  // parse the address values.
+  // parse the address values. smaps ranges are half-open [start, end).
   size_t start = getAddressVal(startAddr);
   size_t end = getAddressVal(endAddr);
-  return start <= addr && end >= addr;
+  return start <= addr && addr < end;
 }
 
 bool isAddressLine(folly::StringPiece line) {

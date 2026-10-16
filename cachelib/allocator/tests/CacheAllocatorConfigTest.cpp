@@ -226,6 +226,76 @@ TEST_F(CacheAllocatorConfigTest, HeapHugePageCache) {
   }
 }
 
+TEST_F(CacheAllocatorConfigTest, HugePageSplitSetters) {
+  if (!PageSize::supportedHugePageSizes().contains(
+          PageSize::kHugePageSize2MB)) {
+    GTEST_SKIP() << "2MB huge pages not supported by kernel";
+  }
+  const PageSize huge{PageSize::kHugePageSize2MB};
+  {
+    AllocatorT::Config config;
+    EXPECT_FALSE(config.slabHugePageSize.isHugePage());
+    EXPECT_FALSE(config.accessHugePageSize.isHugePage());
+    EXPECT_TRUE(config.hugePageMountDir.empty());
+  }
+  {
+    AllocatorT::Config config;
+    config.enableHugePages(huge, "/mnt/huge");
+    EXPECT_TRUE(config.slabHugePageSize.isHugePage());
+    EXPECT_TRUE(config.accessHugePageSize.isHugePage());
+    EXPECT_EQ("/mnt/huge", config.hugePageMountDir);
+  }
+  {
+    AllocatorT::Config config;
+    config.enableSlabHugePages(huge, "/mnt/huge");
+    EXPECT_TRUE(config.slabHugePageSize.isHugePage());
+    EXPECT_FALSE(config.accessHugePageSize.isHugePage());
+    config.enableAccessHugePages(huge);
+    EXPECT_TRUE(config.accessHugePageSize.isHugePage());
+    EXPECT_EQ("/mnt/huge", config.hugePageMountDir);
+  }
+  {
+    AllocatorT::Config config;
+    EXPECT_THROW(config.enableSlabHugePages(PageSize{}), std::invalid_argument);
+    EXPECT_THROW(config.enableAccessHugePages(PageSize{}),
+                 std::invalid_argument);
+  }
+}
+
+TEST_F(CacheAllocatorConfigTest, HugePageAccessOnlyWithMemoryMonitor) {
+  AllocatorT::Config config;
+  config.setCacheSize(defaultTotalSize)
+      .enableAccessHugePages(PageSize(Slab::kSize * 256))
+      .enableMemoryMonitor(std::chrono::seconds{2}, advisingMonitorConfig());
+  EXPECT_NO_THROW(config.validate());
+}
+
+TEST_F(CacheAllocatorConfigTest, HugePageSlabOnlyWithMemoryMonitor) {
+  AllocatorT::Config config;
+  config.setCacheSize(defaultTotalSize)
+      .enableSlabHugePages(PageSize(Slab::kSize * 256))
+      .enableMemoryMonitor(std::chrono::seconds{2}, advisingMonitorConfig());
+  EXPECT_THROW(config.validate(), std::invalid_argument);
+}
+
+TEST_F(CacheAllocatorConfigTest, SerializeHugePageConfig) {
+  if (!PageSize::supportedHugePageSizes().contains(
+          PageSize::kHugePageSize2MB)) {
+    GTEST_SKIP() << "2MB huge pages not supported by kernel";
+  }
+  AllocatorT::Config config;
+  auto def = config.serialize();
+  EXPECT_EQ(def["slabHugePageSize"], "0");
+  EXPECT_EQ(def["accessHugePageSize"], "0");
+  EXPECT_EQ(def["hugePageMountDir"], "");
+  config.enableSlabHugePages(PageSize(PageSize::kHugePageSize2MB), "/mnt/huge");
+  auto set = config.serialize();
+  EXPECT_EQ(set["slabHugePageSize"],
+            std::to_string(PageSize::kHugePageSize2MB));
+  EXPECT_EQ(set["accessHugePageSize"], "0");
+  EXPECT_EQ(set["hugePageMountDir"], "/mnt/huge");
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

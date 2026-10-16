@@ -171,6 +171,8 @@ class ChainedHashTable {
                              : mmapBytes_;
     }
 
+    const void* getBucketMemory() const noexcept { return hashTable_.get(); }
+
     // return the number of buckets in hash table
     size_t getNumBuckets() const noexcept { return numBuckets_; }
 
@@ -531,6 +533,10 @@ class ChainedHashTable {
 
     // return the hashtable size in bytes
     size_t getMemorySize() const noexcept { return ht_.getMemorySize(); }
+
+    const void* getBucketMemory() const noexcept {
+      return ht_.getBucketMemory();
+    }
 
     const Config& getConfig() const noexcept { return config_; }
 
