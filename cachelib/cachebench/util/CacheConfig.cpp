@@ -128,6 +128,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, usePosixShm);
   JSONSetVal(configJson, shmType);
   JSONSetVal(configJson, hugePageSize);
+  JSONSetVal(configJson, slabHugePageSize);
+  JSONSetVal(configJson, accessHugePageSize);
   JSONSetVal(configJson, hugePageMountDir);
   JSONSetVal(configJson, lockMemory);
   JSONSetVal(configJson, enableSlabAsanPoisoning);
@@ -193,7 +195,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 1112>();
+  checkCorrectSize<CacheConfig, 1128>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(fmt::format(

@@ -306,10 +306,19 @@ struct CacheConfig : public JSONConfig {
   //   "posix" persistent POSIX shared memory (requires cacheDir)
   std::string shmType;
 
-  // Requests HugeTLB-backed pages for the slab and hash-table memory. Value is
-  // a kernel-supported huge-page size in bytes (e.g. 2097152 for 2MB pages);
-  // 0 means normal pages. The HugeTLB pool must be reserved out-of-band.
+  // Requests HugeTLB-backed pages for both the slab and hash-table memory.
+  // Value is a kernel-supported huge-page size in bytes (e.g. 2097152 for 2MB
+  // pages); 0 means normal pages. The HugeTLB pool must be reserved
+  // out-of-band. The per-side fields below override this when non-zero.
   size_t hugePageSize{0};
+
+  // Huge-page size in bytes for slab memory only; overrides hugePageSize when
+  // non-zero.
+  size_t slabHugePageSize{0};
+
+  // Huge-page size in bytes for the access-container hash tables only;
+  // overrides hugePageSize when non-zero.
+  size_t accessHugePageSize{0};
 
   // Mounted hugetlbfs directory backing POSIX huge-page segments. Required when
   // combining hugePageSize with POSIX shm; ignored for SysV and temp shm.

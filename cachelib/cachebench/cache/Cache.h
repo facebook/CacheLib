@@ -646,15 +646,27 @@ Cache<Allocator>::Cache(const CacheConfig& config,
         fmt::format("Unknown shmType '{}'", config_.shmType));
   }
 
-  if (config_.hugePageSize != 0) {
+  const size_t slabHugePageSize = config_.slabHugePageSize != 0
+                                      ? config_.slabHugePageSize
+                                      : config_.hugePageSize;
+  const size_t accessHugePageSize = config_.accessHugePageSize != 0
+                                        ? config_.accessHugePageSize
+                                        : config_.hugePageSize;
+  if (slabHugePageSize != 0 || accessHugePageSize != 0) {
     if (allocatorConfig_.isUsingPosixShm() &&
         config_.hugePageMountDir.empty()) {
       throw std::invalid_argument(
           "Using POSIX for shared memory & huge pages, but didn't specify a "
           "hugetlbfs mount");
     }
-    allocatorConfig_.enableHugePages(PageSize(config_.hugePageSize),
-                                     config_.hugePageMountDir);
+    if (slabHugePageSize != 0) {
+      allocatorConfig_.enableSlabHugePages(PageSize(slabHugePageSize),
+                                           config_.hugePageMountDir);
+    }
+    if (accessHugePageSize != 0) {
+      allocatorConfig_.enableAccessHugePages(PageSize(accessHugePageSize),
+                                             config_.hugePageMountDir);
+    }
   }
 
   if (useTempShm && !config_.memoryMonitorEnabled()) {
