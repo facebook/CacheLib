@@ -254,6 +254,11 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   counters_.updateCount(statPrefix + "mem.unreserved_size",
                         memStats.unReservedSize);
 
+  counters_.updateCount(statPrefix + "mem.access_container_size",
+                        memStats.accessContainerSize);
+  counters_.updateCount(statPrefix + "mem.chained_item_access_container_size",
+                        memStats.chainedItemAccessContainerSize);
+
   counters_.updateCount(statPrefix + "nvm.size", memStats.nvmCacheSize);
   counters_.updateCount(
       statPrefix + "cache.size.configured",

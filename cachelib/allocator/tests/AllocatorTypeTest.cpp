@@ -126,6 +126,10 @@ TYPED_TEST(BaseAllocatorTest, DropFile) { this->testDropFile(); }
 
 TYPED_TEST(BaseAllocatorTest, ShmTemporary) { this->testShmTemporary(); }
 
+TYPED_TEST(BaseAllocatorTest, AccessContainerMemoryStats) {
+  this->testAccessContainerMemoryStats();
+}
+
 TYPED_TEST(BaseAllocatorTest, Serialization) { this->testSerialization(); }
 
 TYPED_TEST(BaseAllocatorTest, SerializationMMConfig) {

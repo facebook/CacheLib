@@ -6267,7 +6267,9 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
                           allocator_->getUnreservedMemorySize(),
                           nvmCache_ ? nvmCache_->getSize() : 0,
                           util::getMemAvailable(),
-                          util::getRSSBytes()};
+                          util::getRSSBytes(),
+                          accessContainer_->getMemorySize(),
+                          chainedItemAccessContainer_->getMemorySize()};
 }
 
 template <typename CacheTrait>

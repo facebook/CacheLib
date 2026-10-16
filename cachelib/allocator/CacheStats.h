@@ -630,6 +630,12 @@ struct CacheMemoryStats {
   // rss size of the process
   size_t memRssSize{0};
 
+  // memory used by the main access container hash table in bytes.
+  size_t accessContainerSize{0};
+
+  // memory used by the chained-item access container hash table in bytes.
+  size_t chainedItemAccessContainerSize{0};
+
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
 

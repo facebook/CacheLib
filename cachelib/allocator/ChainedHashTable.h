@@ -166,8 +166,9 @@ class ChainedHashTable {
     bool isRestorable() const noexcept { return restorable_; }
 
     // return the hashtable size in bytes
-    size_t size() const noexcept {
-      return numBuckets_ * sizeof(CompressedPtrType);
+    size_t getMemorySize() const noexcept {
+      return mmapBytes_ == 0 ? numBuckets_ * sizeof(CompressedPtrType)
+                             : mmapBytes_;
     }
 
     // return the number of buckets in hash table
@@ -528,6 +529,9 @@ class ChainedHashTable {
       return sizeof(CompressedPtrType) * numBuckets;
     }
 
+    // return the hashtable size in bytes
+    size_t getMemorySize() const noexcept { return ht_.getMemorySize(); }
+
     const Config& getConfig() const noexcept { return config_; }
 
     unsigned int getHashpower() const noexcept {
@@ -863,7 +867,8 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
     throw std::invalid_argument("Number of buckets must be a power of two");
   }
   if (pageSize.isHugePage()) {
-    mmapBytes_ = pageSize.getPageAlignedSize(size());
+    mmapBytes_ =
+        pageSize.getPageAlignedSize(numBuckets_ * sizeof(CompressedPtrType));
     hashTable_.reset(static_cast<CompressedPtrType*>(
         util::mmapAlignedZeroedMemory(pageSize.getPageSize(), mmapBytes_,
                                       /*noAccess=*/false,
@@ -1090,10 +1095,11 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
 
   // Take page alignment into consideration when comparing the size of the
   // shared memory and the size of the hashtable.
-  if (nBytes != util::getAlignedSize(ht_.size(), pageSize.getPageSize())) {
+  if (nBytes !=
+      util::getAlignedSize(ht_.getMemorySize(), pageSize.getPageSize())) {
     throw std::invalid_argument(
         fmt::format("Hashtable size not compatible. old = {}, new = {}",
-                    ht_.size(),
+                    ht_.getMemorySize(),
                     nBytes));
   }
 
