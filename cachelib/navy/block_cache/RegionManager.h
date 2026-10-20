@@ -58,8 +58,7 @@ using RegionCleanupCallback =
 
 // Size class or stack allocator. Thread safe. Syncs access, reclaims regions
 // Controls the allocation of regions, status (open for read/write), and
-// eviction. Region manager doesn't have internal locks. External caller must
-// take care of locking.
+// eviction.
 class RegionManager {
  public:
   // Constructs a Region Manager.
