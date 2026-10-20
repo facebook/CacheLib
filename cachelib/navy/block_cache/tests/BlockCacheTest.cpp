@@ -1861,6 +1861,13 @@ TEST(BlockCache, HoleStatsRecovery) {
   driver->getCounters(validationFunctor);
 }
 
+TEST(BlockCache, ZeroCleanRegionThreadsRejected) {
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto config = makeConfig(std::make_unique<FifoPolicy>(), *device);
+  config.cleanRegionThreads = 0;
+  EXPECT_THROW(config.validate(), std::invalid_argument);
+}
+
 TEST(BlockCache, RecoveryBadConfig) {
   folly::IOBufQueue ioq;
   {

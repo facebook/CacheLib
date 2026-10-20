@@ -94,6 +94,10 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (numInMemBuffers == 0) {
     throw std::invalid_argument("there must be at least one in-mem buffers");
   }
+  if (cleanRegionThreads == 0) {
+    throw std::invalid_argument(
+        "there must be at least one clean region thread");
+  }
   if (allocatorsPerPriority.size() == 0) {
     throw std::invalid_argument("Allocators must have at least one priority");
   }
