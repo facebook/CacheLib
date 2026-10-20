@@ -208,17 +208,20 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // totalObjSize.
   // 3. expanding less based on system stats if expanding based on
   // totalObjSize.
+  // Keep room for one object when shrinking for memory pressure. An empty
+  // cache cannot estimate average object size to grow again.
+  const auto maxEntriesToShrink = currentNumEntries - 1;
   if (mode_ == FreeMemory) {
     auto freeMemBytes = objCache_.config_.getFreeMemBytes();
     if (freeMemBytes < objCache_.config_.lowerLimitBytes) {
       // We will shrink the cache even if we had decided to expand the cache
       // based on object size. If we had decided to shrink based on object
       // size, then we shrink to the lesser value.
+      const auto entriesToShrink = std::min(
+          maxEntriesToShrink,
+          (objCache_.config_.lowerLimitBytes - freeMemBytes) / averageObjSize);
       newEntriesLimit =
-          std::min(newEntriesLimit,
-                   (currentNumEntries -
-                    ((objCache_.config_.lowerLimitBytes - freeMemBytes) /
-                     averageObjSize)));
+          std::min(newEntriesLimit, currentNumEntries - entriesToShrink);
     } else if (freeMemBytes > objCache_.config_.upperLimitBytes) {
       // We will expand the cache only if we had also decided to expand based
       // on object size. We will shrink if we had decided to shrink based
@@ -226,17 +229,18 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       newEntriesLimit =
           std::min(newEntriesLimit,
                    (currentNumEntries +
-                    ((objCache_.config_.upperLimitBytes - freeMemBytes) /
+                    ((freeMemBytes - objCache_.config_.upperLimitBytes) /
                      averageObjSize)));
     }
   } else if (mode_ == ResidentMemory) {
     auto rssBytes = objCache_.config_.getRSSMemBytes();
     if (rssBytes > objCache_.config_.upperLimitBytes) {
       // Same behavior as when shrinking with FreeMemory.
-      newEntriesLimit = std::min(
-          newEntriesLimit,
-          (currentNumEntries -
-           ((rssBytes - objCache_.config_.upperLimitBytes) / averageObjSize)));
+      const auto entriesToShrink = std::min(
+          maxEntriesToShrink,
+          (rssBytes - objCache_.config_.upperLimitBytes) / averageObjSize);
+      newEntriesLimit =
+          std::min(newEntriesLimit, currentNumEntries - entriesToShrink);
     } else if (rssBytes < objCache_.config_.lowerLimitBytes) {
       // Same behavior as when expanding with FreeMemory.
       newEntriesLimit = std::min(

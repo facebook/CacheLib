@@ -79,6 +79,47 @@ class ObjectCacheTest : public ::testing::Test {
  public:
   using ObjectCache = ObjectCache<AllocatorT>;
   using ObjectCacheConfig = typename ObjectCache::Config;
+
+  void testMemorySizeControlSteps(
+      ObjCacheSizeControlMode mode,
+      const std::vector<std::pair<uint64_t, size_t>>& steps) {
+    uint64_t memoryBytes = 15'000;
+    ObjectCacheConfig config;
+    config.setCacheName("memory_size_control")
+        .setCacheCapacity(100, 10'000, 60'000)
+        .setItemDestructor(
+            [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    config.setObjectSizeControllerMode(mode, 20'000, 10'000);
+    config.setFreeMemCb([&]() { return memoryBytes; });
+    config.setRSSMemCb([&]() { return memoryBytes; });
+    auto objcache = ObjectCache::create(config);
+    ASSERT_TRUE(objcache->stopAllWorkers(std::chrono::seconds{0}));
+    auto& controller = *objcache->sizeController_;
+
+    size_t key = 0;
+    for (auto [reading, expectedLimit] : steps) {
+      SCOPED_TRACE(fmt::format("memory reading {}", reading));
+      // Fill the current capacity so growth is eligible on the next pass.
+      const auto entriesToInsert =
+          objcache->getCurrentEntriesLimit() - objcache->getNumEntries();
+      for (size_t i = 0; i < entriesToInsert; ++i) {
+        auto [status, object, replaced] = objcache->insertOrReplace(
+            fmt::format("key_{}", key++), std::make_unique<Foo>(), 100);
+        ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+      }
+
+      // Run exactly one pass; no controller can race the next memory reading.
+      memoryBytes = reading;
+      const auto runCount = controller.getRunCount();
+      ASSERT_TRUE(controller.start(std::chrono::hours{1}, "size_test"));
+      const bool ran = test_util::eventuallyTrue(
+          [&]() { return controller.getRunCount() > runCount; }, 3);
+      ASSERT_TRUE(controller.stop(std::chrono::seconds{0}));
+      ASSERT_TRUE(ran);
+      ASSERT_EQ(expectedLimit, objcache->getCurrentEntriesLimit());
+    }
+  }
+
   void testGetAllocSize() {
     std::vector<uint8_t> maxKeySizes{};
     std::vector<uint32_t> allocSizes{};
@@ -2122,6 +2163,28 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
                                         TinyLFUAllocator,
                                         LruAllocatorSpinBuckets>;
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
+TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeShrinkBeyondCache) {
+  this->testMemorySizeControlSteps(FreeMemory,
+                                   {{9'500, 95}, {0, 1}, {20'200, 3}});
+}
+TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSShrinkBeyondCache) {
+  this->testMemorySizeControlSteps(ResidentMemory,
+                                   {{20'500, 95}, {30'000, 1}, {9'800, 3}});
+}
+TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeShrinkWholeCache) {
+  this->testMemorySizeControlSteps(FreeMemory, {{0, 1}, {20'200, 3}});
+}
+TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSShrinkWholeCache) {
+  this->testMemorySizeControlSteps(ResidentMemory, {{30'000, 1}, {9'800, 3}});
+}
+TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeGrowth) {
+  this->testMemorySizeControlSteps(FreeMemory,
+                                   {{9'500, 95}, {20'200, 97}, {15'000, 100}});
+}
+TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSGrowth) {
+  this->testMemorySizeControlSteps(ResidentMemory,
+                                   {{20'500, 95}, {9'800, 97}, {15'000, 100}});
+}
 TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
 TYPED_TEST(ObjectCacheTest, ConfigValidation) { this->testConfigValidation(); }
 TYPED_TEST(ObjectCacheTest, SetShardName) { this->testSetShardName(); }
