@@ -1524,6 +1524,8 @@ std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
 
   ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
   ret.cacheFindLatencyNs = cacheFindLatency_.estimate();
+  ret.nvmLookupLatencyNs = cacheStats.nvmLookupLatencyNs;
+  ret.nvmInsertLatencyNs = cacheStats.nvmInsertLatencyNs;
 
   // Populate counters.
   // TODO: Populate more counters that are interesting to cachebench.

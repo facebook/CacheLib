@@ -187,6 +187,8 @@ class Stats : public StatsBase {
 
   util::PercentileStats::Estimates cacheAllocateLatencyNs;
   util::PercentileStats::Estimates cacheFindLatencyNs;
+  util::PercentileStats::Estimates nvmLookupLatencyNs;
+  util::PercentileStats::Estimates nvmInsertLatencyNs;
 
   double nvmReadLatencyMicrosP50{0};
   double nvmReadLatencyMicrosP90{0};
@@ -766,6 +768,16 @@ class Stats : public StatsBase {
 
     counters["find_latency_p99"] = cacheFindLatencyNs.p99;
     counters["alloc_latency_p99"] = cacheAllocateLatencyNs.p99;
+
+    constexpr double kNanosPerMicrosecond = 1000.0;
+    counters["nvm_lookup_latency_us_p50"] = folly::UserMetric(
+        static_cast<double>(nvmLookupLatencyNs.p50) / kNanosPerMicrosecond);
+    counters["nvm_lookup_latency_us_p99"] = folly::UserMetric(
+        static_cast<double>(nvmLookupLatencyNs.p99) / kNanosPerMicrosecond);
+    counters["nvm_insert_latency_us_p50"] = folly::UserMetric(
+        static_cast<double>(nvmInsertLatencyNs.p50) / kNanosPerMicrosecond);
+    counters["nvm_insert_latency_us_p99"] = folly::UserMetric(
+        static_cast<double>(nvmInsertLatencyNs.p99) / kNanosPerMicrosecond);
 
     counters["nvm_read_latency_p99"] =
         static_cast<int64_t>(nvmReadLatencyMicrosP99);
