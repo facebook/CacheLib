@@ -70,7 +70,9 @@ RegionManager::RegionManager(uint32_t numRegions,
   }
 
   for (uint32_t i = 0; i < numWorkers; i++) {
-    auto name = fmt::format("region_manager_{}", i);
+    // Thread names are truncated to 15 characters; keep the prefix short so
+    // the worker index survives.
+    auto name = fmt::format("navy_regmgr_{}", i);
     workers_.emplace_back(
         std::make_unique<NavyThread>(name, NavyThread::Options(stackSize)));
     workerSet_.insert(workers_.back().get());
