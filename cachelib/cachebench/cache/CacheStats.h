@@ -743,20 +743,29 @@ class Stats : public StatsBase {
   }
 
   void render(folly::UserCounters& counters) const override {
-    auto calcInvertPctFn = [](uint64_t ops, uint64_t total) {
-      return static_cast<int64_t>(invertPctFn(ops, total) * 100);
+    auto totalMisses = getTotalMisses();
+    const auto hitRate = invertPctFn(totalMisses, numCacheGets);
+    const auto ramHitRate = invertPctFn(numCacheGetMiss, numCacheGets);
+    const auto nvmHitRate =
+        numNvmGets == 0 ? 0.0 : invertPctFn(numNvmGetMiss, numNvmGets);
+    const auto scaledPct = [](double pct) {
+      return static_cast<int64_t>(pct * 100);
     };
 
-    auto totalMisses = getTotalMisses();
     counters["num_items"] = numItems;
     counters["num_nvm_items"] = numNvmItems;
-    counters["hit_rate"] = calcInvertPctFn(totalMisses, numCacheGets);
+
+    // Preserve the scaled counters for existing consumers.
+    counters["hit_rate"] = scaledPct(hitRate);
+    counters["ram_hit_rate"] = scaledPct(ramHitRate);
+    counters["nvm_hit_rate"] = scaledPct(nvmHitRate);
+
+    counters["hit_rate_pct"] = folly::UserMetric(hitRate);
+    counters["ram_hit_rate_pct"] = folly::UserMetric(ramHitRate);
+    counters["nvm_hit_rate_pct"] = folly::UserMetric(nvmHitRate);
 
     counters["find_latency_p99"] = cacheFindLatencyNs.p99;
     counters["alloc_latency_p99"] = cacheAllocateLatencyNs.p99;
-
-    counters["ram_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
-    counters["nvm_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
 
     counters["nvm_read_latency_p99"] =
         static_cast<int64_t>(nvmReadLatencyMicrosP99);
