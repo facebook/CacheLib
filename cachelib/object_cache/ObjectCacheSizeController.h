@@ -114,8 +114,9 @@ size_t ObjectCacheSizeController<AllocatorT>::getTotalObjSizeBytes() const {
         trackJemallocMemStats();
     // proportionally add Jemalloc external fragmentation bytes (i.e.
     // jemallocActiveBytes - jemallocAllocatedBytes)
-    totalObjSize = static_cast<size_t>(
-        1.0 * totalObjSize / jemallocAllocatedBytes * jemallocActiveBytes);
+    totalObjSize =
+        static_cast<size_t>(static_cast<double>(totalObjSize) /
+                            jemallocAllocatedBytes * jemallocActiveBytes);
   }
   return totalObjSize;
 }
