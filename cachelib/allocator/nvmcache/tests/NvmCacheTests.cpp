@@ -2755,6 +2755,57 @@ TEST_F(NvmCacheTest, testItemDestructor) {
   }
 }
 
+TEST_F(NvmCacheTest, testItemDestructorMovePreservesNvmEvicted) {
+  uint32_t destructorCount = 0;
+  getConfig().setRemoveCallback({});
+  getConfig().setItemDestructor(
+      [&](const DestructedData&) { ++destructorCount; });
+  getConfig().enableMovingOnSlabRelease([](Item& oldItem, Item& newItem,
+                                           Item* /* parentPtr */) {
+    std::memcpy(newItem.getMemory(), oldItem.getMemory(), oldItem.getSize());
+  });
+  auto& cache = makeCache();
+  auto pid = this->poolId();
+
+  const std::string key = "key" + genRandomStr(10);
+  const std::string val = "val" + genRandomStr(10);
+  {
+    auto handle = cache.allocate(pid, key, val.size());
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
+    cache.insertOrReplace(handle);
+  }
+  ASSERT_TRUE(pushToNvmCacheFromRamForTesting(key));
+
+  // Drop only the NVM copy so the RAM copy becomes NvmClean + NvmEvicted.
+  removeFromNvmForTesting(key);
+  cache.flushNvmCache();
+  void* oldMemory = nullptr;
+  {
+    auto handle = fetch(key, true /* ramOnly */);
+    ASSERT_NE(nullptr, handle.get());
+    ASSERT_TRUE(handle->isNvmClean());
+    ASSERT_TRUE(handle->isNvmEvicted());
+    oldMemory = handle.get();
+  }
+
+  releaseSlabFor(oldMemory);
+  {
+    auto handle = fetch(key, true /* ramOnly */);
+    ASSERT_NE(nullptr, handle.get());
+    ASSERT_NE(oldMemory, handle.get());
+    EXPECT_TRUE(handle->isNvmClean());
+    EXPECT_TRUE(handle->isNvmEvicted());
+  }
+
+  cache.remove(key);
+  cache.flushNvmCache();
+  EXPECT_EQ(1, destructorCount);
+  EXPECT_EQ(0,
+            cache.getNvmCacheStatsMap().getCounts().at(
+                "items_tracked_for_destructor"));
+}
+
 TEST_F(NvmCacheTest, testItemDestructorPutFail) {
   auto& config = getConfig();
   auto& navyConfig = config.nvmConfig->navyConfig;

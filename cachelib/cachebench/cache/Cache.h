@@ -1634,7 +1634,15 @@ void Cache<Allocator>::clearCache(uint64_t errorLimit) {
     for (const auto& key : keys) {
       cache_->remove(key);
     }
+  }
+
+  // Drain asynchronous NVM removals before final stats validate that the
+  // item-destructor ownership bookkeeping is empty.
+  if (config_.enableItemDestructorCheck || config_.enableItemDestructor) {
     cache_->flushNvmCache();
+  }
+
+  if (config_.enableItemDestructorCheck) {
     itemRecords_.findUndestructedItem(std::cout, errorLimit);
   }
 }

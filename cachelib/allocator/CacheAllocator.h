@@ -4036,6 +4036,10 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
   // a delete accordingly. See D7859775 for an example
   if (oldItem.isNvmClean()) {
     newItemHdl->markNvmClean();
+    // the NVM copy may already be gone; don't let the new item claim it.
+    if (oldItem.isNvmEvicted()) {
+      newItemHdl->markNvmEvicted();
+    }
   }
 
   // Execute the move callback. We cannot make any guarantees about the

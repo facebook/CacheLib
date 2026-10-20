@@ -846,7 +846,8 @@ class Stats : public StatsBase {
     }
 
     if (numNvmItemRemovedSetSize != 0) {
-      std::cout << "NVM error. ItemRemoved not empty" << std::endl;
+      std::cout << "NVM error. ItemRemoved not empty: "
+                << numNvmItemRemovedSetSize << std::endl;
       pass = false;
     }
 
