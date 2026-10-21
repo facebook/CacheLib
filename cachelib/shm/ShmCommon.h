@@ -69,6 +69,10 @@
 #endif
 #endif
 
+#ifndef MADV_DONTDUMP
+#define MADV_DONTDUMP 0
+#endif
+
 namespace facebook {
 namespace cachelib {
 

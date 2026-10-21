@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <fmt/core.h>
 #include <folly/Expected.h>
+#include <folly/String.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -456,6 +457,11 @@ void PosixShmSegment::createReferenceMapping() {
                                        PROT_NONE, MAP_SHARED, fd_, 0);
 
   XDCHECK(referenceMapping_ != nullptr);
+  if (madvise(referenceMapping_, opts_.pageSize.getPageSize(), MADV_DONTDUMP) !=
+      0) {
+    XLOG(WARN) << "Failure to exclude reference mapping from coredump: "
+               << folly::errnoStr(errno);
+  }
 }
 
 void PosixShmSegment::deleteReferenceMapping() const {

@@ -174,3 +174,18 @@ TEST_F(PosixShmTest, RemoveWithMMap) {
   newS.mapAddress(addr);
   checkMemory(addr, size, 0);
 }
+
+TEST_F(PosixShmTest, ReferenceMappingExcludedFromCoredump) {
+  PosixShmSegment s(ShmNew, segmentName, getRandomSize());
+  auto addr = getNewUnmappedAddr();
+  s.mapAddress(addr);
+
+  auto vmFlags = getMappingVmFlags("/dev/shm" + s.getKeyStr());
+
+  auto dataMapping = vmFlags.extract(reinterpret_cast<uintptr_t>(addr));
+  ASSERT_FALSE(dataMapping.empty());
+  EXPECT_FALSE(dataMapping.mapped().contains("dd"));
+  ASSERT_EQ(1, vmFlags.size());
+  EXPECT_TRUE(vmFlags.begin()->second.contains("dd"));
+  s.unMap(addr);
+}

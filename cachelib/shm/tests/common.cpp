@@ -18,6 +18,12 @@
 
 #include <folly/Random.h>
 
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <optional>
+#include <sstream>
+
 #include "cachelib/shm/ShmCommon.h"
 
 namespace facebook {
@@ -52,6 +58,26 @@ void ShmTestBase::writeToMemory(void* addr,
                                 size_t size,
                                 const unsigned char value) {
   memset(addr, value, size);
+}
+
+/* static */
+std::map<uintptr_t, std::set<std::string>> ShmTestBase::getMappingVmFlags(
+    const std::string& mappingPath) {
+  std::ifstream smaps("/proc/self/smaps");
+  std::map<uintptr_t, std::set<std::string>> result;
+  std::optional<uintptr_t> currentStart;
+  std::string line;
+  while (std::getline(smaps, line)) {
+    if (line.find(mappingPath) != std::string::npos) {
+      currentStart = std::stoull(line, nullptr, 16);
+    } else if (currentStart && line.starts_with("VmFlags:")) {
+      std::istringstream flags(line.substr(std::strlen("VmFlags:")));
+      result[*currentStart] = {std::istream_iterator<std::string>(flags),
+                               std::istream_iterator<std::string>()};
+      currentStart.reset();
+    }
+  }
+  return result;
 }
 } // namespace tests
 } // namespace cachelib

@@ -17,14 +17,6 @@
 #include <fmt/core.h>
 #include <sys/resource.h>
 
-#include <cstring>
-#include <fstream>
-#include <iterator>
-#include <map>
-#include <optional>
-#include <set>
-#include <sstream>
-
 #include "cachelib/shm/SysVShmSegment.h"
 #include "cachelib/shm/tests/common.h"
 
@@ -32,31 +24,6 @@ using namespace facebook::cachelib::tests;
 using facebook::cachelib::ShmAttach;
 using facebook::cachelib::ShmNew;
 using facebook::cachelib::SysVShmSegment;
-
-namespace {
-// Returns the VmFlags of every mapping in this process of the SysV segment
-// with the given key, keyed by the mapping's start address.
-std::map<uintptr_t, std::set<std::string>> getMappingVmFlags(
-    const std::string& keyStr) {
-  const auto shmName =
-      fmt::format("/SYSV{:08x}", static_cast<uint32_t>(std::stoi(keyStr)));
-  std::ifstream smaps("/proc/self/smaps");
-  std::map<uintptr_t, std::set<std::string>> result;
-  std::optional<uintptr_t> currentStart;
-  std::string line;
-  while (std::getline(smaps, line)) {
-    if (line.find(shmName) != std::string::npos) {
-      currentStart = std::stoull(line, nullptr, 16);
-    } else if (currentStart && line.starts_with("VmFlags:")) {
-      std::istringstream flags(line.substr(std::strlen("VmFlags:")));
-      result[*currentStart] = {std::istream_iterator<std::string>(flags),
-                               std::istream_iterator<std::string>()};
-      currentStart.reset();
-    }
-  }
-  return result;
-}
-} // namespace
 
 class SysVShmTest : public ShmTestBase {
  public:
@@ -168,7 +135,8 @@ TEST_F(SysVShmTest, ReferenceMappingExcludedFromCoredump) {
   auto addr = getMapAddr();
   s.mapAddress(addr);
 
-  auto vmFlags = getMappingVmFlags(s.getKeyStr());
+  auto vmFlags = getMappingVmFlags(fmt::format(
+      "/SYSV{:08x}", static_cast<uint32_t>(std::stoi(s.getKeyStr()))));
 
   auto dataMapping = vmFlags.extract(reinterpret_cast<uintptr_t>(addr));
   ASSERT_FALSE(dataMapping.empty());
