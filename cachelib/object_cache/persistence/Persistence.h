@@ -375,7 +375,7 @@ bool Restorer<ObjectCache>::run() {
   for (auto& t : ts) {
     t.join();
   }
-  XLOGF(INFO, "Restorer found {} expired objects", numExpired_);
+  XLOGF(INFO, "Restorer found {} expired objects", numExpired_.load());
   return true;
 }
 } // namespace facebook::cachelib::objcache2
