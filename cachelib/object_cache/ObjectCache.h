@@ -63,13 +63,15 @@ struct ObjectCacheDestructorData {
                             const KAllocation::Key& k,
                             uint32_t expiryTime,
                             uint32_t creationTime,
-                            uint32_t lastAccessTime)
+                            uint32_t lastAccessTime,
+                            size_t size = 0)
       : context(ctx),
         objectPtr(ptr),
         key(k),
         expiryTime(expiryTime),
         creationTime(creationTime),
-        lastAccessTime(lastAccessTime) {}
+        lastAccessTime(lastAccessTime),
+        objectSize(size) {}
 
   bool isEviction() const noexcept {
     return context == ObjectCacheDestructorContext::kEvicted;
@@ -98,6 +100,10 @@ struct ObjectCacheDestructorData {
 
   // the last time this object was accessed
   uint32_t lastAccessTime;
+
+  // recorded object size from insertion or subsequent updates, including
+  // updateObjectSize(); may be 0 when objectSizeTracking is disabled.
+  size_t objectSize;
 };
 
 struct ObjectCachePreRemoveData {
@@ -856,7 +862,8 @@ void ObjectCache<AllocatorT>::init() {
             // execute user defined item destructor
             config_.itemDestructor(ObjectCacheDestructorData(
                 ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-                item.getCreationTime(), item.getLastAccessTime()));
+                item.getCreationTime(), item.getLastAccessTime(),
+                itemPtr->objectSize));
           };
         });
   } else {
@@ -885,7 +892,8 @@ void ObjectCache<AllocatorT>::init() {
         // execute user defined item destructor
         config_.removeCb(ObjectCacheDestructorData(
             ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-            item.getCreationTime(), item.getLastAccessTime()));
+            item.getCreationTime(), item.getLastAccessTime(),
+            itemPtr->objectSize));
       };
     });
   }
