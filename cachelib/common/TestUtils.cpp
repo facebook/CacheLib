@@ -61,7 +61,6 @@ constexpr uint64_t kDefaultTimeoutSecs = 30;
     now = std::chrono::steady_clock::now();
   }
   /* Should never get here, but the compiler isn't that smart */
-  return ::testing::AssertionFailure();
 }
 
 } // namespace
