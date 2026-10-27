@@ -120,6 +120,74 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testFreeMemoryShrinkCounters() {
+    uint64_t freeMemoryBytes = 9'500;
+    ObjectCacheConfig config;
+    config.setCacheName("free_memory_shrink_counters")
+        .setCacheCapacity(100, 10'000, 60'000)
+        .setItemDestructor(
+            [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    config.setObjectSizeControllerMode(FreeMemory, 20'000, 10'000);
+    config.setFreeMemCb([&]() { return freeMemoryBytes; });
+    auto objcache = ObjectCache::create(config);
+    ASSERT_TRUE(objcache->stopAllWorkers(std::chrono::seconds{0}));
+    auto& controller = *objcache->sizeController_;
+
+    auto runController = [&](size_t expectedLimit, uint64_t expectedCalls) {
+      SCOPED_TRACE(fmt::format("free memory {}", freeMemoryBytes));
+      const auto runCount = controller.getRunCount();
+      ASSERT_TRUE(controller.start(std::chrono::hours{1}, "counter_test"));
+      const bool ran = test_util::eventuallyTrue(
+          [&]() { return controller.getRunCount() > runCount; }, 3);
+      ASSERT_TRUE(controller.stop(std::chrono::seconds{0}));
+      ASSERT_TRUE(ran);
+      EXPECT_EQ(expectedLimit, objcache->getCurrentEntriesLimit());
+      bool foundCounter = false;
+      objcache->getObjectCacheCounters(
+          util::CounterVisitor{[&](folly::StringPiece name, double value,
+                                   util::CounterVisitor::CounterType type) {
+            if (name == "objcache.size_controller.free_memory_shrink_calls") {
+              foundCounter = true;
+              EXPECT_EQ(expectedCalls, value);
+              EXPECT_EQ(util::CounterVisitor::CounterType::RATE, type);
+            }
+          }});
+      EXPECT_TRUE(foundCounter);
+    };
+
+    // An empty or warming cache does not run the pressure shrink path.
+    runController(100, 0);
+    for (size_t i = 0; i < 100; ++i) {
+      auto [status, object, replaced] = objcache->insertOrReplace(
+          fmt::format("key_{}", i), std::make_unique<Foo>(), 100);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+      if (i == 39) {
+        runController(100, 0);
+      }
+    }
+
+    freeMemoryBytes = 15'000;
+    runController(100, 0);
+    freeMemoryBytes = 10'000;
+    runController(100, 0);
+    freeMemoryBytes = 9'999; // Less than one object's worth of pressure.
+    runController(100, 0);
+    freeMemoryBytes = 9'500;
+    runController(95, 1);
+
+    // A budget reduction already requires more shrinking than RAM pressure.
+    ASSERT_TRUE(objcache->setTotalObjectSizeLimit(5'000));
+    runController(50, 1);
+    ASSERT_TRUE(objcache->setTotalObjectSizeLimit(10'000));
+    runController(45, 2);
+
+    freeMemoryBytes = 0;
+    runController(1, 3);
+    runController(1, 3); // The controller keeps one entry for size estimation.
+    freeMemoryBytes = 30'000;
+    runController(100, 3);
+  }
+
   void testGetAllocSize() {
     std::vector<uint8_t> maxKeySizes{};
     std::vector<uint32_t> allocSizes{};
@@ -2163,6 +2231,9 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
                                         TinyLFUAllocator,
                                         LruAllocatorSpinBuckets>;
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
+TYPED_TEST(ObjectCacheTest, FreeMemoryShrinkCounters) {
+  this->testFreeMemoryShrinkCounters();
+}
 TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeShrinkBeyondCache) {
   this->testMemorySizeControlSteps(FreeMemory,
                                    {{9'500, 95}, {0, 1}, {20'200, 3}});

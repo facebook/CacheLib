@@ -103,6 +103,9 @@ class ObjectCacheSizeController : public PeriodicWorker {
   TLCounter totalEntriesShrunk_{};
   TLCounter totalEntriesExpanded_{};
   TLCounter ensureFreeMemoryCalls_{};
+  // FreeMemory-mode shrink calls for which low free memory sets a stricter
+  // target than the object-size budget. Counts attempts, not bytes freed.
+  TLCounter freeMemoryShrinkCalls_{};
 };
 
 template <typename AllocatorT>
@@ -212,6 +215,7 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // Keep room for one object when shrinking for memory pressure. An empty
   // cache cannot estimate average object size to grow again.
   const auto maxEntriesToShrink = currentNumEntries - 1;
+  bool shrinkForFreeMemory = false;
   if (mode_ == FreeMemory) {
     auto freeMemBytes = objCache_.config_.getFreeMemBytes();
     if (freeMemBytes < objCache_.config_.lowerLimitBytes) {
@@ -221,6 +225,9 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       const auto entriesToShrink = std::min(
           maxEntriesToShrink,
           (objCache_.config_.lowerLimitBytes - freeMemBytes) / averageObjSize);
+      shrinkForFreeMemory =
+          entriesToShrink > 0 &&
+          (currentNumEntries - entriesToShrink) < newEntriesLimit;
       newEntriesLimit =
           std::min(newEntriesLimit, currentNumEntries - entriesToShrink);
     } else if (freeMemBytes > objCache_.config_.upperLimitBytes) {
@@ -257,6 +264,9 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   if (newEntriesLimit < currentEntriesLimit &&
       currentNumEntries >= newEntriesLimit) {
     // shrink the cache
+    if (shrinkForFreeMemory) {
+      freeMemoryShrinkCalls_.inc();
+    }
     shrinkCacheByEntriesNum(currentEntriesLimit - newEntriesLimit);
   } else if (newEntriesLimit > currentEntriesLimit &&
              currentNumEntries == currentEntriesLimit) {
@@ -362,6 +372,9 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
           util::CounterVisitor::CounterType::RATE);
   visitor("objcache.size_controller.ensure_free_memory_calls",
           ensureFreeMemoryCalls_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.free_memory_shrink_calls",
+          freeMemoryShrinkCalls_.get(),
           util::CounterVisitor::CounterType::RATE);
 }
 
