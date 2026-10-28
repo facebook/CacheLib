@@ -198,6 +198,20 @@ class ObjectCacheBase : public CacheBase {
     return {};
   }
 
+  // not supported in object cache
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* numSlabsToAdvise */,
+      const std::set<PoolId>& /* poolIds */) override {
+    throw std::runtime_error("Unsupported function in ObjectCacheBase!");
+    return {};
+  }
+
+  // not supported in object cache
+  size_t getNumSlabsAdvised(
+      const std::set<PoolId>& /* poolIds */) const override {
+    throw std::runtime_error("Unsupported function in ObjectCacheBase!");
+  }
+
   // Releasing a slab from this allocation class id and pool id. The release
   // could be for a pool resizing or allocation class rebalancing.
   //

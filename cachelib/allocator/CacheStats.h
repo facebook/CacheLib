@@ -615,7 +615,8 @@ struct CacheMemoryStats {
   // current advised away memory size in bytes.
   size_t advisedSize{0};
 
-  // maximum advised pct of regular cache.
+  // maximum advised pct of the pools the memory monitor manages: all regular
+  // pools, or MemoryMonitor::Config::poolIds when set.
   size_t maxAdvisedPct{0};
 
   // amount of memory that is not assigned for any pool in bytes

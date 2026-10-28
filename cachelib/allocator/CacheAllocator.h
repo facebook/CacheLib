@@ -27,6 +27,7 @@
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -1119,7 +1120,13 @@ class CacheAllocator : public CacheBase {
                              std::shared_ptr<PoolOptimizeStrategy> strategy,
                              unsigned int ccacheStepSizePercent);
 
-  // start memory monitor
+  // start memory monitor. A running monitor is stopped and replaced.
+  // startNewMemMonitor() and stopMemMonitor() must not be called concurrently
+  // with each other; getCacheMemoryStats() and serializeConfigParams() may run
+  // concurrently.
+  //
+  // @throw std::invalid_argument if config.poolIds has an id that is not a
+  //        regular pool; a running monitor is then left running.
   // @param interval                        the period this worker fires
   // @param config                          memory monitoring config
   // @param strategy                        strategy to find an allocation class
@@ -1216,6 +1223,20 @@ class CacheAllocator : public CacheBase {
     auto regularPoolIds = getRegularPoolIds();
     return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise,
                                                    regularPoolIds);
+  }
+
+  // calculate the number of slabs to be advised/reclaimed in each of the
+  // given regular pools
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise, const std::set<PoolId>& poolIds) override final {
+    return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise, poolIds);
+  }
+
+  // @return the number of slabs advised away from the given pools
+  // @throw std::invalid_argument if a pool id is not a valid pool
+  size_t getNumSlabsAdvised(
+      const std::set<PoolId>& poolIds) const override final {
+    return allocator_->getNumSlabsAdvised(poolIds);
   }
 
   // returns a valid PoolId corresponding to the name or kInvalidPoolId if the
@@ -2297,7 +2318,13 @@ class CacheAllocator : public CacheBase {
 
   std::map<std::string, std::string> serializeConfigParams()
       const override final {
-    auto configMap = config_.serialize();
+    auto configMap = [this] {
+      // startNewMemMonitor()/stopMemMonitor() update the memory monitor
+      // fields of config_ under workersMutex_. The other fields don't need
+      // synchronization.
+      std::lock_guard<std::mutex> l(workersMutex_);
+      return config_.serialize();
+    }();
 
     auto exportRebalanceStrategyConfig = [this](PoolId poolId) {
       auto strategy = getRebalanceStrategy(poolId);
@@ -2621,6 +2648,10 @@ class CacheAllocator : public CacheBase {
 
   // free memory monitor
   std::unique_ptr<MemoryMonitor> memMonitor_;
+  // memMonitor_->getMaxAdvisePct(), or 0 without a monitor. Readable without
+  // workersMutex_, which getCacheMemoryStats() cannot take: the monitor calls
+  // it while stopWorker() holds the mutex and waits for the monitor.
+  std::atomic<size_t> memMonitorMaxAdvisePct_{0};
 
   // background evictor
   std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundEvictor_;
@@ -6286,18 +6317,19 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
   size_t configuredCompactCacheSize = std::accumulate(
       ccCachePoolIds.begin(), ccCachePoolIds.end(), 0ULL, addSize);
 
-  return CacheMemoryStats{totalCacheSize,
-                          configuredTotalCacheSize,
-                          configuredRegularCacheSize,
-                          configuredCompactCacheSize,
-                          allocator_->getAdvisedMemorySize(),
-                          memMonitor_ ? memMonitor_->getMaxAdvisePct() : 0,
-                          allocator_->getUnreservedMemorySize(),
-                          nvmCache_ ? nvmCache_->getSize() : 0,
-                          util::getMemAvailable(),
-                          util::getRSSBytes(),
-                          accessContainer_->getMemorySize(),
-                          chainedItemAccessContainer_->getMemorySize()};
+  return CacheMemoryStats{
+      totalCacheSize,
+      configuredTotalCacheSize,
+      configuredRegularCacheSize,
+      configuredCompactCacheSize,
+      allocator_->getAdvisedMemorySize(),
+      memMonitorMaxAdvisePct_.load(std::memory_order_relaxed),
+      allocator_->getUnreservedMemorySize(),
+      nvmCache_ ? nvmCache_->getSize() : 0,
+      util::getMemAvailable(),
+      util::getRSSBytes(),
+      accessContainer_->getMemorySize(),
+      chainedItemAccessContainer_->getMemorySize()};
 }
 
 template <typename CacheTrait>
@@ -6412,12 +6444,29 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
         "supported for cache on a shared memory segment only.");
   }
   config_.validateMemMonitorAndHugePages();
+  // Before stopping a running monitor, so that invalid ids leave it running.
+  MemoryMonitor::validatePoolIds(*this, config.poolIds);
 
-  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
-                      strategy, allocator_->getNumSlabsAdvised())) {
+  // Stop a running monitor before counting the advised slabs: an iteration
+  // still in progress could otherwise advise more after they were counted.
+  if (memMonitor_ && !stopMemMonitor()) {
     return false;
   }
 
+  // On a warm restart, resume from the slabs already advised away from the
+  // pools this monitor manages.
+  const size_t numSlabsAdvised =
+      config.poolIds.empty() ? allocator_->getNumSlabsAdvised()
+                             : allocator_->getNumSlabsAdvised(config.poolIds);
+  const bool started = startNewWorker("MemoryMonitor", memMonitor_, interval,
+                                      *this, config, strategy, numSlabsAdvised);
+  memMonitorMaxAdvisePct_.store(memMonitor_ ? memMonitor_->getMaxAdvisePct()
+                                            : 0,
+                                std::memory_order_relaxed);
+  if (!started) {
+    return false;
+  }
+  std::lock_guard<std::mutex> l(workersMutex_);
   config_.memMonitorInterval = interval;
   config_.memMonitorConfig = std::move(config);
   config_.poolAdviseStrategy = strategy;
@@ -6533,7 +6582,9 @@ bool CacheAllocator<CacheTrait>::stopPoolOptimizer(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopMemMonitor(std::chrono::seconds timeout) {
   auto res = stopWorker("MemoryMonitor", memMonitor_, timeout);
+  memMonitorMaxAdvisePct_.store(0, std::memory_order_relaxed);
   if (res) {
+    std::lock_guard<std::mutex> l(workersMutex_);
     config_.memMonitorInterval = std::chrono::seconds{0};
   }
   return res;

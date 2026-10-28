@@ -17,6 +17,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <folly/CPortability.h>
 #include <folly/Optional.h>
 #include <folly/json/DynamicConverter.h>
@@ -296,6 +297,16 @@ class CacheAllocatorConfig {
   // "upperLimit" refers to the upper bound of application memory.
   // Cache size will actually decrease once an application reaches past it
   // and grows when drops below "lowerLimit".
+  //
+  // config.poolIds restricts advising and reclaiming to a subset of the
+  // regular pools (default: all), see MemoryMonitor::Config::poolIds. Every id
+  // must be a regular pool when the monitor starts, otherwise starting it
+  // throws std::invalid_argument. On a cold start the monitor enabled here
+  // starts in the CacheAllocator constructor, before any pool is added, so
+  // either leave poolIds empty here and call
+  // CacheAllocator::startNewMemMonitor() with poolIds after addPool(), or call
+  // setDelayCacheWorkersStart() and then CacheAllocator::startCacheWorkers()
+  // after adding the pools.
   //
   // @param interval  waits for an interval between each run
   // @param config    memory monitoring config
@@ -1548,6 +1559,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memUpperLimitGB"] = std::to_string(memMonitorConfig.upperLimitGB);
   configMap["reclaimRateLimitWindowSecs"] =
       std::to_string(memMonitorConfig.reclaimRateLimitWindowSecs.count());
+  const auto& poolIds = memMonitorConfig.poolIds;
+  configMap["memMonitorPoolIds"] =
+      poolIds.empty() ? "all" : fmt::format("{}", fmt::join(poolIds, ","));
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);

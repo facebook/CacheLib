@@ -146,6 +146,16 @@ TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyWTinyLFU) {
   EXPECT_EQ(serialized["evictionPolicy"], "MMWTinyLFU");
 }
 
+TEST_F(CacheAllocatorConfigTest, SerializeMemMonitorPoolIds) {
+  AllocatorT::Config config;
+  EXPECT_EQ(config.serialize()["memMonitorPoolIds"], "all");
+
+  MemoryMonitor::Config memConfig = advisingMonitorConfig();
+  memConfig.poolIds = {3, 0};
+  config.enableMemoryMonitor(std::chrono::seconds{2}, memConfig);
+  EXPECT_EQ(config.serialize()["memMonitorPoolIds"], "0,3");
+}
+
 TEST_F(CacheAllocatorConfigTest, SetEventTrackerConfigFactory) {
   AllocatorT::Config config;
   int factoryCallCount = 0;

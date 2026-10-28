@@ -87,6 +87,22 @@ size_t MemoryPoolManager::getNumSlabsAdvised() const noexcept {
   return slabsAdvised;
 }
 
+size_t MemoryPoolManager::getNumSlabsAdvised(
+    const std::set<PoolId>& poolIds) const {
+  size_t slabsAdvised = 0;
+  const auto maxId = nextPoolId_.load(std::memory_order_acquire);
+  for (const auto id : poolIds) {
+    if (id < 0 || id >= maxId) {
+      throw std::invalid_argument(fmt::format("Invalid pool id: {} (max: {})",
+                                              static_cast<int>(id),
+                                              static_cast<int>(maxId) - 1));
+    }
+    XDCHECK_NE(pools_[id], nullptr);
+    slabsAdvised += pools_[id]->getNumSlabsAdvised();
+  }
+  return slabsAdvised;
+}
+
 size_t MemoryPoolManager::getRemainingSizeLocked() const noexcept {
   const size_t totalSize =
       slabAlloc_.getNumUsableAndAdvisedSlabs() * Slab::kSize;
