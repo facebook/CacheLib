@@ -37,9 +37,9 @@ std::vector<uint8_t> randomBytes(size_t size, uint32_t seed) {
 }
 } // namespace
 
-// Sizes spanning below and above typical offload gates (DTO_MIN_BYTES and
-// navy-level thresholds), so both the DSA path and internal CPU fallbacks
-// are exercised when built with DTO support.
+// Sizes from a few bytes to 1 MiB, so both the DSA path and the internal CPU
+// fallbacks (sizes a work queue refuses, device failures) are exercised when
+// built with DTO support.
 const size_t kSizes[] = {1, 13, 175, 4096, 16 * 1024, 64 * 1024, 1024 * 1024};
 
 TEST(ChecksumOffload, CopyAndChecksumMatchesSoftware) {

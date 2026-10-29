@@ -52,11 +52,26 @@ struct alignas(64) OpStorage {
   unsigned char bytes[sizeof(dto_async_op)];
 };
 
+// Submission flags for every descriptor this file sends. DTO_SUBMIT_CC steers
+// the copy output toward the CPU cache, for destinations read again soon.
+// DTO_SUBMIT_BOF asks the device to block on a page fault and finish the
+// operation instead of failing it; DTO applies it only on work queues
+// configured with block-on-fault (the device rejects it elsewhere), so on
+// other queues a fault surfaces as DTO_ASYNC_FAILED and the operation is
+// redone on the CPU below. Either way the result is correct; the difference
+// is whether the device or the CPU pays for the fault.
+unsigned int dtoFlags(bool cacheControl) {
+  return (cacheControl ? DTO_SUBMIT_CC : 0u) | DTO_SUBMIT_BOF;
+}
+
 /* True when dto_async_wait()/dto_batch_wait() park the thread rather than
- * spin, so handing them the wait actually idles the core. Not cached:
- * dto_wait_blocks() reads a global that DTO's lazy init sets on the first
- * submit, and a call before that (a stats read, a test) would otherwise pin
- * "does not block" for the life of the process. The read is a single load. */
+ * spin, so handing them the wait actually idles the core. None of DTO's wait
+ * methods parks today (busypoll, umwait, tpause and yield all keep the
+ * thread), so this is 0 and the loops below pause-poll; a wait method that
+ * does park would be used without changes here. Not cached: dto_wait_blocks()
+ * reads a global that DTO's lazy init sets on the first submit, and a call
+ * before that (a stats read, a test) would otherwise pin "does not block" for
+ * the life of the process. The read is a single load. */
 bool dtoWaitBlocks() { return dto_wait_blocks() != 0; }
 
 // 6.1/6.2 checksum ops and 6.3 copy-out: how much of the wait is spent spinning
@@ -96,14 +111,16 @@ void AsyncChecksumOp::submitImpl(Kind kind,
   int rc;
   switch (kind) {
   case Kind::kCopyCrc:
-    rc = dto_submit_memcpy_crc(op, dest, src.data(), src.size(), cacheControl);
+    rc = dto_submit_memcpy_crc(op, dest, src.data(), src.size(),
+                               dtoFlags(cacheControl));
     break;
   case Kind::kCopy:
-    rc = dto_submit_memcpy(op, dest, src.data(), src.size(), cacheControl);
+    rc = dto_submit_memcpy(op, dest, src.data(), src.size(),
+                           dtoFlags(cacheControl));
     break;
   case Kind::kCrc:
   default:
-    rc = dto_submit_crc(op, src.data(), src.size());
+    rc = dto_submit_crc(op, src.data(), src.size(), dtoFlags(false));
     break;
   }
   if (rc == DTO_ASYNC_SUBMITTED) {
@@ -149,10 +166,12 @@ uint32_t AsyncChecksumOp::wait() {
       ++yields;
       folly::fibers::yield();
     } else if (dtoWaitBlocks()) {
-      // Nothing else to run here. Hand the wait to DTO, which parks this
-      // thread on its completion aggregator and is woken when the device
-      // finishes. Returns only once the status byte is written, so the
-      // enclosing poll settles the result on the next turn.
+      // Nothing else to run here and DTO's wait method parks the thread, so
+      // hand the wait to the library. intel/DTO 1.2 never reports this
+      // (dto_wait_blocks() is 0: busypoll, umwait, tpause and yield all keep
+      // the thread), so today the pause-poll branch below runs instead.
+      // dto_async_wait() returns only once the status byte is written, so
+      // the enclosing poll settles the result on the next turn.
       ++blocks;
       dto_async_wait(op);
     } else {
@@ -170,9 +189,7 @@ uint32_t AsyncChecksumOp::wait() {
   state_ = State::kIdle;
   if (rc == DTO_ASYNC_DONE) {
     onDevice_ = true;
-    return kind_ == Kind::kCopy
-               ? 0
-               : static_cast<uint32_t>(dto_async_crc_val(op));
+    return kind_ == Kind::kCopy ? 0 : dto_async_crc_val(op);
   }
   // Accelerator failure: destination contents are unspecified, so redo the
   // whole operation on the CPU. dest_ is not yet visible to readers per the
@@ -237,7 +254,8 @@ bool copyWithOffload(uint8_t* dest, const uint8_t* src, size_t n) {
   auto* op = reinterpret_cast<dto_async_op*>(storage.bytes);
   // Cache control on: the DRAM item is about to be handed to the caller and
   // read (served) right away.
-  const int rc = dto_submit_memcpy(op, dest, src, n, 1 /* cacheControl */);
+  const int rc =
+      dto_submit_memcpy(op, dest, src, n, dtoFlags(true /* cacheControl */));
   if (rc != DTO_ASYNC_SUBMITTED) {
     std::memcpy(dest, src, n);
     return false;
@@ -298,7 +316,9 @@ std::atomic<uint64_t> gBatchBatches{0}, gBatchMembers{0}, gBatchSingles{0},
 
 BatchChecksumOp::BatchChecksumOp() {
 #ifdef CACHELIB_BUILD_WITH_DTO
-  op_ = dto_batch_op_new();
+  // One DTO batch of kMax members, reused across reset(): the descriptor
+  // list and completion records are allocated once per BatchChecksumOp.
+  op_ = dto_batch_create(static_cast<int>(kMax));
 #endif
 }
 
@@ -308,7 +328,7 @@ BatchChecksumOp::~BatchChecksumOp() {
   }
 #ifdef CACHELIB_BUILD_WITH_DTO
   if (op_) {
-    dto_batch_op_free(static_cast<dto_batch_op*>(op_));
+    dto_batch_destroy(static_cast<dto_batch*>(op_));
   }
 #endif
 }
@@ -355,16 +375,23 @@ bool BatchChecksumOp::submit() {
     allNonEmpty = members_[i].src.size() > 0;
   }
   if (op_ && allNonEmpty) {
-    dto_batch_member m[kMax];
-    for (size_t i = 0; i < count_; ++i) {
-      m[i].dst = members_[i].dest;
-      m[i].src = members_[i].src.data();
-      m[i].n = members_[i].src.size();
-      m[i].kind = members_[i].copy ? DTO_BATCH_MEMCPY_CRC : DTO_BATCH_CRC;
-      m[i].cache_control = members_[i].cacheControl ? 1 : 0;
+    auto* b = static_cast<dto_batch*>(op_);
+    dto_batch_reset(b);
+    bool added = true;
+    for (size_t i = 0; i < count_ && added; ++i) {
+      const Member& m = members_[i];
+      const int idx =
+          m.copy ? dto_batch_add_memcpy_crc(b, m.dest, m.src.data(),
+                                            m.src.size(),
+                                            dtoFlags(m.cacheControl))
+                 : dto_batch_add_crc(b, m.src.data(), m.src.size(),
+                                     dtoFlags(false));
+      added = idx == static_cast<int>(i);
     }
-    if (dto_submit_batch(static_cast<dto_batch_op*>(op_), m,
-                         static_cast<int>(count_)) == DTO_ASYNC_SUBMITTED) {
+    // A single member goes out as a plain descriptor; more than the work
+    // queue's max_batch_size, or a member above its max_transfer_size, is
+    // refused with nothing submitted.
+    if (added && dto_batch_submit(b) == DTO_ASYNC_SUBMITTED) {
       onDevice_ = true;
       return true;
     }
@@ -385,15 +412,15 @@ bool BatchChecksumOp::submit() {
 
 void BatchChecksumOp::finish() {
 #ifdef CACHELIB_BUILD_WITH_DTO
-  auto* op = static_cast<dto_batch_op*>(op_);
+  auto* b = static_cast<dto_batch*>(op_);
   for (size_t i = 0; i < count_; ++i) {
-    if (dto_batch_member_done(op, static_cast<int>(i))) {
-      crc_[i] = dto_batch_crc_val(op, static_cast<int>(i));
-    } else {
-      // DTO already redid the copy of a failed copy+CRC member; only the
-      // CRC is still owed (see dto_batch_member_done).
+    // Once dto_batch_poll reports DONE every result is valid: members the
+    // device did not finish were redone on the CPU inside DTO, copy and CRC
+    // alike. dto_batch_status() is the device's status for the member, 1
+    // when the device did it; anything else was a CPU repair.
+    crc_[i] = dto_batch_crc(b, static_cast<int>(i));
+    if (dto_batch_status(b, static_cast<int>(i)) != 1) {
       ++fallbacks_;
-      crc_[i] = checksum(members_[i].src);
     }
   }
   if (fallbacks_) {
@@ -409,7 +436,7 @@ bool BatchChecksumOp::poll() {
     return true;
   }
 #ifdef CACHELIB_BUILD_WITH_DTO
-  if (dto_batch_poll(static_cast<dto_batch_op*>(op_)) == DTO_ASYNC_PENDING) {
+  if (dto_batch_poll(static_cast<dto_batch*>(op_)) == DTO_ASYNC_PENDING) {
     return false;
   }
   finish();
@@ -425,7 +452,7 @@ void BatchChecksumOp::wait() {
     return;
   }
 #ifdef CACHELIB_BUILD_WITH_DTO
-  auto* op = static_cast<dto_batch_op*>(op_);
+  auto* op = static_cast<dto_batch*>(op_);
   // Same policy as AsyncChecksumOp::wait(): yield when a sibling fiber is
   // runnable, park through DTO when its wait method blocks, else pause-poll.
   auto* fm = folly::fibers::onFiber()
@@ -628,38 +655,45 @@ bool copyLargeWithOffload(uint8_t* dest,
   }
   gCopyLargeCalls.fetch_add(1, std::memory_order_relaxed);
   const auto tSubmit = std::chrono::steady_clock::now();
-  parts = std::max<size_t>(1, std::min<size_t>(parts, DTO_BATCH_MAX));
+  // Pieces of one DSA batch descriptor. DTO accepts up to DTO_BATCH_MAX
+  // (1024) members, but the piece tables below live on the caller's stack,
+  // which on a Navy fiber is 64 KiB, so cap at 64: a 16 MiB region still
+  // goes out as 256 KiB pieces, more than the engines of one device can run
+  // in parallel anyway.
+  constexpr size_t kMaxParts = 64;
+  parts = std::max<size_t>(1, std::min<size_t>(parts, kMaxParts));
   // Piece boundaries 4 KiB aligned so the device works on whole pages.
   size_t piece = (n + parts - 1) / parts;
   piece = (piece + 4095) & ~size_t{4095};
-  void* dst[DTO_BATCH_MAX];
-  void* srcs[DTO_BATCH_MAX];
-  size_t sizes[DTO_BATCH_MAX];
+  void* dst[kMaxParts];
+  void* srcs[kMaxParts];
+  size_t sizes[kMaxParts];
   int count = 0;
-  for (size_t off = 0; off < n && count < static_cast<int>(DTO_BATCH_MAX);
+  for (size_t off = 0; off < n && count < static_cast<int>(kMaxParts);
        off += piece, ++count) {
     dst[count] = dest + off;
     srcs[count] = const_cast<uint8_t*>(src) + off;
     sizes[count] = std::min(piece, n - off);
   }
+  const unsigned int flags = dtoFlags(cacheControl);
   int rc;
-  dto_batch_op* op = nullptr;
+  dto_batch* op = nullptr;
   alignas(64) dto_async_op single;
   if (count == 1) {
-    rc = dto_submit_memcpy(&single, dest, src, n, cacheControl ? 1 : 0);
+    rc = dto_submit_memcpy(&single, dest, src, n, flags);
   } else {
-    op = dto_batch_op_new();
-    rc = op ? dto_submit_batch_copy(op, dst, srcs, sizes, count)
+    op = dto_batch_create(count);
+    rc = op ? dto_submit_batch_copy(op, dst, srcs, sizes, count, flags)
             : DTO_ASYNC_FALLBACK;
     if (rc != DTO_ASYNC_SUBMITTED) {
       // The device may lack the Batch opcode (DSA 1.0), or the WQ refused the
       // descriptor. One Memory Move covers the range on any DSA; try that
       // before giving the copy to memcpy.
       if (op) {
-        dto_batch_op_free(op);
+        dto_batch_destroy(op);
         op = nullptr;
       }
-      rc = dto_submit_memcpy(&single, dest, src, n, cacheControl ? 1 : 0);
+      rc = dto_submit_memcpy(&single, dest, src, n, flags);
     }
   }
   const auto tWait = std::chrono::steady_clock::now();
@@ -669,7 +703,7 @@ bool copyLargeWithOffload(uint8_t* dest,
       std::memory_order_relaxed);
   if (rc != DTO_ASYNC_SUBMITTED) {
     if (op) {
-      dto_batch_op_free(op);
+      dto_batch_destroy(op);
     }
     std::memcpy(dest, src, n);
     return false;
@@ -721,7 +755,7 @@ bool copyLargeWithOffload(uint8_t* dest,
           .count(),
       std::memory_order_relaxed);
   if (op) {
-    dto_batch_op_free(op);
+    dto_batch_destroy(op);
     // dto_batch_poll repairs failed members on the CPU before returning DONE.
     return true;
   }
@@ -808,10 +842,10 @@ bool checksumOffloadSelfCheck() {
   if (!checksumOffloadSupported()) {
     return false;
   }
-  // Exercise both operations on a buffer large enough to exceed DTO's
-  // minimum-size gates (DTO_CRC_MIN_BYTES / DTO_MIN_BYTES) so the DSA path
-  // actually runs, and verify parity with navy::checksum() plus copy
-  // fidelity. If DSA is unavailable, the CPU fallback must also match.
+  // Exercise both operations on a buffer the size of a large value (explicit
+  // DTO submits are not size-gated; Navy's checksumOffloadMinSize is the only
+  // gate) and verify parity with navy::checksum() plus copy fidelity. If DSA
+  // is unavailable, the CPU fallback must also match.
   constexpr size_t kSize = 1024 * 1024;
   std::vector<uint8_t> src(kSize);
   std::vector<uint8_t> dst(kSize, 0);
@@ -825,8 +859,8 @@ bool checksumOffloadSelfCheck() {
 
   // A device failure is redone on the CPU and still returns the right
   // checksum, so parity alone cannot tell a working accelerator from one that
-  // rejects every descriptor (e.g. a WQ without block-on-fault). Require that
-  // both operations actually completed on the device.
+  // rejects every descriptor (e.g. a WQ whose max_transfer_size is below the
+  // request). Require that both operations actually completed on the device.
   AsyncChecksumOp crcOp;
   crcOp.submitChecksum(view);
   const uint32_t viaCrc = crcOp.wait();

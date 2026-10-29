@@ -38,7 +38,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$REPO/build-cachelib"
+BUILD_DIR="${BUILD_DIR:-$REPO/build-cachelib}"
 PREFIX="$REPO/opt/cachelib"
 DTO_DIR="${DTO_DIR:-$HOME/DTO}"
 
@@ -258,12 +258,28 @@ export DTO_COLLECT_STATS="${DTO_COLLECT_STATS:-0}"
 # the software arm by ~7%, so they are set for every arm. jemalloc users: the
 # equivalent is dirty_decay_ms:-1,muzzy_decay_ms:-1.
 export GLIBC_TUNABLES="${GLIBC_TUNABLES:-glibc.malloc.mmap_threshold=33554432:glibc.malloc.trim_threshold=4294967295:glibc.malloc.top_pad=67108864}"
+# DTO_WAIT_METHOD only matters where DTO itself waits on a descriptor: the
+# preloaded libdto.so of the --intercept arm, and dto_async_wait(), which the
+# checksum offload calls only when dto_wait_blocks() says the method parks the
+# thread (never with DTO 1.2). The offload's own poll loops yield to other
+# fibers or pause regardless of this setting.
 export DTO_WAIT_METHOD="${DTO_WAIT_METHOD:-busypoll}"
-export DTO_COLLECT_STATS=1
+# cachelib links libdto_explicit, the DTO API without the libc interposers, so
+# the checksum offload never intercepts the process's own memcpy/memset. The
+# --intercept arm adds that on top by preloading libdto.so (the interposing
+# variant of the same library) into the cachebench process.
 if [ "$INTERCEPT" = off ]; then
-  export DTO_MIN_BYTES=1073741824   # 1GB: transparent interception off
+  export DTO_MIN_BYTES=1073741824   # 1GB: belt and braces, nothing intercepts
 else
   unset DTO_MIN_BYTES               # DTO's own threshold decides
+  LIBDTO=""
+  for d in ${DTO_LIB_DIR:+"$DTO_LIB_DIR"} "$BUILD_DIR/_deps/dto-build" \
+           "$PREFIX/lib" "$PREFIX/lib64" /usr/local/lib /usr/local/lib64; do
+    if [ -f "$d/libdto.so" ]; then LIBDTO="$d/libdto.so"; break; fi
+  done
+  [ -n "$LIBDTO" ] || { echo "--intercept on needs libdto.so; set DTO_LIB_DIR" >&2; exit 1; }
+  echo "   transparent interception: LD_PRELOAD=$LIBDTO"
+  export LD_PRELOAD="$LIBDTO${LD_PRELOAD:+:$LD_PRELOAD}"
 fi
 
 LOG="$OUT/cachebench_${WORKLOAD}_offload_${OFFLOAD}_intercept_${INTERCEPT}_page_${PAGE_SIZE}.log"

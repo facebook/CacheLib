@@ -67,8 +67,8 @@ target_link_libraries(cachelib_navy PUBLIC
   )
 
 # DTO (DSA offload runtime) is resolved in the top-level CMakeLists.txt and
-# linked PUBLIC into cachelib_common, so cachelib_navy inherits DTO::dto and
-# the CACHELIB_BUILD_WITH_DTO definition transitively.
+# linked PUBLIC into cachelib_common, so cachelib_navy inherits
+# DTO::dto_explicit and the CACHELIB_BUILD_WITH_DTO definition transitively.
 
 install(TARGETS cachelib_navy
         EXPORT cachelib-exports

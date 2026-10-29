@@ -188,7 +188,7 @@ class BatchChecksumOp {
   bool submitted_{false};
   bool onDevice_{false};
   bool done_{false};
-  void* op_{nullptr}; // dto_batch_op*, owned
+  void* op_{nullptr}; // dto_batch*, owned; created with capacity kMax
 };
 
 /**

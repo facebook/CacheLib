@@ -39,7 +39,7 @@ find_dependency(FBThrift)
 # DTO runtime; resolve its imported target for consumers. A DTO fetched and
 # built in-tree installs its package into this same prefix.
 if (@BUILD_WITH_DTO@)
-  find_dependency(DTO CONFIG)
+  find_dependency(DTO 1.2 CONFIG)
 endif()
 
 if (NOT TARGET cachelib)

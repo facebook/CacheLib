@@ -316,27 +316,28 @@ add_thrift_file(OBJECT_CACHE_PERSISTENCE
                 object_cache/persistence/persistent_data.thrift json)
 
 if (BUILD_WITH_DTO)
-  # DSA offload runtime (DTO). Resolved here so every cachelib library can
-  # use it: DTO::dto is linked PUBLIC into cachelib_common (see
-  # common/CMakeLists.txt), the base library of every other cachelib target,
-  # which propagates the headers, the link dependency, and the
-  # CACHELIB_BUILD_WITH_DTO compile definition to the whole tree and to
-  # consumers of the installed package.
+  # DSA offload runtime (DTO, https://github.com/intel/DTO). Resolved here so
+  # every cachelib library can use it: DTO::dto_explicit is linked PUBLIC into
+  # cachelib_common (see common/CMakeLists.txt), the base library of every
+  # other cachelib target, which propagates the headers, the link dependency,
+  # and the CACHELIB_BUILD_WITH_DTO compile definition to the whole tree and
+  # to consumers of the installed package.
   #
-  # The DSA checksum offload code requires a DTO with the caller-allocated
-  # async submit/poll API, the mixed-member batch API (dto_submit_batch) and
-  # the raw-CRC32C convention, which upstream intel/DTO does not have — so
-  # when no installed DTO cmake package is found, fetch and build the pinned
-  # revision in-tree rather than linking whatever libdto happens to be on
-  # the system.
-  set(CACHELIB_DTO_GIT_REPOSITORY "https://github.com/byrnedj/DTO.git"
+  # The DSA checksum offload code uses DTO's explicit asynchronous API
+  # (caller-allocated submit/poll operations, batches, raw CRC32C), which
+  # exists from DTO 1.2 on. An installed DTO package of at least that version
+  # is used when present; otherwise the pinned release is fetched and built
+  # in-tree rather than linking whatever libdto happens to be on the system.
+  set(CACHELIB_DTO_GIT_REPOSITORY "https://github.com/intel/DTO.git"
       CACHE STRING "Git repository for DTO when no installed copy is found")
-  set(CACHELIB_DTO_GIT_TAG "5b98ab5c33b33af814b839b7b4efd360a2e41889"
+  # Tag v1.2.
+  set(CACHELIB_DTO_GIT_TAG "7eb15200bcd95cf8a49d018856eb647b6f4e0ae9"
       CACHE STRING "DTO revision to fetch when no installed copy is found")
 
-  find_package(DTO CONFIG QUIET)
+  find_package(DTO 1.2 CONFIG QUIET)
   if (DTO_FOUND)
-    message(STATUS "Using installed DTO package: ${DTO_DIR}")
+    message(STATUS "Using installed DTO package: ${DTO_DIR} "
+      "(version ${DTO_VERSION})")
   else()
     if (CMAKE_VERSION VERSION_LESS 3.14)
       message(FATAL_ERROR
