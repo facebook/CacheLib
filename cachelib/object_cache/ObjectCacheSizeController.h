@@ -57,13 +57,16 @@ class ObjectCacheSizeController : public PeriodicWorker {
   size_t getTotalObjSizeBytes() const;
   void shrinkCacheByEntriesNum(size_t entries);
 
-  // Ensure free memory is above the lower limit by shrinking cache if needed.
+  // Shrink until free memory reaches the lower limit. With a configured
+  // minimum cache size, stop at that floor or if eviction cannot progress.
   void ensureFreeMemoryAboveLowerLimit();
 
  private:
   void work() override final;
   void expandCacheByEntriesNum(size_t entries, size_t currentLimit);
   int64_t getNewNumEntries();
+  size_t getMinEntriesLimit(size_t objectSizeLimit,
+                            size_t averageObjSize) const;
 
   std::pair<size_t, size_t> trackJemallocMemStats() const {
     size_t jemallocAllocatedBytes;
@@ -125,6 +128,23 @@ size_t ObjectCacheSizeController<AllocatorT>::getTotalObjSizeBytes() const {
 }
 
 template <typename AllocatorT>
+size_t ObjectCacheSizeController<AllocatorT>::getMinEntriesLimit(
+    size_t objectSizeLimit, size_t averageObjSize) const {
+  const auto percent = objCache_.config_.minCacheSizePercent;
+  if (percent == 0) {
+    return 0;
+  }
+  // Split the percentage calculation to avoid overflowing the byte budget.
+  // Round up to whole bytes and entries, subject to the existing ceilings.
+  const auto minBytes = (objectSizeLimit / 100) * percent +
+                        ((objectSizeLimit % 100) * percent + 99) / 100;
+  const auto minEntries =
+      minBytes / averageObjSize + (minBytes % averageObjSize != 0);
+  return std::min({minEntries, objectSizeLimit / averageObjSize,
+                   objCache_.config_.l1EntriesLimit});
+}
+
+template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::work() {
   if (mode_ == FreeMemoryOnly) {
     auto freeMemBytes = objCache_.config_.getFreeMemBytes();
@@ -183,7 +203,8 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   if (averageObjSize == 0) {
     return;
   }
-  auto newEntriesLimit = totalObjectSizeLimit / averageObjSize;
+  const auto objectSizeEntriesLimit = totalObjectSizeLimit / averageObjSize;
+  auto newEntriesLimit = objectSizeEntriesLimit;
 
   if (newEntriesLimit > objCache_.config_.l1EntriesLimit) {
     XLOGF_EVERY_MS(INFO, 60'000,
@@ -257,6 +278,14 @@ void ObjectCacheSizeController<AllocatorT>::work() {
            ((objCache_.config_.lowerLimitBytes - rssBytes) / averageObjSize)));
     }
   }
+
+  // The floor applies to the object-memory budget, not the initial number
+  // of hash-table entries. Normal budget enforcement remains authoritative.
+  newEntriesLimit =
+      std::max(newEntriesLimit,
+               getMinEntriesLimit(totalObjectSizeLimit, averageObjSize));
+  shrinkForFreeMemory =
+      shrinkForFreeMemory && newEntriesLimit < objectSizeEntriesLimit;
 
   // entriesLimit should never exceed the configured entries limit
   newEntriesLimit = std::min(newEntriesLimit, objCache_.config_.l1EntriesLimit);
@@ -383,7 +412,27 @@ void ObjectCacheSizeController<AllocatorT>::ensureFreeMemoryAboveLowerLimit() {
   ensureFreeMemoryCalls_.inc();
   auto freeMemBytes = objCache_.config_.getFreeMemBytes();
   while (freeMemBytes < objCache_.config_.lowerLimitBytes) {
-    shrinkCacheByEntriesNum(objCache_.config_.shrinkCacheBy);
+    const auto currentLimit = getCurrentEntriesLimit();
+    auto entriesToShrink = objCache_.config_.shrinkCacheBy;
+    if (objCache_.config_.minCacheSizePercent != 0) {
+      const auto numEntries = objCache_.getNumEntries();
+      const auto objectBytes = getTotalObjSizeBytes();
+      if (numEntries == 0 || objectBytes / numEntries == 0) {
+        return;
+      }
+      const auto minEntries = getMinEntriesLimit(getTotalObjectSizeLimit(),
+                                                 objectBytes / numEntries);
+      if (currentLimit <= minEntries) {
+        return;
+      }
+      entriesToShrink =
+          std::min<size_t>(entriesToShrink, currentLimit - minEntries);
+    }
+    shrinkCacheByEntriesNum(entriesToShrink);
+    if (objCache_.config_.minCacheSizePercent != 0 &&
+        getCurrentEntriesLimit() == currentLimit) {
+      return;
+    }
     freeMemBytes = objCache_.config_.getFreeMemBytes();
   }
 }

@@ -82,16 +82,18 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testMemorySizeControlSteps(
       ObjCacheSizeControlMode mode,
-      const std::vector<std::pair<uint64_t, size_t>>& steps) {
-    uint64_t memoryBytes = 15'000;
+      const std::vector<std::pair<uint64_t, size_t>>& steps,
+      uint32_t minCacheSizePercent) {
+    std::atomic<uint64_t> memoryBytes{15'000};
     ObjectCacheConfig config;
     config.setCacheName("memory_size_control")
         .setCacheCapacity(100, 10'000, 60'000)
         .setItemDestructor(
             [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     config.setObjectSizeControllerMode(mode, 20'000, 10'000);
-    config.setFreeMemCb([&]() { return memoryBytes; });
-    config.setRSSMemCb([&]() { return memoryBytes; });
+    config.setMinCacheSizePercent(minCacheSizePercent);
+    config.setFreeMemCb([&]() { return memoryBytes.load(); });
+    config.setRSSMemCb([&]() { return memoryBytes.load(); });
     auto objcache = ObjectCache::create(config);
     ASSERT_TRUE(objcache->stopAllWorkers(std::chrono::seconds{0}));
     auto& controller = *objcache->sizeController_;
@@ -114,10 +116,82 @@ class ObjectCacheTest : public ::testing::Test {
       ASSERT_TRUE(controller.start(std::chrono::hours{1}, "size_test"));
       const bool ran = test_util::eventuallyTrue(
           [&]() { return controller.getRunCount() > runCount; }, 3);
+      if (!ran) {
+        memoryBytes = 15'000;
+      }
       ASSERT_TRUE(controller.stop(std::chrono::seconds{0}));
       ASSERT_TRUE(ran);
       ASSERT_EQ(expectedLimit, objcache->getCurrentEntriesLimit());
     }
+  }
+
+  void testMinCacheSizePercent(ObjCacheSizeControlMode mode) {
+    std::atomic<uint64_t> memoryBytes{15'000};
+    ObjectCacheConfig config;
+    config.setCacheName("minimum_cache_size")
+        .setCacheCapacity(200, 10'000, 60'000)
+        .setMinCacheSizePercent(70)
+        .setItemDestructor(
+            [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    config.setObjectSizeControllerMode(mode, 20'000, 10'000);
+    config.setFreeMemCb([&]() { return memoryBytes.load(); });
+    config.setRSSMemCb([&]() { return memoryBytes.load(); });
+    auto objcache = ObjectCache::create(config);
+    ASSERT_TRUE(objcache->stopAllWorkers(std::chrono::seconds{0}));
+    EXPECT_EQ("70",
+              objcache->serializeConfigParams().at("minCacheSizePercent"));
+    auto& controller = *objcache->sizeController_;
+
+    auto runController = [&](size_t expectedLimit) {
+      const auto runCount = controller.getRunCount();
+      ASSERT_TRUE(controller.start(std::chrono::hours{1}, "minimum_test"));
+      const bool ran = test_util::eventuallyTrue(
+          [&]() { return controller.getRunCount() > runCount; }, 3);
+      // Release pressure before stopping so a regression in FreeMemoryOnly
+      // fails the test instead of leaving its worker in an endless loop.
+      memoryBytes = mode == ResidentMemory ? 0 : 30'000;
+      ASSERT_TRUE(controller.stop(std::chrono::seconds{0}));
+      ASSERT_TRUE(ran);
+      EXPECT_EQ(expectedLimit, objcache->getCurrentEntriesLimit());
+    };
+    auto runUnderPressure = [&](size_t expectedLimit) {
+      memoryBytes = mode == ResidentMemory ? 30'000 : 0;
+      runController(expectedLimit);
+    };
+
+    runUnderPressure(200); // No average size is available in an empty cache.
+    for (size_t i = 0; i < 100; ++i) {
+      auto [status, object, replaced] = objcache->insertOrReplace(
+          fmt::format("key_{}", i), std::make_unique<Foo>(), 100);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+    }
+
+    // The 7,000-byte floor holds 70 objects, not 70% of the 200-entry ceiling.
+    runUnderPressure(70);
+    EXPECT_EQ(7'000, objcache->getTotalObjectSize());
+    runUnderPressure(70);
+
+    // Change the cached population to larger objects at the same byte budget.
+    for (size_t i = 0; i < 100; ++i) {
+      objcache->remove(fmt::format("key_{}", i));
+    }
+    for (size_t i = 0; i < 70; ++i) {
+      auto [status, object, replaced] = objcache->insertOrReplace(
+          fmt::format("large_{}", i), std::make_unique<Foo>(), 200);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, status);
+    }
+    runUnderPressure(35);
+    EXPECT_EQ(7'000, objcache->getTotalObjectSize());
+
+    // The floor follows budget updates and rounds up to a whole object:
+    // 70% of 5,001 bytes needs 18 objects of 200 bytes each.
+    ASSERT_TRUE(objcache->setTotalObjectSizeLimit(5'001));
+    runUnderPressure(18);
+    EXPECT_EQ(3'600, objcache->getTotalObjectSize());
+    runUnderPressure(18);
+
+    memoryBytes = mode == ResidentMemory ? 0 : 30'000;
+    runController(mode == FreeMemoryOnly ? 20 : 25);
   }
 
   void testFreeMemoryShrinkCounters() {
@@ -239,6 +313,24 @@ class ObjectCacheTest : public ::testing::Test {
 
       config.setCacheCapacity(10'000, 100'000, 10);
       EXPECT_NO_THROW(config.validate());
+    }
+
+    {
+      ObjectCacheConfig config;
+      config.setCacheName("minimum_size_validation")
+          .setCacheCapacity(100, 0, 0)
+          .setItemDestructor(
+              [](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+      EXPECT_NO_THROW(config.validate());
+      config.setMinCacheSizePercent(70);
+      EXPECT_THROW(config.validate(), std::invalid_argument);
+      config.setCacheCapacity(100, 10'000, 60'000);
+      EXPECT_NO_THROW(config.validate());
+      config.setMinCacheSizePercent(100);
+      EXPECT_NO_THROW(config.validate());
+      EXPECT_THROW(config.setMinCacheSizePercent(101), std::invalid_argument);
+      config.minCacheSizePercent = 101;
+      EXPECT_THROW(config.validate(), std::invalid_argument);
     }
 
     {
@@ -2231,30 +2323,50 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
                                         TinyLFUAllocator,
                                         LruAllocatorSpinBuckets>;
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentFreeMemory) {
+  this->testMinCacheSizePercent(FreeMemory);
+}
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentResidentMemory) {
+  this->testMinCacheSizePercent(ResidentMemory);
+}
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentFreeMemoryOnly) {
+  this->testMinCacheSizePercent(FreeMemoryOnly);
+}
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentFullBudgetFreeMemory) {
+  this->testMemorySizeControlSteps(FreeMemory, {{0, 100}, {0, 100}}, 100);
+}
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentFullBudgetResidentMemory) {
+  this->testMemorySizeControlSteps(ResidentMemory,
+                                   {{30'000, 100}, {30'000, 100}}, 100);
+}
+TYPED_TEST(ObjectCacheTest, MinCacheSizePercentFullBudgetFreeMemoryOnly) {
+  this->testMemorySizeControlSteps(FreeMemoryOnly, {{0, 100}, {0, 100}}, 100);
+}
 TYPED_TEST(ObjectCacheTest, FreeMemoryShrinkCounters) {
   this->testFreeMemoryShrinkCounters();
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeShrinkBeyondCache) {
   this->testMemorySizeControlSteps(FreeMemory,
-                                   {{9'500, 95}, {0, 1}, {20'200, 3}});
+                                   {{9'500, 95}, {0, 1}, {20'200, 3}}, 0);
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSShrinkBeyondCache) {
   this->testMemorySizeControlSteps(ResidentMemory,
-                                   {{20'500, 95}, {30'000, 1}, {9'800, 3}});
+                                   {{20'500, 95}, {30'000, 1}, {9'800, 3}}, 0);
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeShrinkWholeCache) {
-  this->testMemorySizeControlSteps(FreeMemory, {{0, 1}, {20'200, 3}});
+  this->testMemorySizeControlSteps(FreeMemory, {{0, 1}, {20'200, 3}}, 0);
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSShrinkWholeCache) {
-  this->testMemorySizeControlSteps(ResidentMemory, {{30'000, 1}, {9'800, 3}});
+  this->testMemorySizeControlSteps(ResidentMemory, {{30'000, 1}, {9'800, 3}},
+                                   0);
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlFreeGrowth) {
-  this->testMemorySizeControlSteps(FreeMemory,
-                                   {{9'500, 95}, {20'200, 97}, {15'000, 100}});
+  this->testMemorySizeControlSteps(
+      FreeMemory, {{9'500, 95}, {20'200, 97}, {15'000, 100}}, 0);
 }
 TYPED_TEST(ObjectCacheTest, MemorySizeControlRSSGrowth) {
-  this->testMemorySizeControlSteps(ResidentMemory,
-                                   {{20'500, 95}, {9'800, 97}, {15'000, 100}});
+  this->testMemorySizeControlSteps(
+      ResidentMemory, {{20'500, 95}, {9'800, 97}, {15'000, 100}}, 0);
 }
 TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
 TYPED_TEST(ObjectCacheTest, ConfigValidation) { this->testConfigValidation(); }

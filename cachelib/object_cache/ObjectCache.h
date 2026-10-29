@@ -1335,6 +1335,7 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {
     config["totalObjectSizeLimit"] = std::to_string(getTotalObjectSizeLimit());
+    config["minCacheSizePercent"] = std::to_string(config_.minCacheSizePercent);
     config["sizeControllerIntervalMs"] =
         std::to_string(config_.sizeControllerIntervalMs);
   }
