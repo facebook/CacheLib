@@ -19,6 +19,8 @@
 #include <folly/Conv.h>
 #include <folly/FileUtil.h>
 #include <folly/String.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
 #include <cstdlib>
 
@@ -36,6 +38,18 @@ inline size_t freeHugePages(size_t pageSize) {
   const auto path =
       fmt::format("/sys/kernel/mm/hugepages/hugepages-{}kB/free_hugepages",
                   pageSize / 1024);
+  std::string content;
+  if (!folly::readFile(path.c_str(), content)) {
+    return 0;
+  }
+  return folly::tryTo<size_t>(folly::trimWhitespace(content)).value_or(0);
+}
+
+// Total reserved huge pages of the given size, from sysfs. Returns 0 if the
+// sysfs entry doesn't exist or can't be read.
+inline size_t totalHugePages(size_t pageSize) {
+  const auto path = fmt::format(
+      "/sys/kernel/mm/hugepages/hugepages-{}kB/nr_hugepages", pageSize / 1024);
   std::string content;
   if (!folly::readFile(path.c_str(), content)) {
     return 0;
@@ -78,6 +92,25 @@ inline bool canReserveHugePages(size_t bytes, const PageSize& ps) {
       (ps.getPageAlignedSize(bytes) + ps.getPageSize() - 1) / ps.getPageSize();
   return detail::freeHugePages(ps.getPageSize()) >= needPages &&
          hugePagesUsable(ps);
+}
+
+// True if this process may create SysV HugeTLB segments of the given size.
+// Permission is governed by the hugetlb_shm_group sysctl (default: root
+// only); without it creation fails with EPERM. Probes with an IPC_PRIVATE
+// segment that is destroyed immediately.
+inline bool sysvHugeTlbPermitted(size_t pageSize) {
+  const PageSize ps{pageSize};
+  if (!ps.isHugePage()) {
+    return true;
+  }
+  const int shmid =
+      shmget(IPC_PRIVATE, pageSize,
+             IPC_CREAT | IPC_EXCL | 0600 | ps.hugePageShmgetFlags());
+  if (shmid == -1) {
+    return false;
+  }
+  shmctl(shmid, IPC_RMID, nullptr);
+  return true;
 }
 
 } // namespace tests

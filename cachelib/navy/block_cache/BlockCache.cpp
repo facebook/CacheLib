@@ -97,6 +97,10 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (numInMemBuffers == 0) {
     throw std::invalid_argument("there must be at least one in-mem buffers");
   }
+  if (cleanRegionThreads == 0) {
+    throw std::invalid_argument(
+        "there must be at least one clean region thread");
+  }
   if (allocatorsPerPriority.size() == 0) {
     throw std::invalid_argument("Allocators must have at least one priority");
   }
@@ -1468,6 +1472,8 @@ void BlockCache::writeEntry(MutableBufferView buffer,
   auto keySize = (combinedEntry) ? 0 : hk->key().size();
   auto keyHash = (combinedEntry) ? kCombinedEntrySignatureValue : hk->keyHash();
   size_t logicalWriteSize = 0;
+  const auto unalignedSize = sizeof(EntryDesc) + keySize + value.size();
+  XDCHECK_GE(buffer.size(), unalignedSize);
 
   // Copy descriptor and the key to the end
   uint8_t* dest = buffer.data() + buffer.size() - sizeof(EntryDesc);
@@ -1533,6 +1539,8 @@ void BlockCache::writeEntry(MutableBufferView buffer,
   }
 
   logicalWrittenCount_.add(logicalWriteSize);
+  serializedWrittenCount_.add(buffer.size());
+  alignmentPaddingWrittenCount_.add(buffer.size() - unalignedSize);
 }
 
 void BlockCache::readEntry(RegionDescriptor& regionDesc,
@@ -1665,6 +1673,8 @@ void BlockCache::initializeBlockCache() {
   allocErrorCount_.set(0);
   allocRetryCount_.set(0);
   logicalWrittenCount_.set(0);
+  serializedWrittenCount_.set(0);
+  alignmentPaddingWrittenCount_.set(0);
   holeCount_.set(0);
   holeSizeTotal_.set(0);
   usedSizeBytes_.set(0);
@@ -1722,6 +1732,11 @@ uint64_t BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_alloc_retries", allocRetryCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_logical_written", logicalWrittenCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_serialized_written", serializedWrittenCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_alignment_padding_written",
+          alignmentPaddingWrittenCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_hole_count", holeCount_.get());
   visitor("navy_bc_hole_bytes", holeSizeTotal_.get());

@@ -155,6 +155,11 @@ class MemoryPoolManager {
   // get the total number of slabs advised away across all pools
   size_t getNumSlabsAdvised() const noexcept;
 
+  // get the total number of slabs advised away across the given pools
+  //
+  // @throw std::invalid_argument if a pool id is not a valid pool
+  size_t getNumSlabsAdvised(const std::set<PoolId>& poolIds) const;
+
   // return total memory currently advised away
   size_t getAdvisedMemorySize() const noexcept {
     size_t sum = 0;

@@ -17,6 +17,7 @@
 #include "cachelib/shm/SysVShmSegment.h"
 
 #include <fmt/core.h>
+#include <folly/String.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>
@@ -331,9 +332,15 @@ key_t SysVShmSegment::createKeyForName(const std::string& name) noexcept {
 
 void SysVShmSegment::createReferenceMapping() {
   referenceMapping_ = detail::shmAttachImpl(shmid_, nullptr, SHM_RDONLY);
-  const int rv = mprotect(referenceMapping_, getSize(), PROT_NONE);
-  if (rv != 0) {
+  const size_t size = getSize();
+  if (mprotect(referenceMapping_, size, PROT_NONE) != 0) {
     util::throwSystemError(errno, "Failure to mprotect reference mapping");
+  }
+  // The reference mapping is never accessed. Without this, a core dump would
+  // fault in every untouched page of the segment through this mapping.
+  if (madvise(referenceMapping_, size, MADV_DONTDUMP) != 0) {
+    XLOG(WARN) << "Failure to exclude reference mapping from coredump: "
+               << folly::errnoStr(errno);
   }
 }
 

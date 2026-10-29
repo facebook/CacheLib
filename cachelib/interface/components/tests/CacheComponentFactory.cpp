@@ -54,9 +54,8 @@ Result<std::unique_ptr<CacheComponent>> RAMCacheFactory::recover() {
 }
 
 Result<RAMCacheComponent> RAMCacheFactory::createWithPersistence(
-    RAMCacheComponent::PersistenceConfig pc) {
-  return RAMCacheComponent::create(createConfig(), createPoolConfig(),
-                                   std::move(pc));
+    const RAMCacheComponent::PersistenceConfig& pc) {
+  return RAMCacheComponent::create(createConfig(), createPoolConfig(), pc);
 }
 
 /* static */ LruAllocatorConfig RAMCacheFactory::createConfig() {

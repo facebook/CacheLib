@@ -1953,6 +1953,20 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_FALSE(util::pathExists(tempCacheDir));
   }
 
+  void testAccessContainerMemoryStats() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.setAccessConfig({12, 6});
+    config.configureChainedItems({8, 4});
+    AllocatorT alloc(config);
+
+    using CompressedPtr = typename AllocatorT::Item::CompressedPtrType;
+    const auto memStats = alloc.getCacheMemoryStats();
+    EXPECT_EQ((1u << 12) * sizeof(CompressedPtr), memStats.accessContainerSize);
+    EXPECT_EQ((1u << 8) * sizeof(CompressedPtr),
+              memStats.chainedItemAccessContainerSize);
+  }
+
   // make some allocations and access them and record explicitly the time it was
   // accessed. Ensure that the items that are evicted are descending in order of
   // time. To ensure the lru property, lets only allocate objects of fixed size.
@@ -4762,6 +4776,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(4, stats.numFreeAllocs());
       ASSERT_EQ(0, stats.numActiveAllocs());
     }
+
+    // A missing chained head reaches the invalid-chain exception.
+    auto missing = alloc.allocate(pid, "missing-chain", size);
+    ASSERT_NE(nullptr, missing);
+    missing->markHasChainedItem();
+    ASSERT_FALSE(alloc.findChainedItem(*missing));
+    auto* item = missing.release();
+    ASSERT_THROW(alloc.release(item, true), exception::ChainedItemInvalid);
+    item->unmarkHasChainedItem();
+    alloc.allocator_->free(item);
+    EXPECT_EQ(0, alloc.getPoolStats(pid).numActiveAllocs());
   }
 
   // Insert some chained items and make sure they're popped in the

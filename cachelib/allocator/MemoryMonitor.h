@@ -17,6 +17,7 @@
 #pragma once
 
 #include <atomic>
+#include <set>
 
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -122,6 +123,21 @@ class MemoryMonitor : public PeriodicWorker {
     // advised memory by the amount by which free/resident memory is
     // decreasing/increasing
     std::chrono::seconds reclaimRateLimitWindowSecs{0};
+    // Pools from which slabs are advised away and into which they are
+    // reclaimed. Empty means all regular (non compact cache) pools. When set,
+    // the advise/reclaim targets, the maxAdvisePercent cap and the advised
+    // slab accounting only consider these pools.
+    //
+    // Every id must be a regular pool (as returned by addPool()) when the
+    // monitor starts, otherwise starting it throws std::invalid_argument. See
+    // CacheAllocatorConfig::enableMemoryMonitor() for setting it on a cold
+    // start.
+    //
+    // poolIds is not persisted. Slabs advised away from pools outside poolIds
+    // (e.g. by a monitor with different poolIds before a warm restart) stay
+    // advised away until a monitor covering those pools reclaims them, e.g. one
+    // with empty poolIds. Reclaiming them is up to the caller.
+    std::set<PoolId> poolIds{};
   };
 
   // Memory monitoring can be setup to run in one of the two following modes:
@@ -211,6 +227,11 @@ class MemoryMonitor : public PeriodicWorker {
     return stats_.getSlabReleaseEvents(pid);
   }
 
+  // @throw std::invalid_argument if poolIds (Config::poolIds) has an id that
+  //        is not a regular pool of the cache
+  static void validatePoolIds(const CacheBase& cache,
+                              const std::set<PoolId>& poolIds);
+
  private:
   // updates the number of slabs to be advised by numSlabs. This would either
   // increment (to advise away more slabs) or decrement (to reclaim some of the
@@ -244,11 +265,18 @@ class MemoryMonitor : public PeriodicWorker {
   // @return number of slabs in based on pool size
   size_t getPoolSlabs(PoolId poolId) const noexcept;
 
-  // @return number of slabs based on the size of all pools added together
+  // @return number of slabs based on the size of all monitored pools added
+  //         together
   size_t getTotalSlabs() const noexcept;
 
-  // @return number of slabs in use by all pools together
+  // @return number of slabs in use by all monitored pools together
   size_t getSlabsInUse() const noexcept;
+
+  // @return poolIds_, or all regular pools if poolIds_ is empty
+  std::set<PoolId> getMonitoredPoolIds() const;
+
+  // @return number of slabs currently advised away from the monitored pools
+  size_t getMonitoredSlabsAdvised() const;
 
   // advise away slabs to increase free memory or reduce RSS
   void adviseAwaySlabs();
@@ -270,10 +298,13 @@ class MemoryMonitor : public PeriodicWorker {
   // slab release stats for memory monitor.
   ReleaseStats stats_{};
 
+  // Pools selected by Config::poolIds. Empty means all regular pools.
+  const std::set<PoolId> poolIds_;
+
   // Number of slabs to advise away. This is target number of slabs to be
-  // advised across all pools. Note that this needs to be std::atomic since
-  // there can be a race condition where one worker is stopping and another is
-  // starting.
+  // advised across all monitored pools. Note that this needs to be std::atomic
+  // since there can be a race condition where one worker is stopping and
+  // another is starting.
   std::atomic_size_t numSlabsToAdvise_;
 
   // number of slabs released as a part of resizing pools.

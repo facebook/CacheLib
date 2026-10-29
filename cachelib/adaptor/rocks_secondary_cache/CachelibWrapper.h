@@ -20,7 +20,6 @@
 #include "rocksdb/secondary_cache.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/types.h"
-#include "rocksdb/version.h"
 
 namespace facebook {
 namespace rocks_secondary_cache {
@@ -124,9 +123,7 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
       rocksdb::Cache::CreateContext* create_context,
       bool wait,
       bool advise_erase,
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
       rocksdb::Statistics* stats,
-#endif
       bool& is_in_sec_cache) override;
 
   bool SupportForceErase() const override { return false; }

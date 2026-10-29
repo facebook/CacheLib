@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <mutex>
+#include <set>
 #include <unordered_map>
 
 #include "cachelib/allocator/CacheStats.h"
@@ -281,6 +282,21 @@ class CacheBase {
   // calculate the number of slabs to be advised/reclaimed in each pool
   virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
       size_t numSlabsToAdvise) = 0;
+
+  // calculate the number of slabs to be advised/reclaimed in each of the
+  // given pools
+  //
+  // @param numSlabsToAdvise  target number of slabs advised away across
+  //                          poolIds
+  // @param poolIds           regular pools to advise from or reclaim to;
+  //                          unlike MemoryMonitor::Config::poolIds, an
+  //                          empty set means no pools
+  virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise, const std::set<PoolId>& poolIds) = 0;
+
+  // @return the number of slabs advised away from the given pools
+  // @throw std::invalid_argument if a pool id is not a valid pool
+  virtual size_t getNumSlabsAdvised(const std::set<PoolId>& poolIds) const = 0;
 
   // Releasing a slab from this allocation class id and pool id. The release
   // could be for a pool resizing or allocation class rebalancing.

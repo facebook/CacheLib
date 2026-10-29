@@ -16,7 +16,9 @@ The sections below list out the `config setters` in the order of the config they
 * SharedMemoryManager: The component that controls the shared memory (new, attaching, etc)
    * `enableCachePersistence`: setting cache directory.
    * `usePosixForShm`: setting whether to Posix.
-   * `enableHugePages`: back the slab memory and access-container hash tables with HugeTLB pages; the metadata segment stays on normal pages. Takes a huge-page size in bytes and for POSIX shm, a mounted `hugetlbfs` directory. The HugeTLB pool must be reserved out-of-band. See [Cache persistence](Cache_persistence) for details.
+   * `enableHugePages`: back the slab memory and access-container hash tables with HugeTLB pages; the metadata segment stays on normal pages. Shorthand for calling `enableSlabHugePages` and `enableAccessHugePages` with the same size. Takes a huge-page size in bytes and for POSIX shm, a mounted `hugetlbfs` directory shared by both sides. The HugeTLB pool must be reserved out-of-band. See [Cache persistence](Cache_persistence) for details.
+   * `enableSlabHugePages`: back only the slab memory with HugeTLB pages, leaving the access-container hash tables on normal pages.
+   * `enableAccessHugePages`: back only the access-container hash tables (main and chained-item) with HugeTLB pages, leaving slab memory on normal pages. Useful on CPUs with limited huge-page TLB slots.
 * Memory allocator: The components that manages memory allocations. (Carving out slabs, pool managers)
    * `setDefaultAllocSizes`: set the default allocation sizes, by either supplying the sizes directly or specifying min, max, size factor and
    * `enableCachePersistence`: the baseAddr is used here as the slab base address (if supplied).

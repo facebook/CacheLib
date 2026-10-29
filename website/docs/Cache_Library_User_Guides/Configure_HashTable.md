@@ -70,6 +70,10 @@ Cache::Config cfg;
 cfg.accessConfig.locksPower = 10;
 ```
 
+## Measuring hash table memory
+
+Each cache has two access containers: the main hash table and the chained-item hash table (used only when chained items are enabled). Their sizes in bytes are reported as the `mem.access_container_size` and `mem.chained_item_access_container_size` counters, also available programmatically via the `accessContainerSize` and `chainedItemAccessContainerSize` fields of `getCacheMemoryStats()`. Note that a tiny table on huge pages still occupies nearly a whole huge page, so compare these counters against your huge-page size before enabling `enableAccessHugePages` (see [Cache persistence](Cache_persistence)).
+
 ## Auto-tune Hashtable
 If you know the estimated number of items to cache, instead of figuring out the two parameters yourself, you can pass #items in `setAccessConfig` API to automatically tune the hash table with reasonable values of these two parameters:
 ```cpp

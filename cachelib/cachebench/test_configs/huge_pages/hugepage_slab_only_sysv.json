@@ -1,0 +1,35 @@
+// @nolint
+// Huge-page combo test: slab memory on 2MB huge pages, access-container hash
+// tables on normal pages. Persistent SysV shared memory (SHM_HUGETLB).
+{
+  "cache_config" : {
+    "cacheSizeMB" : 512,
+    "cacheDir" : "/tmp/cachebench_hp_slab_only_sysv",
+    "slabHugePageSize" : 2097152,
+    "shmType" : "sysv",
+
+    "htBucketPower" : 22,
+    "poolRebalanceIntervalSec" : 0,
+    "moveOnSlabRelease" : false,
+
+    "numPools" : 1,
+    "poolSizes" : [1.0]
+  },
+  "test_config" : {
+    "numOps" : 2000000,
+    "numThreads" : 8,
+    "numKeys" : 2000000,
+
+    "keySizeRange" : [16, 64],
+    "keySizeRangeProbability" : [1.0],
+
+    "valSizeRange" : [512, 4096],
+    "valSizeRangeProbability" : [1.0],
+
+    "getRatio" : 0.8,
+    "setRatio" : 0.2,
+    "delRatio" : 0.0,
+    "keyPoolDistribution" : [1.0],
+    "opPoolDistribution" : [1.0]
+  }
+}

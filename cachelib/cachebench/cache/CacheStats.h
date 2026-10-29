@@ -187,6 +187,8 @@ class Stats : public StatsBase {
 
   util::PercentileStats::Estimates cacheAllocateLatencyNs;
   util::PercentileStats::Estimates cacheFindLatencyNs;
+  util::PercentileStats::Estimates nvmLookupLatencyNs;
+  util::PercentileStats::Estimates nvmInsertLatencyNs;
 
   double nvmReadLatencyMicrosP50{0};
   double nvmReadLatencyMicrosP90{0};
@@ -743,20 +745,39 @@ class Stats : public StatsBase {
   }
 
   void render(folly::UserCounters& counters) const override {
-    auto calcInvertPctFn = [](uint64_t ops, uint64_t total) {
-      return static_cast<int64_t>(invertPctFn(ops, total) * 100);
+    auto totalMisses = getTotalMisses();
+    const auto hitRate = invertPctFn(totalMisses, numCacheGets);
+    const auto ramHitRate = invertPctFn(numCacheGetMiss, numCacheGets);
+    const auto nvmHitRate =
+        numNvmGets == 0 ? 0.0 : invertPctFn(numNvmGetMiss, numNvmGets);
+    const auto scaledPct = [](double pct) {
+      return static_cast<int64_t>(pct * 100);
     };
 
-    auto totalMisses = getTotalMisses();
     counters["num_items"] = numItems;
     counters["num_nvm_items"] = numNvmItems;
-    counters["hit_rate"] = calcInvertPctFn(totalMisses, numCacheGets);
+
+    // Preserve the scaled counters for existing consumers.
+    counters["hit_rate"] = scaledPct(hitRate);
+    counters["ram_hit_rate"] = scaledPct(ramHitRate);
+    counters["nvm_hit_rate"] = scaledPct(nvmHitRate);
+
+    counters["hit_rate_pct"] = folly::UserMetric(hitRate);
+    counters["ram_hit_rate_pct"] = folly::UserMetric(ramHitRate);
+    counters["nvm_hit_rate_pct"] = folly::UserMetric(nvmHitRate);
 
     counters["find_latency_p99"] = cacheFindLatencyNs.p99;
     counters["alloc_latency_p99"] = cacheAllocateLatencyNs.p99;
 
-    counters["ram_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
-    counters["nvm_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
+    constexpr double kNanosPerMicrosecond = 1000.0;
+    counters["nvm_lookup_latency_us_p50"] = folly::UserMetric(
+        static_cast<double>(nvmLookupLatencyNs.p50) / kNanosPerMicrosecond);
+    counters["nvm_lookup_latency_us_p99"] = folly::UserMetric(
+        static_cast<double>(nvmLookupLatencyNs.p99) / kNanosPerMicrosecond);
+    counters["nvm_insert_latency_us_p50"] = folly::UserMetric(
+        static_cast<double>(nvmInsertLatencyNs.p50) / kNanosPerMicrosecond);
+    counters["nvm_insert_latency_us_p99"] = folly::UserMetric(
+        static_cast<double>(nvmInsertLatencyNs.p99) / kNanosPerMicrosecond);
 
     counters["nvm_read_latency_p99"] =
         static_cast<int64_t>(nvmReadLatencyMicrosP99);
@@ -825,7 +846,8 @@ class Stats : public StatsBase {
     }
 
     if (numNvmItemRemovedSetSize != 0) {
-      std::cout << "NVM error. ItemRemoved not empty" << std::endl;
+      std::cout << "NVM error. ItemRemoved not empty: "
+                << numNvmItemRemovedSetSize << std::endl;
       pass = false;
     }
 

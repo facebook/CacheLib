@@ -620,7 +620,8 @@ struct CacheMemoryStats {
   // current advised away memory size in bytes.
   size_t advisedSize{0};
 
-  // maximum advised pct of regular cache.
+  // maximum advised pct of the pools the memory monitor manages: all regular
+  // pools, or MemoryMonitor::Config::poolIds when set.
   size_t maxAdvisedPct{0};
 
   // amount of memory that is not assigned for any pool in bytes
@@ -634,6 +635,12 @@ struct CacheMemoryStats {
 
   // rss size of the process
   size_t memRssSize{0};
+
+  // memory used by the main access container hash table in bytes.
+  size_t accessContainerSize{0};
+
+  // memory used by the chained-item access container hash table in bytes.
+  size_t chainedItemAccessContainerSize{0};
 
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }

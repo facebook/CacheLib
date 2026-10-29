@@ -285,6 +285,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
                     totalCacheSize)};
   }
   proto.setMetadataSize(metadataSize);
+  proto.setMetadataStagingSize(config.getMetadataStagingSize());
 
   proto.setMaxKeySize(config.getMaxKeySize());
 

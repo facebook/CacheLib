@@ -27,6 +27,7 @@
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -149,6 +150,7 @@ class NvmAdmissionPolicyTest;
 
 class CacheAllocatorTestWrapper;
 class PersistenceCache;
+class HugePageMatrixTest;
 } // namespace tests
 
 namespace interface {
@@ -1118,7 +1120,13 @@ class CacheAllocator : public CacheBase {
                              std::shared_ptr<PoolOptimizeStrategy> strategy,
                              unsigned int ccacheStepSizePercent);
 
-  // start memory monitor
+  // start memory monitor. A running monitor is stopped and replaced.
+  // startNewMemMonitor() and stopMemMonitor() must not be called concurrently
+  // with each other; getCacheMemoryStats() and serializeConfigParams() may run
+  // concurrently.
+  //
+  // @throw std::invalid_argument if config.poolIds has an id that is not a
+  //        regular pool; a running monitor is then left running.
   // @param interval                        the period this worker fires
   // @param config                          memory monitoring config
   // @param strategy                        strategy to find an allocation class
@@ -1215,6 +1223,20 @@ class CacheAllocator : public CacheBase {
     auto regularPoolIds = getRegularPoolIds();
     return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise,
                                                    regularPoolIds);
+  }
+
+  // calculate the number of slabs to be advised/reclaimed in each of the
+  // given regular pools
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise, const std::set<PoolId>& poolIds) override final {
+    return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise, poolIds);
+  }
+
+  // @return the number of slabs advised away from the given pools
+  // @throw std::invalid_argument if a pool id is not a valid pool
+  size_t getNumSlabsAdvised(
+      const std::set<PoolId>& poolIds) const override final {
+    return allocator_->getNumSlabsAdvised(poolIds);
   }
 
   // returns a valid PoolId corresponding to the name or kInvalidPoolId if the
@@ -2253,7 +2275,7 @@ class CacheAllocator : public CacheBase {
         config.disableFullCoredump,
         config.lockMemory,
         config.isSlabAsanPoisoningEnabled(),
-        config.hugePageSize};
+        config.slabHugePageSize};
   }
 
   // starts one of the cache workers passing the current instance and the args
@@ -2296,7 +2318,13 @@ class CacheAllocator : public CacheBase {
 
   std::map<std::string, std::string> serializeConfigParams()
       const override final {
-    auto configMap = config_.serialize();
+    auto configMap = [this] {
+      // startNewMemMonitor()/stopMemMonitor() update the memory monitor
+      // fields of config_ under workersMutex_. The other fields don't need
+      // synchronization.
+      std::lock_guard<std::mutex> l(workersMutex_);
+      return config_.serialize();
+    }();
 
     auto exportRebalanceStrategyConfig = [this](PoolId poolId) {
       auto strategy = getRebalanceStrategy(poolId);
@@ -2620,6 +2648,10 @@ class CacheAllocator : public CacheBase {
 
   // free memory monitor
   std::unique_ptr<MemoryMonitor> memMonitor_;
+  // memMonitor_->getMaxAdvisePct(), or 0 without a monitor. Readable without
+  // workersMutex_, which getCacheMemoryStats() cannot take: the monitor calls
+  // it while stopWorker() holds the mutex and waits for the monitor.
+  std::atomic<size_t> memMonitorMaxAdvisePct_{0};
 
   // background evictor
   std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundEvictor_;
@@ -2714,6 +2746,7 @@ class CacheAllocator : public CacheBase {
   FRIEND_TEST(CachelibAdminCoreTest, WorkingSetAnalysisLoggingTest);
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
+  friend class facebook::cachelib::tests::HugePageMatrixTest;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::AllocatorHitStatsTest;
   template <typename AllocatorT>
@@ -2785,7 +2818,7 @@ CacheAllocator<CacheTrait>::CacheAllocator(
       config_(config.validate()),
       tempShm_(type == InitMemType::kNone && isOnShm_
                    ? std::make_unique<TempShmMapping>(config_.getCacheSize(),
-                                                      config_.hugePageSize)
+                                                      config_.slabHugePageSize)
                    : nullptr),
       shmManager_(type != InitMemType::kNone
                       ? std::make_unique<ShmManager>(config_.cacheDir,
@@ -2848,14 +2881,14 @@ ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
     throw std::invalid_argument("CacheLib only supports a single memory tier");
   }
   opts.memBindNumaNodes = config_.memoryTierConfigs[0].getMemBind();
-  applyHugePageOpts(opts, config_.hugePageSize);
+  applyHugePageOpts(opts, config_.slabHugePageSize);
   return opts;
 }
 
 template <typename CacheTrait>
 ShmSegmentOpts CacheAllocator<CacheTrait>::createShmAccessOpts() {
   ShmSegmentOpts opts;
-  applyHugePageOpts(opts, config_.hugePageSize);
+  applyHugePageOpts(opts, config_.accessHugePageSize);
   return opts;
 }
 
@@ -2902,7 +2935,7 @@ CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
                       createShmCacheOpts())
           .addr,
       config_.getCacheSize(), config_.disableFullCoredump,
-      config_.isSlabAsanPoisoningEnabled(), config_.hugePageSize);
+      config_.isSlabAsanPoisoningEnabled(), config_.slabHugePageSize);
 }
 
 template <typename CacheTrait>
@@ -3083,7 +3116,7 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
     return std::make_unique<AccessContainer>(
         config, compressor_,
         [this](Item* it) -> WriteHandle { return acquire(it); },
-        config_.hugePageSize);
+        config_.accessHugePageSize);
   } else if (type == InitMemType::kMemNew) {
     return std::make_unique<AccessContainer>(
         config,
@@ -3103,7 +3136,7 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
         shmManager_->attachShm(name, nullptr, createShmAccessOpts()),
         compressor_,
         [this](Item* it) -> WriteHandle { return acquire(it); },
-        config_.hugePageSize);
+        config_.accessHugePageSize);
   }
 
   // Invalid type
@@ -3665,7 +3698,8 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     // with this parent. So we're free to go through the list and free
     // chained items one by one.
     auto headHandle = findChainedItem(it);
-    ChainedItem* head = &headHandle.get()->asChainedItem();
+    ChainedItem* head =
+        headHandle ? &headHandle.get()->asChainedItem() : nullptr;
     headHandle.reset();
 
     if (head == nullptr || &head->getParentItem(compressor_) != &it) {
@@ -4033,6 +4067,10 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
   // a delete accordingly. See D7859775 for an example
   if (oldItem.isNvmClean()) {
     newItemHdl->markNvmClean();
+    // the NVM copy may already be gone; don't let the new item claim it.
+    if (oldItem.isNvmEvicted()) {
+      newItemHdl->markNvmEvicted();
+    }
   }
 
   // Execute the move callback. We cannot make any guarantees about the
@@ -5904,6 +5942,14 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   *metadata_.cacheCreationTime() = static_cast<int64_t>(cacheCreationTime_);
   *metadata_.mmType() = MMType::kId;
   *metadata_.accessType() = AccessType::kId;
+  if (config_.slabHugePageSize.isHugePage()) {
+    *metadata_.slabPageSize() =
+        static_cast<int64_t>(config_.slabHugePageSize.getPageSize());
+  }
+  if (config_.accessHugePageSize.isHugePage()) {
+    *metadata_.accessPageSize() =
+        static_cast<int64_t>(config_.accessHugePageSize.getPageSize());
+  }
 
   metadata_.compactCachePools()->clear();
   const auto pools = getPoolIds();
@@ -6120,6 +6166,20 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
     throw std::invalid_argument(fmt::format("Expected {}, got {} for MMType",
                                             *meta.mmType(), MMType::kId));
   }
+
+  const size_t persistedSlabPageSize =
+      PageSize(static_cast<size_t>(*meta.slabPageSize())).getPageSize();
+  const size_t persistedAccessPageSize =
+      PageSize(static_cast<size_t>(*meta.accessPageSize())).getPageSize();
+  if (persistedSlabPageSize != config_.slabHugePageSize.getPageSize() ||
+      persistedAccessPageSize != config_.accessHugePageSize.getPageSize()) {
+    throw std::invalid_argument(fmt::format(
+        "Huge page config changed across restarts: persisted slab/access page "
+        "sizes {}/{}, configured {}/{}",
+        persistedSlabPageSize, persistedAccessPageSize,
+        config_.slabHugePageSize.getPageSize(),
+        config_.accessHugePageSize.getPageSize()));
+  }
   return meta;
 }
 
@@ -6257,16 +6317,19 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
   size_t configuredCompactCacheSize = std::accumulate(
       ccCachePoolIds.begin(), ccCachePoolIds.end(), 0ULL, addSize);
 
-  return CacheMemoryStats{totalCacheSize,
-                          configuredTotalCacheSize,
-                          configuredRegularCacheSize,
-                          configuredCompactCacheSize,
-                          allocator_->getAdvisedMemorySize(),
-                          memMonitor_ ? memMonitor_->getMaxAdvisePct() : 0,
-                          allocator_->getUnreservedMemorySize(),
-                          nvmCache_ ? nvmCache_->getSize() : 0,
-                          util::getMemAvailable(),
-                          util::getRSSBytes()};
+  return CacheMemoryStats{
+      totalCacheSize,
+      configuredTotalCacheSize,
+      configuredRegularCacheSize,
+      configuredCompactCacheSize,
+      allocator_->getAdvisedMemorySize(),
+      memMonitorMaxAdvisePct_.load(std::memory_order_relaxed),
+      allocator_->getUnreservedMemorySize(),
+      nvmCache_ ? nvmCache_->getSize() : 0,
+      util::getMemAvailable(),
+      util::getRSSBytes(),
+      accessContainer_->getMemorySize(),
+      chainedItemAccessContainer_->getMemorySize()};
 }
 
 template <typename CacheTrait>
@@ -6381,12 +6444,29 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
         "supported for cache on a shared memory segment only.");
   }
   config_.validateMemMonitorAndHugePages();
+  // Before stopping a running monitor, so that invalid ids leave it running.
+  MemoryMonitor::validatePoolIds(*this, config.poolIds);
 
-  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
-                      strategy, allocator_->getNumSlabsAdvised())) {
+  // Stop a running monitor before counting the advised slabs: an iteration
+  // still in progress could otherwise advise more after they were counted.
+  if (memMonitor_ && !stopMemMonitor()) {
     return false;
   }
 
+  // On a warm restart, resume from the slabs already advised away from the
+  // pools this monitor manages.
+  const size_t numSlabsAdvised =
+      config.poolIds.empty() ? allocator_->getNumSlabsAdvised()
+                             : allocator_->getNumSlabsAdvised(config.poolIds);
+  const bool started = startNewWorker("MemoryMonitor", memMonitor_, interval,
+                                      *this, config, strategy, numSlabsAdvised);
+  memMonitorMaxAdvisePct_.store(memMonitor_ ? memMonitor_->getMaxAdvisePct()
+                                            : 0,
+                                std::memory_order_relaxed);
+  if (!started) {
+    return false;
+  }
+  std::lock_guard<std::mutex> l(workersMutex_);
   config_.memMonitorInterval = interval;
   config_.memMonitorConfig = std::move(config);
   config_.poolAdviseStrategy = strategy;
@@ -6502,7 +6582,9 @@ bool CacheAllocator<CacheTrait>::stopPoolOptimizer(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopMemMonitor(std::chrono::seconds timeout) {
   auto res = stopWorker("MemoryMonitor", memMonitor_, timeout);
+  memMonitorMaxAdvisePct_.store(0, std::memory_order_relaxed);
   if (res) {
+    std::lock_guard<std::mutex> l(workersMutex_);
     config_.memMonitorInterval = std::chrono::seconds{0};
   }
   return res;

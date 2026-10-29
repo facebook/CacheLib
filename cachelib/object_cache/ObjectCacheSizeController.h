@@ -57,13 +57,16 @@ class ObjectCacheSizeController : public PeriodicWorker {
   size_t getTotalObjSizeBytes() const;
   void shrinkCacheByEntriesNum(size_t entries);
 
-  // Ensure free memory is above the lower limit by shrinking cache if needed.
+  // Shrink until free memory reaches the lower limit. With a configured
+  // minimum cache size, stop at that floor or if eviction cannot progress.
   void ensureFreeMemoryAboveLowerLimit();
 
  private:
   void work() override final;
   void expandCacheByEntriesNum(size_t entries, size_t currentLimit);
   int64_t getNewNumEntries();
+  size_t getMinEntriesLimit(size_t objectSizeLimit,
+                            size_t averageObjSize) const;
 
   std::pair<size_t, size_t> trackJemallocMemStats() const {
     size_t jemallocAllocatedBytes;
@@ -103,6 +106,9 @@ class ObjectCacheSizeController : public PeriodicWorker {
   TLCounter totalEntriesShrunk_{};
   TLCounter totalEntriesExpanded_{};
   TLCounter ensureFreeMemoryCalls_{};
+  // FreeMemory-mode shrink calls for which low free memory sets a stricter
+  // target than the object-size budget. Counts attempts, not bytes freed.
+  TLCounter freeMemoryShrinkCalls_{};
 };
 
 template <typename AllocatorT>
@@ -114,10 +120,28 @@ size_t ObjectCacheSizeController<AllocatorT>::getTotalObjSizeBytes() const {
         trackJemallocMemStats();
     // proportionally add Jemalloc external fragmentation bytes (i.e.
     // jemallocActiveBytes - jemallocAllocatedBytes)
-    totalObjSize = static_cast<size_t>(
-        1.0 * totalObjSize / jemallocAllocatedBytes * jemallocActiveBytes);
+    totalObjSize =
+        static_cast<size_t>(static_cast<double>(totalObjSize) /
+                            jemallocAllocatedBytes * jemallocActiveBytes);
   }
   return totalObjSize;
+}
+
+template <typename AllocatorT>
+size_t ObjectCacheSizeController<AllocatorT>::getMinEntriesLimit(
+    size_t objectSizeLimit, size_t averageObjSize) const {
+  const auto percent = objCache_.config_.minCacheSizePercent;
+  if (percent == 0) {
+    return 0;
+  }
+  // Split the percentage calculation to avoid overflowing the byte budget.
+  // Round up to whole bytes and entries, subject to the existing ceilings.
+  const auto minBytes = (objectSizeLimit / 100) * percent +
+                        ((objectSizeLimit % 100) * percent + 99) / 100;
+  const auto minEntries =
+      minBytes / averageObjSize + (minBytes % averageObjSize != 0);
+  return std::min({minEntries, objectSizeLimit / averageObjSize,
+                   objCache_.config_.l1EntriesLimit});
 }
 
 template <typename AllocatorT>
@@ -179,7 +203,8 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   if (averageObjSize == 0) {
     return;
   }
-  auto newEntriesLimit = totalObjectSizeLimit / averageObjSize;
+  const auto objectSizeEntriesLimit = totalObjectSizeLimit / averageObjSize;
+  auto newEntriesLimit = objectSizeEntriesLimit;
 
   if (newEntriesLimit > objCache_.config_.l1EntriesLimit) {
     XLOGF_EVERY_MS(INFO, 60'000,
@@ -208,17 +233,24 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // totalObjSize.
   // 3. expanding less based on system stats if expanding based on
   // totalObjSize.
+  // Keep room for one object when shrinking for memory pressure. An empty
+  // cache cannot estimate average object size to grow again.
+  const auto maxEntriesToShrink = currentNumEntries - 1;
+  bool shrinkForFreeMemory = false;
   if (mode_ == FreeMemory) {
     auto freeMemBytes = objCache_.config_.getFreeMemBytes();
     if (freeMemBytes < objCache_.config_.lowerLimitBytes) {
       // We will shrink the cache even if we had decided to expand the cache
       // based on object size. If we had decided to shrink based on object
       // size, then we shrink to the lesser value.
+      const auto entriesToShrink = std::min(
+          maxEntriesToShrink,
+          (objCache_.config_.lowerLimitBytes - freeMemBytes) / averageObjSize);
+      shrinkForFreeMemory =
+          entriesToShrink > 0 &&
+          (currentNumEntries - entriesToShrink) < newEntriesLimit;
       newEntriesLimit =
-          std::min(newEntriesLimit,
-                   (currentNumEntries -
-                    ((objCache_.config_.lowerLimitBytes - freeMemBytes) /
-                     averageObjSize)));
+          std::min(newEntriesLimit, currentNumEntries - entriesToShrink);
     } else if (freeMemBytes > objCache_.config_.upperLimitBytes) {
       // We will expand the cache only if we had also decided to expand based
       // on object size. We will shrink if we had decided to shrink based
@@ -226,17 +258,18 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       newEntriesLimit =
           std::min(newEntriesLimit,
                    (currentNumEntries +
-                    ((objCache_.config_.upperLimitBytes - freeMemBytes) /
+                    ((freeMemBytes - objCache_.config_.upperLimitBytes) /
                      averageObjSize)));
     }
   } else if (mode_ == ResidentMemory) {
     auto rssBytes = objCache_.config_.getRSSMemBytes();
     if (rssBytes > objCache_.config_.upperLimitBytes) {
       // Same behavior as when shrinking with FreeMemory.
-      newEntriesLimit = std::min(
-          newEntriesLimit,
-          (currentNumEntries -
-           ((rssBytes - objCache_.config_.upperLimitBytes) / averageObjSize)));
+      const auto entriesToShrink = std::min(
+          maxEntriesToShrink,
+          (rssBytes - objCache_.config_.upperLimitBytes) / averageObjSize);
+      newEntriesLimit =
+          std::min(newEntriesLimit, currentNumEntries - entriesToShrink);
     } else if (rssBytes < objCache_.config_.lowerLimitBytes) {
       // Same behavior as when expanding with FreeMemory.
       newEntriesLimit = std::min(
@@ -246,12 +279,23 @@ void ObjectCacheSizeController<AllocatorT>::work() {
     }
   }
 
+  // The floor applies to the object-memory budget, not the initial number
+  // of hash-table entries. Normal budget enforcement remains authoritative.
+  newEntriesLimit =
+      std::max(newEntriesLimit,
+               getMinEntriesLimit(totalObjectSizeLimit, averageObjSize));
+  shrinkForFreeMemory =
+      shrinkForFreeMemory && newEntriesLimit < objectSizeEntriesLimit;
+
   // entriesLimit should never exceed the configured entries limit
   newEntriesLimit = std::min(newEntriesLimit, objCache_.config_.l1EntriesLimit);
   auto currentEntriesLimit = getCurrentEntriesLimit();
   if (newEntriesLimit < currentEntriesLimit &&
       currentNumEntries >= newEntriesLimit) {
     // shrink the cache
+    if (shrinkForFreeMemory) {
+      freeMemoryShrinkCalls_.inc();
+    }
     shrinkCacheByEntriesNum(currentEntriesLimit - newEntriesLimit);
   } else if (newEntriesLimit > currentEntriesLimit &&
              currentNumEntries == currentEntriesLimit) {
@@ -358,6 +402,9 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
   visitor("objcache.size_controller.ensure_free_memory_calls",
           ensureFreeMemoryCalls_.get(),
           util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.free_memory_shrink_calls",
+          freeMemoryShrinkCalls_.get(),
+          util::CounterVisitor::CounterType::RATE);
 }
 
 template <typename AllocatorT>
@@ -365,7 +412,27 @@ void ObjectCacheSizeController<AllocatorT>::ensureFreeMemoryAboveLowerLimit() {
   ensureFreeMemoryCalls_.inc();
   auto freeMemBytes = objCache_.config_.getFreeMemBytes();
   while (freeMemBytes < objCache_.config_.lowerLimitBytes) {
-    shrinkCacheByEntriesNum(objCache_.config_.shrinkCacheBy);
+    const auto currentLimit = getCurrentEntriesLimit();
+    auto entriesToShrink = objCache_.config_.shrinkCacheBy;
+    if (objCache_.config_.minCacheSizePercent != 0) {
+      const auto numEntries = objCache_.getNumEntries();
+      const auto objectBytes = getTotalObjSizeBytes();
+      if (numEntries == 0 || objectBytes / numEntries == 0) {
+        return;
+      }
+      const auto minEntries = getMinEntriesLimit(getTotalObjectSizeLimit(),
+                                                 objectBytes / numEntries);
+      if (currentLimit <= minEntries) {
+        return;
+      }
+      entriesToShrink =
+          std::min<size_t>(entriesToShrink, currentLimit - minEntries);
+    }
+    shrinkCacheByEntriesNum(entriesToShrink);
+    if (objCache_.config_.minCacheSizePercent != 0 &&
+        getCurrentEntriesLimit() == currentLimit) {
+      return;
+    }
     freeMemBytes = objCache_.config_.getFreeMemBytes();
   }
 }

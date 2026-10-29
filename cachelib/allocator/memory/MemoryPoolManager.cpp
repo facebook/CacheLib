@@ -39,7 +39,8 @@ MemoryPoolManager::MemoryPoolManager(
   }
   // Check if nextPoolid is restored properly or not. If not restored,
   // throw error
-  if (!object.nextPoolId().is_set()) {
+  if (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          object.nextPoolId())) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
         " nextPoolId is not set");
@@ -82,6 +83,22 @@ size_t MemoryPoolManager::getNumSlabsAdvised() const noexcept {
   for (auto i = 0; i < maxPools; i++) {
     XDCHECK_NE(pools_[i], nullptr);
     slabsAdvised += pools_[i]->getNumSlabsAdvised();
+  }
+  return slabsAdvised;
+}
+
+size_t MemoryPoolManager::getNumSlabsAdvised(
+    const std::set<PoolId>& poolIds) const {
+  size_t slabsAdvised = 0;
+  const auto maxId = nextPoolId_.load(std::memory_order_acquire);
+  for (const auto id : poolIds) {
+    if (id < 0 || id >= maxId) {
+      throw std::invalid_argument(fmt::format("Invalid pool id: {} (max: {})",
+                                              static_cast<int>(id),
+                                              static_cast<int>(maxId) - 1));
+    }
+    XDCHECK_NE(pools_[id], nullptr);
+    slabsAdvised += pools_[id]->getNumSlabsAdvised();
   }
   return slabsAdvised;
 }

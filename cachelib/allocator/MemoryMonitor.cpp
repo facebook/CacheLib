@@ -35,6 +35,7 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
     : cache_(cache),
       mode_(config.mode),
       strategy_(std::move(strategy)),
+      poolIds_(config.poolIds),
       numSlabsToAdvise_(initialNumSlabsToAdvise),
       percentAdvisePerIteration_(config.maxAdvisePercentPerIter),
       percentReclaimPerIteration_(config.maxReclaimPercentPerIter),
@@ -52,6 +53,7 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
   // There should be at least a slab worth of difference between upper
   // and lower memory limits.
   XDCHECK_LT(lowerLimit_, upperLimit_ - Slab::kSize);
+  validatePoolIds(cache_, poolIds_);
 }
 
 MemoryMonitor::~MemoryMonitor() {
@@ -107,14 +109,13 @@ void MemoryMonitor::checkFreeMemory() {
   auto memFree = util::getMemAvailable();
   memAvailableSize_ = memFree;
   rateLimiter_.addValue(memFree);
-  const auto stats = cache_.getCacheMemoryStats();
   if (memFree < lowerLimit_) {
     XLOGF(DBG,
           "Free memory size of {} bytes is below the limit of {} bytes",
           memFree,
           lowerLimit_);
     adviseAwaySlabs();
-  } else if (memFree > upperLimit_ && stats.numAdvisedSlabs() > 0) {
+  } else if (memFree > upperLimit_ && getMonitoredSlabsAdvised() > 0) {
     XLOGF(DBG,
           "Free memory size of {} bytes is above the limit of {} bytes",
           memFree,
@@ -128,14 +129,13 @@ void MemoryMonitor::checkResidentMemory() {
   auto rss = util::getRSSBytes();
   memRssSize_ = rss;
   rateLimiter_.addValue(rss);
-  const auto stats = cache_.getCacheMemoryStats();
   if (rss > upperLimit_) {
     XLOGF(DBG,
           "Resident memory size of {} bytes is above the limit of {} bytes",
           rss,
           upperLimit_);
     adviseAwaySlabs();
-  } else if (rss < lowerLimit_ && stats.numAdvisedSlabs() > 0) {
+  } else if (rss < lowerLimit_ && getMonitoredSlabsAdvised() > 0) {
     XLOGF(DBG,
           "Resident memory size of {} bytes is below the limit of {} bytes",
           rss,
@@ -157,8 +157,28 @@ size_t MemoryMonitor::getPoolSlabs(PoolId poolId) const noexcept {
   return bytesToSlabs(cache_.getPool(poolId).getPoolUsableSize());
 }
 
+void MemoryMonitor::validatePoolIds(const CacheBase& cache,
+                                    const std::set<PoolId>& poolIds) {
+  const auto regularPoolIds = cache.getRegularPoolIds();
+  for (const auto pid : poolIds) {
+    if (!regularPoolIds.contains(pid)) {
+      throw std::invalid_argument(fmt::format(
+          "Memory monitor pool id {} is not a regular pool of the cache",
+          static_cast<int>(pid)));
+    }
+  }
+}
+
+std::set<PoolId> MemoryMonitor::getMonitoredPoolIds() const {
+  return poolIds_.empty() ? cache_.getRegularPoolIds() : poolIds_;
+}
+
+size_t MemoryMonitor::getMonitoredSlabsAdvised() const {
+  return cache_.getNumSlabsAdvised(getMonitoredPoolIds());
+}
+
 size_t MemoryMonitor::getTotalSlabs() const noexcept {
-  const auto pools = cache_.getRegularPoolIds();
+  const auto pools = getMonitoredPoolIds();
   return std::accumulate(pools.begin(), pools.end(), 0ull,
                          [this](auto total, const auto& poolId) {
                            return total + getPoolSlabs(poolId);
@@ -166,7 +186,7 @@ size_t MemoryMonitor::getTotalSlabs() const noexcept {
 }
 
 size_t MemoryMonitor::getSlabsInUse() const noexcept {
-  const auto pools = cache_.getRegularPoolIds();
+  const auto pools = getMonitoredPoolIds();
   return std::accumulate(pools.begin(), pools.end(), 0ull,
                          [this](auto total, const auto& poolId) {
                            return total + getPoolUsedSlabs(poolId);
@@ -175,7 +195,7 @@ size_t MemoryMonitor::getSlabsInUse() const noexcept {
 
 void MemoryMonitor::checkPoolsAndAdviseReclaim() {
   auto results = cache_.calcNumSlabsToAdviseReclaim(
-      numSlabsToAdvise_.load(std::memory_order_acquire));
+      numSlabsToAdvise_.load(std::memory_order_acquire), getMonitoredPoolIds());
   if (results.poolAdviseReclaimMap.empty()) {
     return;
   }
@@ -258,13 +278,19 @@ void MemoryMonitor::adviseAwaySlabs() {
   const auto totalSlabs = getTotalSlabs();
 
   if (totalSlabsInUse == 0 || totalSlabs == 0) {
+    if (!poolIds_.empty()) {
+      XLOG_EVERY_MS(WARN, 60000,
+                    "The memory monitor pools have no slabs in use; nothing "
+                    "can be advised away");
+      return;
+    }
     // If there are no used slabs and we're still having to advise away, then
     // the cache size is too big!
     XLOG(DBG, "There are no slabs in use to advise away");
     return;
   }
-  const auto numAdvised = cache_.getCacheMemoryStats().numAdvisedSlabs();
-  // allSlabs represents the total number of slabs across all pools
+  const auto numAdvised = getMonitoredSlabsAdvised();
+  // allSlabs represents the total number of slabs across all monitored pools
   const auto allSlabs = numAdvised + totalSlabs;
 
   // Check if we've already hit or exceeded the maximum limit
@@ -308,9 +334,9 @@ void MemoryMonitor::reclaimSlabs() {
           reclaimBytes, rateLimitedReclaimBytes);
   }
   auto slabsToReclaim = bytesToSlabs(rateLimitedReclaimBytes);
-  const auto stats = cache_.getCacheMemoryStats();
-  if (slabsToReclaim > stats.numAdvisedSlabs()) {
-    slabsToReclaim = stats.numAdvisedSlabs();
+  const auto numAdvised = getMonitoredSlabsAdvised();
+  if (slabsToReclaim > numAdvised) {
+    slabsToReclaim = numAdvised;
   }
   if (slabsToReclaim == 0) {
     return;

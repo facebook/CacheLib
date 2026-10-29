@@ -135,6 +135,40 @@ TEST(CacheStatsTest, DramIteratorCountersSaturateAtSignedMaximum) {
             counters.at("dram_iterator_sweeps"));
 }
 
+TEST(CacheStatsTest, RendersHitRatesAsPercentages) {
+  Stats stats;
+  stats.numCacheGets = 200;
+  stats.numCacheGetMiss = 80;
+  stats.numNvmGets = 80;
+  stats.numNvmGetMiss = 20;
+
+  folly::UserCounters counters;
+  stats.render(counters);
+
+  EXPECT_EQ(folly::UserMetric(9000), counters.at("hit_rate"));
+  EXPECT_EQ(folly::UserMetric(6000), counters.at("ram_hit_rate"));
+  EXPECT_EQ(folly::UserMetric(7500), counters.at("nvm_hit_rate"));
+  EXPECT_EQ(folly::UserMetric(90.0), counters.at("hit_rate_pct"));
+  EXPECT_EQ(folly::UserMetric(60.0), counters.at("ram_hit_rate_pct"));
+  EXPECT_EQ(folly::UserMetric(75.0), counters.at("nvm_hit_rate_pct"));
+}
+
+TEST(CacheStatsTest, RendersNvmOperationLatenciesInMicroseconds) {
+  Stats stats;
+  stats.nvmLookupLatencyNs.p50 = 1500;
+  stats.nvmLookupLatencyNs.p99 = 2500;
+  stats.nvmInsertLatencyNs.p50 = 3500;
+  stats.nvmInsertLatencyNs.p99 = 4500;
+
+  folly::UserCounters counters;
+  stats.render(counters);
+
+  EXPECT_EQ(folly::UserMetric(1.5), counters.at("nvm_lookup_latency_us_p50"));
+  EXPECT_EQ(folly::UserMetric(2.5), counters.at("nvm_lookup_latency_us_p99"));
+  EXPECT_EQ(folly::UserMetric(3.5), counters.at("nvm_insert_latency_us_p50"));
+  EXPECT_EQ(folly::UserMetric(4.5), counters.at("nvm_insert_latency_us_p99"));
+}
+
 TEST(CacheStatsTest, ParsesBlockCacheLatencyCountersForMultipleArenas) {
   const std::unordered_map<std::string, double> navyStats{
       {"navy_bc_insert_latency_us_p50_0", 10.5},

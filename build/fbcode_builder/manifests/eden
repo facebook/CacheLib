@@ -18,6 +18,7 @@ builder = cmake
 
 [dependencies]
 blake3
+boost
 googletest
 folly
 fbthrift
@@ -27,6 +28,7 @@ re2
 libgit2
 pexpect
 python-psutil
+python-parameterized
 python-toml
 python-filelock
 edencommon
@@ -34,13 +36,6 @@ rust-shed
 
 [dependencies.fbsource=on]
 rust
-
-# macOS ships with sqlite3, and some of the core system
-# frameworks require that that version be linked rather
-# than the one we might build for ourselves here, so we
-# skip building it on macos.
-[dependencies.not(os=darwin)]
-sqlite3
 
 [dependencies.os=darwin]
 osxfuse
@@ -52,8 +47,6 @@ osxfuse
 libcurl
 # Added so that OSS doesn't see system "python" which is python 2 on darwin and some linux
 python
-# TODO: teach getdeps to compile lmdb on Windows.
-lmdb
 
 [dependencies.test=on]
 # sapling CLI is needed to run the tests
@@ -80,6 +73,7 @@ fbcode/tools/lfs = tools/lfs
 
 [shipit.pathmap.fb=off]
 fbcode/eden/fs/public_autocargo = eden/fs
+fbcode/eden/mononoke/public_autocargo = eden/mononoke
 fbcode/eden/scm/public_autocargo = eden/scm
 fbcode/common/rust/shed/hostcaps/public_cargo = common/rust/shed/hostcaps
 fbcode/configerator/structs/scm/hg/public_autocargo = configerator/structs/scm/hg
@@ -90,7 +84,7 @@ fbcode/configerator/structs/scm/hg/public_autocargo = configerator/structs/scm/h
 ^fbcode/eden/fs/py/eden/config\.py$
 ^fbcode/eden/hg-server/.*$
 ^fbcode/eden/fs/facebook/experimental/.*$
-^fbcode/eden/mononoke/(?!lfs_protocol)
+^fbcode/eden/mononoke/(?!(public_autocargo/)?common/lfs_protocol/)
 ^fbcode/eden/scm/build/.*$
 ^fbcode/eden/scm/lib/third-party/rust/.*/Cargo.toml$
 ^fbcode/eden/website/.*$
@@ -102,6 +96,7 @@ fbcode/configerator/structs/scm/hg/public_autocargo = configerator/structs/scm/h
 ^fbcode/common/rust/shed(?!/public_autocargo).*/Cargo\.toml$
 ^fbcode/configerator/structs/scm/hg(?!/public_autocargo).*/Cargo\.toml$
 ^fbcode/eden/fs(?!/public_autocargo).*/Cargo\.toml$
+^fbcode/eden/mononoke(?!/public_autocargo).*/Cargo\.toml$
 ^fbcode/eden/scm(?!/public_autocargo|/saplingnative).*/Cargo\.toml$
 ^.*/facebook/.*$
 ^.*/fb/.*$
@@ -118,6 +113,9 @@ USE_CARGO_VENDOR=ON
 
 [cmake.defines.fb=on]
 IS_FB_BUILD=ON
+
+[cmake.defines.test=on]
+BUILD_TESTS=ON
 
 [depends.environment]
 EDEN_VERSION_OVERRIDE

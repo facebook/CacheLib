@@ -109,6 +109,18 @@ TEST_F(MemoryPoolManagerTest, MaxPools) {
                std::logic_error);
 }
 
+TEST_F(MemoryPoolManagerTest, NumSlabsAdvisedInvalidPoolId) {
+  auto slabAlloc = createSlabAllocator(10);
+  MemoryPoolManager m(*slabAlloc);
+  const auto pid =
+      m.createNewPool("foo", 2 * Slab::kSize, getRandomAllocSizes(3));
+
+  EXPECT_EQ(0, m.getNumSlabsAdvised(std::set<PoolId>{}));
+  EXPECT_EQ(0, m.getNumSlabsAdvised(std::set<PoolId>{pid}));
+  EXPECT_THROW(m.getNumSlabsAdvised(std::set<PoolId>{pid, PoolId(pid + 1)}),
+               std::invalid_argument);
+}
+
 // test getPoolById and getPoolByName.
 TEST_F(MemoryPoolManagerTest, GetPoolBy) {
   const unsigned int nPools = 20;

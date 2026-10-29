@@ -70,6 +70,11 @@ struct ObjectCacheConfig {
                                                  uint64_t _upperLimitBytes,
                                                  uint64_t _lowerLimitBytes);
 
+  // Preserve this percentage of the current totalObjectSizeLimit when
+  // shrinking for memory pressure. See minCacheSizePercent for the capacity
+  // estimate and its limits. Valid values are 0 (disabled) through 100.
+  ObjectCacheConfig& setMinCacheSizePercent(uint32_t percent);
+
   // Set a custom function to compute the free memory bytes.
   // If not set, the default function util::getMemAvailable() will be used.
   ObjectCacheConfig& setFreeMemCb(GetFreeMemCb _getFreeMemBytes);
@@ -266,6 +271,16 @@ struct ObjectCacheConfig {
   // the cache will start evicting
   size_t totalObjectSizeLimit{0};
 
+  // Minimum estimated object-memory capacity, as a percentage of the current
+  // totalObjectSizeLimit, in FreeMemory, ResidentMemory and FreeMemoryOnly.
+  // For example, 70 preserves 4.2 GiB of a 6 GiB object budget. The controller
+  // converts bytes to entries using the current average object size; this
+  // does not guarantee populated bytes after expiration or changes in item
+  // sizes. The maximum object budget and l1EntriesLimit still take precedence.
+  // Zero preserves the existing behavior without a minimum. Once the floor
+  // is reached, memory pressure may remain above the configured thresholds.
+  uint32_t minCacheSizePercent{0};
+
   // Throttler config of size controller
   util::Throttler::Config sizeControllerThrottlerConfig{};
 
@@ -402,6 +417,17 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setObjectSizeControllerMode(
   memoryMode = _memoryMode;
   upperLimitBytes = _upperLimitBytes;
   lowerLimitBytes = _lowerLimitBytes;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setMinCacheSizePercent(
+    uint32_t percent) {
+  if (percent > 100) {
+    throw std::invalid_argument(
+        "minCacheSizePercent must be between 0 and 100");
+  }
+  minCacheSizePercent = percent;
   return *this;
 }
 
@@ -664,6 +690,15 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
           "Only one of sizeControllerIntervalMs and totalObjectSizeLimit is "
           "set");
     }
+  }
+
+  if (minCacheSizePercent > 100 ||
+      (minCacheSizePercent != 0 &&
+       (!objectSizeTrackingEnabled || !totalObjectSizeLimit ||
+        sizeControllerIntervalMs <= 0))) {
+    throw std::invalid_argument(
+        "minCacheSizePercent requires a value between 0 and 100 and an "
+        "enabled object size controller");
   }
 
   if (fragmentationTrackingEnabled && !objectSizeTrackingEnabled) {

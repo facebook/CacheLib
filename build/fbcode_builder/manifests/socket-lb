@@ -21,13 +21,13 @@ BUILD_TESTING = ON
 BUILD_TESTING = OFF
 
 [dependencies]
+bpftool
 folly
 gflags
 glog
 katran
 libbpf
 libelf
-numa
 zlib
 
 [dependencies.test=on]
@@ -35,15 +35,9 @@ googletest
 
 [debs]
 clang
-
-[debs.not(distro=ubuntu)]
-bpftool
-
-[debs.distro=ubuntu]
-linux-tools-common
+llvm
 
 [rpms]
-bpftool
 clang
 llvm
 

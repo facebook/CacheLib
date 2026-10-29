@@ -88,6 +88,38 @@ TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesTimeout) {
   this->testMemMonitorAdvisesTimeout();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorInvalidPoolIdsOnStartup) {
+  this->testMemMonitorInvalidPoolIdsOnStartup();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorInvalidPoolIdsAtRuntime) {
+  this->testMemMonitorInvalidPoolIdsAtRuntime();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorPoolSubsetAdviseReclaim) {
+  this->testMemMonitorPoolSubsetAdviseReclaim();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorPoolSubsetMaxAdvise) {
+  this->testMemMonitorPoolSubsetMaxAdvise();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorPoolSubsetWarmRestart) {
+  this->testMemMonitorPoolSubsetWarmRestart();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorPoolSubsetRollbackAttach) {
+  this->testMemMonitorPoolSubsetRollbackAttach();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorRestartWhileReadingStats) {
+  this->testMemMonitorRestartWhileReadingStats();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorReplaceRunningMonitor) {
+  this->testMemMonitorReplaceRunningMonitor();
+}
+
 TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
 }

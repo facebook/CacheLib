@@ -67,7 +67,7 @@ class BaseAllocatorTestDeathStyle : public AllocatorTest<AllocatorT> {
     auto roCache = ReadOnlySharedCacheView(config.cacheDir,
                                            config.usePosixShm,
                                            nullptr,
-                                           config.hugePageSize,
+                                           config.slabHugePageSize,
                                            config.hugePageMountDir);
 
     auto ptr = roCache.getItemPtrFromOffset(offset);

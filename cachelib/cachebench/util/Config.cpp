@@ -60,7 +60,6 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, onlySetIfMiss);
   JSONSetVal(configJson, ignoreOpCount);
   JSONSetVal(configJson, populateItem);
-  JSONSetVal(configJson, samplingIntervalMs);
 
   JSONSetVal(configJson, checkConsistency);
   JSONSetVal(configJson, touchValue);
@@ -145,7 +144,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 640>();
+  checkCorrectSize<StressorConfig, 624>();
 }
 
 bool StressorConfig::usesDramIterator() const {

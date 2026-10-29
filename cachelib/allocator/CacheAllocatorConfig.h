@@ -17,6 +17,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <folly/CPortability.h>
 #include <folly/Optional.h>
 #include <folly/json/DynamicConverter.h>
@@ -239,19 +240,34 @@ class CacheAllocatorConfig {
 
   // Requests HugeTLB-backed pages for slab (main cache) memory and access
   // container hash tables; persistence metadata stays on normal pages.
+  // Shorthand for enableSlabHugePages + enableAccessHugePages with the same
+  // size. Use the individual setters to enable huge pages for only one of them.
   //
   // pageSize is in bytes and must be a huge page size the kernel supports.
   // mountDir is a mounted hugetlbfs backing POSIX huge-page segments; it is
   // required for POSIX shm (cache creation throws if empty) and ignored for
-  // SysV. The HugeTLB pool must be provisioned out-of-band; CacheLib only draws
-  // from the already-reserved pool.
+  // SysV. The mount is shared by slab and access segments. The HugeTLB pool
+  // must be provisioned out-of-band; CacheLib only draws from the
+  // already-reserved pool.
   //
-  // For persistent POSIX caches, the configured mount path must remain
-  // unchanged across restarts. Changing it, enabling huge pages after they
-  // were disabled, or disabling huge pages after they were enabled forces a
-  // cold roll that removes the old shared-memory segments.
+  // Changing either page size or the mount path across restarts forces a cold
+  // roll that removes the old shared-memory segments.
   CacheAllocatorConfig& enableHugePages(PageSize pageSize,
                                         std::string mountDir = "");
+
+  // Requests HugeTLB-backed pages for slab (main cache) memory only.
+  // A non-empty mountDir sets the shared hugetlbfs mount (see above).
+  // @throw std::invalid_argument if mountDir conflicts with a previously
+  // set mount.
+  CacheAllocatorConfig& enableSlabHugePages(PageSize pageSize,
+                                            std::string mountDir = "");
+
+  // Requests HugeTLB-backed pages for the access-container hash tables only.
+  // A non-empty mountDir sets the shared hugetlbfs mount (see above).
+  // @throw std::invalid_argument if mountDir conflicts with a previously
+  // set mount.
+  CacheAllocatorConfig& enableAccessHugePages(PageSize pageSize,
+                                              std::string mountDir = "");
 
   // Configures cache memory tiers. Each tier represents a cache region inside
   // byte-addressable memory such as DRAM, Pmem, CXLmem.
@@ -281,6 +297,16 @@ class CacheAllocatorConfig {
   // "upperLimit" refers to the upper bound of application memory.
   // Cache size will actually decrease once an application reaches past it
   // and grows when drops below "lowerLimit".
+  //
+  // config.poolIds restricts advising and reclaiming to a subset of the
+  // regular pools (default: all), see MemoryMonitor::Config::poolIds. Every id
+  // must be a regular pool when the monitor starts, otherwise starting it
+  // throws std::invalid_argument. On a cold start the monitor enabled here
+  // starts in the CacheAllocator constructor, before any pool is added, so
+  // either leave poolIds empty here and call
+  // CacheAllocator::startNewMemMonitor() with poolIds after addPool(), or call
+  // setDelayCacheWorkersStart() and then CacheAllocator::startCacheWorkers()
+  // after adding the pools.
   //
   // @param interval  waits for an interval between each run
   // @param config    memory monitoring config
@@ -538,12 +564,15 @@ class CacheAllocatorConfig {
   // if true, uses posix shm; if not, uses sys-v (default)
   bool usePosixShm{false};
 
-  // Huge-page size for the huge-page-backed shm segments (slab + hash tables);
-  // default => all segments use normal pages. Set via enableHugePages().
-  PageSize hugePageSize{};
+  // Huge-page size backing the slab memory segment; default => normal pages.
+  PageSize slabHugePageSize{};
 
-  // Mount dir of a hugetlbfs; required for POSIX huge-page segments, ignored
-  // for SysV segments. Set via enableHugePages().
+  // Huge-page size backing the access-container hash table segments; default
+  // => normal pages.
+  PageSize accessHugePageSize{};
+
+  // Mount dir of a hugetlbfs, shared by slab and access huge-page segments;
+  // required for POSIX huge-page segments, ignored for SysV segments.
   std::string hugePageMountDir;
 
   // Attach shared memory to a fixed base address
@@ -810,6 +839,8 @@ class CacheAllocatorConfig {
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
   std::string_view getEvictionPolicyName() const;
+  static void validateHugePageSize(const PageSize& pageSize);
+  void validateHugePageMountDir(const std::string& mountDir) const;
 
   // Configuration for memory tiers.
   MemoryTierConfigs memoryTierConfigs{
@@ -1101,8 +1132,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::usePosixForShm() {
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableHugePages(
-    PageSize pageSize, std::string mountDir) {
+void CacheAllocatorConfig<T>::validateHugePageSize(const PageSize& pageSize) {
   if (!pageSize.isHugePage()) {
     throw std::invalid_argument("user didn't specify an actual huge page");
   } else if (!PageSize::supportedHugePageSizes().contains(
@@ -1110,8 +1140,47 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableHugePages(
     throw std::invalid_argument(
         fmt::format("unsupported huge page size {}", pageSize.getPageSize()));
   }
-  hugePageSize = std::move(pageSize);
-  hugePageMountDir = std::move(mountDir);
+}
+
+template <typename T>
+void CacheAllocatorConfig<T>::validateHugePageMountDir(
+    const std::string& mountDir) const {
+  if (!mountDir.empty() && !hugePageMountDir.empty() &&
+      hugePageMountDir != mountDir) {
+    throw std::invalid_argument(
+        fmt::format("Conflicting hugetlbfs mount dirs: {} vs {}",
+                    hugePageMountDir, mountDir));
+  }
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableHugePages(
+    PageSize pageSize, std::string mountDir) {
+  return enableSlabHugePages(pageSize, mountDir)
+      .enableAccessHugePages(pageSize);
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableSlabHugePages(
+    PageSize pageSize, std::string mountDir) {
+  validateHugePageSize(pageSize);
+  validateHugePageMountDir(mountDir);
+  slabHugePageSize = pageSize;
+  if (!mountDir.empty()) {
+    hugePageMountDir = std::move(mountDir);
+  }
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableAccessHugePages(
+    PageSize pageSize, std::string mountDir) {
+  validateHugePageSize(pageSize);
+  validateHugePageMountDir(mountDir);
+  accessHugePageSize = pageSize;
+  if (!mountDir.empty()) {
+    hugePageMountDir = std::move(mountDir);
+  }
   return *this;
 }
 
@@ -1416,12 +1485,12 @@ template <typename T>
 void CacheAllocatorConfig<T>::validateMemMonitorAndHugePages() const {
   // madvise() only frees physical memory when it covers whole pages, so huge
   // pages that don't evenly divide slabs can't be released at slab granularity
-  if (hugePageSize.isHugePage() &&
-      Slab::kSize % hugePageSize.getPageSize() != 0) {
+  if (slabHugePageSize.isHugePage() &&
+      Slab::kSize % slabHugePageSize.getPageSize() != 0) {
     throw std::invalid_argument(
         fmt::format("Memory monitor requires the huge page size ({}) to evenly "
                     "divide the slab size ({})",
-                    hugePageSize.getPageSize(),
+                    slabHugePageSize.getPageSize(),
                     Slab::kSize));
   }
 }
@@ -1434,6 +1503,13 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
   configMap["posixShm"] = isUsingPosixShm() ? "set" : "empty";
+  const auto pageSizeStr = [](const PageSize& ps) {
+    return ps.isHugePage() ? std::to_string(ps.getPageSize())
+                           : std::to_string(PageSize::kNormalPageSize);
+  };
+  configMap["slabHugePageSize"] = pageSizeStr(slabHugePageSize);
+  configMap["accessHugePageSize"] = pageSizeStr(accessHugePageSize);
+  configMap["hugePageMountDir"] = hugePageMountDir;
 
   configMap["defaultAllocSizes"] = "";
   // Stringify std::set
@@ -1483,6 +1559,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memUpperLimitGB"] = std::to_string(memMonitorConfig.upperLimitGB);
   configMap["reclaimRateLimitWindowSecs"] =
       std::to_string(memMonitorConfig.reclaimRateLimitWindowSecs.count());
+  const auto& poolIds = memMonitorConfig.poolIds;
+  configMap["memMonitorPoolIds"] =
+      poolIds.empty() ? "all" : fmt::format("{}", fmt::join(poolIds, ","));
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);

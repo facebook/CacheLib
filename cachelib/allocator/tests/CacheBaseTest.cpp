@@ -82,6 +82,17 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
     return {};
   }
 
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* unused */,
+      const std::set<PoolId>& /* unused */) override final {
+    return {};
+  }
+
+  size_t getNumSlabsAdvised(
+      const std::set<PoolId>& /* unused */) const override final {
+    return 0;
+  }
+
  protected:
   std::unique_ptr<SlabAllocator> slabAllocator_;
   MemoryPool memoryPool_;

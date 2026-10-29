@@ -87,7 +87,7 @@ if (!attached) {
 
 ## Back the cache with huge pages (HugeTLB)
 
-CacheLib can back the *slab memory (main cache)* and the *access-container hash tables* with [HugeTLB](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html) pages to lower TLB pressure. Enable huge pages with `enableHugePages`, passing a huge-page size that the kernel supports (see available sizes in the subdirectories of `/sys/kernel/mm/hugepages`):
+CacheLib can back the *slab memory (main cache)* and the *access-container hash tables* with [HugeTLB](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html) pages to lower TLB pressure. Each side is configured independently: `enableSlabHugePages` controls slab memory, `enableAccessHugePages` controls both access-container hash tables (main and chained-item), and `enableHugePages` is a shorthand that enables both with the same size. All of them take a huge-page size that the kernel supports (see available sizes in the subdirectories of `/sys/kernel/mm/hugepages`) and share a single `hugetlbfs` mount directory:
 
 ```cpp
 Cache::Config config;
@@ -97,7 +97,14 @@ config.enableCachePersistence(/* directory for shared memory related metadata */
 config.enableHugePages(cachelib::PageSize(2 * 1024 * 1024));
 ```
 
-The HugeTLB pool must be provisioned out-of-band by reserving pages via `/proc/sys/vm/nr_hugepages`, `hugeadm` or [kernel command line args](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html). CacheLib only draws from the already-reserved pool and fails cache creation if there aren't enough huge pages available.
+```cpp
+// Back only the hash tables with 2MB huge pages; slabs stay on normal pages.
+config.enableAccessHugePages(cachelib::PageSize(2 * 1024 * 1024));
+```
+
+Backing only the access containers is useful on CPUs with a small number of huge-page TLB slots: the hash tables sit on the latency-sensitive lookup path, so covering them with huge pages while leaving the much larger slab memory on normal pages spends the limited TLB entries where they matter most.
+
+The HugeTLB pool must be provisioned out-of-band by reserving pages via `/proc/sys/vm/nr_hugepages`, `hugeadm` or [kernel command line args](https://docs.kernel.org/admin-guide/mm/hugetlbpage.html). CacheLib only draws from the already-reserved pool. SysV and POSIX shared memory fail cache creation if there aren't enough huge pages available. Heap-backed (non-persistent) and temporary-shared-memory caches instead map anonymous HugeTLB pages that succeed at `mmap` time even with an empty pool and then fault with `SIGBUS` on first touch, so always size the reserved pool before enabling huge pages there.
 
 Huge pages are supported for SysV shared memory (the default), POSIX shared memory, temporary shared memory (cache with memory monitoring enabled but no persistence), and plain (non-persistent) heap memory with no memory monitoring. For POSIX shared memory you must also pass a mounted `hugetlbfs` directory as the second argument; cache creation throws if it is empty:
 
@@ -107,9 +114,22 @@ config.enableCachePersistence(/* cache directory */)
     .enableHugePages(cachelib::PageSize(2 * 1024 * 1024), "/mnt/hugetlbfs");
 ```
 
-For a persistent POSIX cache, keep the `hugetlbfs` mount directory unchanged across restarts. Changing the directory, enabling huge pages after they were disabled, or disabling huge pages after they were enabled all force a cold roll: CacheLib removes the old shared-memory segments and starts with an empty cache.
+For a persistent cache, the slab huge-page size, the access huge-page size, and — for POSIX shared memory — the `hugetlbfs` mount directory are all part of the persisted metadata. A warm roll requires all of these to match the previous run; any change forces a cold roll, where CacheLib removes the old shared-memory segments and starts with an empty cache:
 
-Huge pages are not supported with cross-host cache persistence.  They're also not supported with memory monitoring when the huge page size is bigger than the slab size - for example, you can't punch a slab-sized hole in a 1GB huge page.
+| Change across restart | Result |
+|---|---|
+| Same slab size, access size, mount dir, backing | Warm roll |
+| Slab size changed (including enabled/disabled flips) | Cold roll |
+| Access size changed (including enabled/disabled flips) | Cold roll |
+| `hugetlbfs` mount dir changed (POSIX) | Cold roll |
+| `hugetlbfs` mount dir changed (SysV) | Warm roll (mount dir is ignored) |
+| Backing type changed (e.g. SysV to POSIX) | Startup failure (see below) |
+
+The cold roll on a page-size change is deliberate, even for SysV shared memory where attach would otherwise succeed: SysV ignores page configuration at attach time, so without the explicit check a warm roll would silently keep the old segments on their creation-time backing while the new configuration claims otherwise. Failing attach guarantees that changing the configuration actually changes the backing — enabling huge pages on a warm cache recreates the segments on huge pages instead of being a silent no-op — and keeps the exported cache config truthful. POSIX behaves the same way necessarily (segments live at different paths), so the rule is uniform across backings: page configuration is part of cache identity.
+
+Changing the backing type does not cold-roll: `ShmManager` rejects the attach with `invalid_argument` before clearing the persisted metadata, so both attach and create-new fail on every restart until `cacheDir` is removed.
+
+Huge pages are not supported with cross-host cache persistence. They're also not supported with memory monitoring when the *slab* huge page size is bigger than the slab size - for example, you can't punch a slab-sized hole in a 1GB huge page. (The access huge-page size is exempt: hash tables are never `madvise`d away, so access-only huge pages work with memory monitoring regardless of size.)
 
 ## Drop persistent cache
 

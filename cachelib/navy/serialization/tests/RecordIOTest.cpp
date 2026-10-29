@@ -20,6 +20,10 @@
 #include <gtest/gtest.h>
 
 #include "cachelib/navy/serialization/RecordIO.h"
+#include "cachelib/navy/testing/MockDevice.h"
+
+using testing::_;
+using testing::NiceMock;
 
 namespace facebook::cachelib::navy::tests {
 namespace {
@@ -226,6 +230,173 @@ TEST(RecordIO, MemoryDeviceVariousPayloads) {
         }
       }
     }
+  }
+}
+
+// The writer keeps whole blocks that already fit and drops only the final
+// block when the stream reaches the end of the metadata region.
+TEST(RecordIO, PartialTailIsDroppedOneBlock) {
+  constexpr uint32_t ioAlignSize = 4096;
+  constexpr uint64_t metadataSize = 8 * ioAlignSize;
+  const uint32_t fullBlock =
+      ioAlignSize - folly::recordio_helpers::headerSize();
+
+  auto dev = createMemoryDevice(10 * metadataSize, nullptr, ioAlignSize);
+  {
+    auto rw = createMetadataRecordWriter(*dev, metadataSize);
+    for (int i = 0; i < 7; i++) {
+      auto wbuf = folly::IOBuf::create(fullBlock);
+      wbuf->append(fullBlock);
+      memset(wbuf->writableData(), 'A' + i, fullBlock);
+      rw->writeRecord(std::move(wbuf));
+    }
+    auto tail = folly::IOBuf::create(100);
+    tail->append(100);
+    memset(tail->writableData(), 'Z', 100);
+    rw->writeRecord(std::move(tail));
+  }
+
+  auto rr = createMetadataRecordReader(*dev, metadataSize);
+  for (int i = 0; i < 7; i++) {
+    ASSERT_FALSE(rr->isEnd());
+    auto rbuf = rr->readRecord();
+    ASSERT_NE(nullptr, rbuf);
+    EXPECT_EQ(fullBlock, rbuf->length());
+    EXPECT_EQ('A' + i, rbuf->data()[0]);
+  }
+  EXPECT_TRUE(rr->isEnd());
+}
+
+// A larger staging size means fewer, bigger device writes; the bytes written
+// are the same either way.
+TEST(RecordIO, StagingSizeBatchesWritesWithoutChangingImage) {
+  constexpr uint64_t metadataSize = 4 * 1024 * 1024;
+  constexpr uint32_t recSize = 3000;
+  constexpr int nRecs = 500;
+
+  auto run = [&](uint32_t ioAlignSize, size_t stagingSize) {
+    auto dev =
+        std::make_unique<NiceMock<MockDevice>>(2 * metadataSize, ioAlignSize);
+    uint32_t writes = 0;
+    ON_CALL(*dev, writeImpl(_, _, _, _))
+        .WillByDefault(
+            [&](uint64_t offset, uint32_t size, const void* data, int) {
+              writes++;
+              auto& real = dev->getRealDeviceRef();
+              Buffer buffer = real.makeIOBuffer(size);
+              memcpy(buffer.data(), data, size);
+              return real.write(offset, std::move(buffer));
+            });
+    {
+      auto rw = createMetadataRecordWriter(*dev, metadataSize, stagingSize);
+      for (int i = 0; i < nRecs; i++) {
+        auto wbuf = folly::IOBuf::create(recSize);
+        wbuf->append(recSize);
+        memset(wbuf->writableData(), 'A' + (i % 26), recSize);
+        rw->writeRecord(std::move(wbuf));
+      }
+    }
+    Buffer img{metadataSize, ioAlignSize};
+    EXPECT_TRUE(dev->getRealDeviceRef().read(0, metadataSize, img.data()));
+    auto s = std::string(reinterpret_cast<char*>(img.data()), metadataSize);
+    // Guards against the mock swallowing the writes and leaving every run
+    // comparing the same empty image.
+    EXPECT_NE(std::string(metadataSize, '\0'), s);
+    return std::make_pair(s, writes);
+  };
+
+  for (uint32_t ioAlignSize : {4096u, 16384u}) {
+    const auto oneBlock = run(ioAlignSize, ioAlignSize);
+    // Values below a block and values that are not a block multiple are
+    // clamped, so they must land on the same image.
+    for (size_t stagingSize : {size_t{0}, size_t{1}, size_t{4095},
+                               size_t{100000}, size_t{4 * 1024 * 1024}}) {
+      EXPECT_EQ(oneBlock.first, run(ioAlignSize, stagingSize).first)
+          << "align=" << ioAlignSize << " staging=" << stagingSize;
+    }
+    // Unset means a block per write, and 1MB is what opts into batching.
+    EXPECT_EQ(oneBlock.second, run(ioAlignSize, 0).second)
+        << "align=" << ioAlignSize;
+    EXPECT_LT(run(ioAlignSize, 1024 * 1024).second, oneBlock.second)
+        << "align=" << ioAlignSize;
+  }
+}
+
+// A larger read staging size means fewer, bigger device reads; the records
+// that come back and the position reported are the same either way.
+TEST(RecordIO, ReadStagingSizeBatchesReadsWithoutChangingRecords) {
+  constexpr uint64_t metadataSize = 4 * 1024 * 1024;
+  constexpr int nRecs = 100;
+  // Every 50th record is fragment-sized, like the bloom filter's 1 MiB
+  // fragments, which is the shape the batching is for. The rest are
+  // sub-block and block-crossing.
+  auto recSize = [](int i) -> uint32_t {
+    return i % 50 == 49 ? 1024 * 1024 : 64 + (i * 1031) % 12000;
+  };
+
+  auto run = [&](uint32_t ioAlignSize, size_t readStagingSize) {
+    auto dev =
+        std::make_unique<NiceMock<MockDevice>>(2 * metadataSize, ioAlignSize);
+    uint64_t writtenEnd = 0;
+    ON_CALL(*dev, writeImpl(_, _, _, _))
+        .WillByDefault(
+            [&](uint64_t offset, uint32_t size, const void* data, int) {
+              writtenEnd = std::max(writtenEnd, offset + size);
+              auto& real = dev->getRealDeviceRef();
+              Buffer buffer = real.makeIOBuffer(size);
+              memcpy(buffer.data(), data, size);
+              return real.write(offset, std::move(buffer));
+            });
+    {
+      auto rw = createMetadataRecordWriter(*dev, metadataSize);
+      for (int i = 0; i < nRecs; i++) {
+        auto wbuf = folly::IOBuf::create(recSize(i));
+        wbuf->append(recSize(i));
+        memset(wbuf->writableData(), 'A' + (i % 26), recSize(i));
+        rw->writeRecord(std::move(wbuf));
+      }
+    }
+
+    uint32_t reads = 0;
+    // A RAID or non-preallocated device has nothing behind the reserved region
+    // past the last block the writer flushed, so a read that runs into it
+    // comes back short and Device reports failure.
+    ON_CALL(*dev, readImpl(_, _, _))
+        .WillByDefault([&](uint64_t offset, uint32_t size, void* buffer) {
+          reads++;
+          return offset + size <= writtenEnd &&
+                 dev->getRealDeviceRef().read(offset, size, buffer);
+        });
+
+    std::string records;
+    auto rr = createMetadataRecordReader(*dev, metadataSize, readStagingSize);
+    for (int i = 0; i < nRecs; i++) {
+      EXPECT_FALSE(rr->isEnd()) << "record " << i;
+      auto rbuf = rr->readRecord();
+      EXPECT_EQ(recSize(i), rbuf->length());
+      records.append(reinterpret_cast<const char*>(rbuf->data()),
+                     rbuf->length());
+    }
+    EXPECT_TRUE(rr->isEnd());
+    return std::make_tuple(records, rr->getCurPos(), reads);
+  };
+
+  for (uint32_t ioAlignSize : {4096u, 16384u}) {
+    const auto oneBlock = run(ioAlignSize, ioAlignSize);
+    EXPECT_FALSE(std::get<0>(oneBlock).empty());
+    for (size_t stagingSize : {size_t{0}, size_t{1}, size_t{4095},
+                               size_t{100000}, size_t{4 * 1024 * 1024}}) {
+      const auto staged = run(ioAlignSize, stagingSize);
+      EXPECT_EQ(std::get<0>(oneBlock), std::get<0>(staged))
+          << "align=" << ioAlignSize << " staging=" << stagingSize;
+      EXPECT_EQ(std::get<1>(oneBlock), std::get<1>(staged))
+          << "align=" << ioAlignSize << " staging=" << stagingSize;
+    }
+    // Unset means a block per read, and 1MB is what opts into batching.
+    EXPECT_EQ(std::get<2>(oneBlock), std::get<2>(run(ioAlignSize, 0)))
+        << "align=" << ioAlignSize;
+    EXPECT_LT(std::get<2>(run(ioAlignSize, 1024 * 1024)), std::get<2>(oneBlock))
+        << "align=" << ioAlignSize;
   }
 }
 

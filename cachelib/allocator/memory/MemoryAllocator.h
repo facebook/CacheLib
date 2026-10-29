@@ -777,6 +777,13 @@ class MemoryAllocator {
     return memoryPoolManager_.getNumSlabsAdvised();
   }
 
+  // get the total number of slabs advised away across the given pools
+  //
+  // @throw std::invalid_argument if a pool id is not a valid pool
+  size_t getNumSlabsAdvised(const std::set<PoolId>& poolIds) const {
+    return memoryPoolManager_.getNumSlabsAdvised(poolIds);
+  }
+
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
   // @param numSlabsToAdvise  total number of slabs to advise across all pools

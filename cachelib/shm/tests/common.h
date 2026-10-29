@@ -23,6 +23,9 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <map>
+#include <set>
+#include <string>
 
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
@@ -50,6 +53,11 @@ class ShmTestBase : public ::testing::Test {
   static size_t getRandomSize();
   static void checkMemory(void* addr, size_t size, const unsigned char value);
   static void writeToMemory(void* addr, size_t size, const unsigned char value);
+
+  // Returns the VmFlags of every mapping in this process whose /proc/self/smaps
+  // entry names the given path, keyed by the mapping's start address.
+  static std::map<uintptr_t, std::set<std::string>> getMappingVmFlags(
+      const std::string& mappingPath);
 
  private:
   // index for the address range

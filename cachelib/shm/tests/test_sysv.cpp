@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <fmt/core.h>
 #include <sys/resource.h>
 
 #include "cachelib/shm/SysVShmSegment.h"
@@ -127,4 +128,20 @@ TEST_F(SysVShmTest, MemoryRetention) {
   const unsigned char magicVal = 'a';
   writeToMemory(addr, shmSize, magicVal);
   checkMemory(addr, shmSize, magicVal);
+}
+
+TEST_F(SysVShmTest, ReferenceMappingExcludedFromCoredump) {
+  SysVShmSegment s(ShmNew, getName(), shmSize);
+  auto addr = getMapAddr();
+  s.mapAddress(addr);
+
+  auto vmFlags = getMappingVmFlags(fmt::format(
+      "/SYSV{:08x}", static_cast<uint32_t>(std::stoi(s.getKeyStr()))));
+
+  auto dataMapping = vmFlags.extract(reinterpret_cast<uintptr_t>(addr));
+  ASSERT_FALSE(dataMapping.empty());
+  EXPECT_FALSE(dataMapping.mapped().contains("dd"));
+  ASSERT_EQ(1, vmFlags.size());
+  EXPECT_TRUE(vmFlags.begin()->second.contains("dd"));
+  s.unMap(addr);
 }

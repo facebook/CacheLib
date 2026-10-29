@@ -988,6 +988,7 @@ class NavyConfig {
   uint64_t getFileSize() const { return fileSize_; }
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
+  uint32_t getMetadataStagingSize() const { return metadataStagingSize_; }
   IoEngine getIoEngine() const { return ioEngine_; }
   uint32_t getQDepth() const { return qDepth_; }
   BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
@@ -1083,6 +1084,12 @@ class NavyConfig {
   }
   void setDeviceMaxWriteSize(uint32_t deviceMaxWriteSize) noexcept {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
+  }
+
+  // Configure how much metadata is staged in memory per device IO, on both
+  // the persist and the recover side. 0 means one block.
+  void setMetadataStagingSize(uint32_t metadataStagingSize) noexcept {
+    metadataStagingSize_ = metadataStagingSize;
   }
 
   // Configure the max key size for Navy
@@ -1213,6 +1220,10 @@ class NavyConfig {
   // This controls granularity of the writes when we flush the region.
   // This is only used when in-mem buffer is enabled.
   uint32_t deviceMaxWriteSize_{};
+  // Bytes staged in memory per metadata IO. Distinct from deviceMetadataSize,
+  // which reserves the partition on the device: this changes the IO
+  // granularity, not how much metadata is written. 0 means one block.
+  uint32_t metadataStagingSize_{0};
   // This controls if device is in bad status (for testing).
   BadDeviceStatus testingBadDevice_{BadDeviceStatus::None};
 
