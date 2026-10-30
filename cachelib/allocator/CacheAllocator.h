@@ -1400,6 +1400,20 @@ class CacheAllocator : public CacheBase {
   // run the benchmarks after flushing.
   void flushNvmCache();
 
+  // Writes a RAM-resident item to NVM without evicting it (write-through).
+  // The item stays in RAM, and a successful put marks it NvmClean so its later
+  // eviction skips the write. The write is queued asynchronously, goes through
+  // the normal admission checks, and is a no-op for an item already NvmClean.
+  //
+  // Do not call this right after insertOrReplace on the same key: put() aborts
+  // on the NVM delete tombstone that insertOrReplace enqueues
+  // (numNvmAbortedPutOnTombstone). Retry on a later turn instead.
+  //
+  // @return true if a put was queued with a valid put token. NvmCache::put can
+  //         still drop it, so callers that need a durable copy should check
+  //         Item::isNvmClean().
+  bool pushToNvmCacheFromRam(Key key);
+
   // Dump the last N items for an MM Container
   // @return  vector of the string of each item. Empty if nothing in LRU
   // @throw  std::invalid_argument if <pid, cid> does not exist
@@ -4499,20 +4513,25 @@ void CacheAllocator<CacheTrait>::removeFromNvmForTesting(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::pushToNvmCacheFromRamForTesting(
     typename Item::Key key) {
+  return pushToNvmCacheFromRam(key);
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::pushToNvmCacheFromRam(typename Item::Key key) {
   auto handle = findInternal(key);
 
-  if (handle && nvmCache_ && shouldWriteToNvmCache(*handle) &&
-      shouldWriteToNvmCacheExclusive(*handle)) {
-    auto putTokenRv =
-        nvmCache_->createPutToken(handle->getKey(), []() { return true; });
-    InFlightPuts::PutToken putToken{};
-    if (putTokenRv) {
-      putToken = std::move(*putTokenRv);
-    }
-    nvmCache_->put(*handle, std::move(putToken));
-    return true;
+  if (!handle || !nvmCache_ || !shouldWriteToNvmCache(*handle) ||
+      !shouldWriteToNvmCacheExclusive(*handle)) {
+    return false;
   }
-  return false;
+  // put() writes nothing without a valid token.
+  auto putTokenRv =
+      nvmCache_->createPutToken(handle->getKey(), []() { return true; });
+  if (!putTokenRv) {
+    return false;
+  }
+  nvmCache_->put(*handle, std::move(*putTokenRv));
+  return true;
 }
 
 template <typename CacheTrait>
