@@ -17,9 +17,9 @@
 #pragma once
 
 #include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <folly/CPortability.h>
 #include <folly/Optional.h>
+#include <folly/String.h>
 #include <folly/json/DynamicConverter.h>
 #include <folly/json/json.h>
 
@@ -1561,7 +1561,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       std::to_string(memMonitorConfig.reclaimRateLimitWindowSecs.count());
   const auto& poolIds = memMonitorConfig.poolIds;
   configMap["memMonitorPoolIds"] =
-      poolIds.empty() ? "all" : fmt::format("{}", fmt::join(poolIds, ","));
+      poolIds.empty() ? "all" : folly::join(",", poolIds);
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
