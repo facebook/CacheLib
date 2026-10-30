@@ -27,6 +27,7 @@
 #include "cachelib/interface/CacheComponent.h"
 #include "cachelib/interface/Connector.h"
 #include "cachelib/interface/DetachedItem.h"
+#include "cachelib/interface/InFlightTransfers.h"
 #include "cachelib/interface/Result.h"
 
 namespace facebook::cachelib::interface {
@@ -48,14 +49,21 @@ class TransferExecutor {
   /**
    * Schedule an item transfer to the destination through the connector.
    * The destination and connector must remain alive until closeAndDrain()
-   * returns.
+   * returns. The token must belong to the item key and is consumed even if
+   * submission fails. An accepted task retains it through resource cleanup.
+   *
+   * Cancellation is checked before allocation, after allocation, and after
+   * copying. Each started component/connector operation finishes normally.
+   * Cancellation after the final checkpoint may still allow insertion; this
+   * API does not order transfers against cache mutations.
    *
    * @return success if the transfer was accepted for asynchronous execution,
    * or SHUTDOWN_FAILED if shutdown has begun
    */
   UnitResult submit(DetachedItem item,
                     CacheComponent& destination,
-                    Connector& connector) noexcept;
+                    Connector& connector,
+                    InFlightTransfers::TransferToken token) noexcept;
 
   /**
    * Stop accepting work. The first caller waits for every accepted transfer to
@@ -64,7 +72,8 @@ class TransferExecutor {
   void closeAndDrain() noexcept;
 
  private:
-  static folly::coro::Task<void> transferItem(DetachedItem item,
+  struct Transfer;
+  static folly::coro::Task<void> transferItem(Transfer transfer,
                                               CacheComponent& destination,
                                               Connector& connector);
 

@@ -17,6 +17,7 @@
 #include "cachelib/interface/TransferExecutor.h"
 
 #include <folly/coro/ViaIfAsync.h>
+#include <folly/coro/WithCancellation.h>
 #include <folly/executors/thread_factory/NamedThreadFactory.h>
 #include <folly/logging/xlog.h>
 
@@ -37,28 +38,43 @@ size_t validateNumThreads(size_t numThreads) {
 
 } // namespace
 
+struct TransferExecutor::Transfer {
+  // Destroy the payload before releasing its registration.
+  InFlightTransfers::TransferToken token;
+  DetachedItem item;
+};
+
 TransferExecutor::TransferExecutor(size_t numThreads)
     : executor_(validateNumThreads(numThreads),
                 std::make_shared<folly::NamedThreadFactory>("transfer")) {}
 
 TransferExecutor::~TransferExecutor() { closeAndDrain(); }
 
-UnitResult TransferExecutor::submit(DetachedItem item,
-                                    CacheComponent& destination,
-                                    Connector& connector) noexcept {
+UnitResult TransferExecutor::submit(
+    DetachedItem item,
+    CacheComponent& destination,
+    Connector& connector,
+    InFlightTransfers::TransferToken token) noexcept {
+  Transfer transfer{std::move(token), std::move(item)};
   std::shared_lock lock{admissionMutex_};
   if (!accepting_) {
     return makeError(Error::Code::SHUTDOWN_FAILED,
                      "transfer executor is shutting down");
   }
 
+  auto cancellation = transfer.token.getCancellationToken();
   scope_.add(folly::coro::co_withExecutor(
-      &executor_, transferItem(std::move(item), destination, connector)));
+      &executor_,
+      folly::coro::co_withCancellation(
+          std::move(cancellation),
+          transferItem(std::move(transfer), destination, connector))));
   return folly::unit;
 }
 
 folly::coro::Task<void> TransferExecutor::transferItem(
-    DetachedItem item, CacheComponent& destination, Connector& connector) {
+    Transfer transfer, CacheComponent& destination, Connector& connector) {
+  auto& item = transfer.item;
+  co_await folly::coro::co_safe_point;
   const auto key = item.getKey().str();
   const auto creationTime = item.getCreationTime();
   const auto expiryTime = item.getExpiryTime();
@@ -71,24 +87,30 @@ folly::coro::Task<void> TransferExecutor::transferItem(
   const auto ttlSecs = expiryTime == 0 ? 0 : expiryTime - creationTime;
   const auto size = item.getMemorySize();
 
-  auto allocated =
-      co_await destination.allocate(key, size, creationTime, ttlSecs);
+  auto allocated = co_await folly::coro::co_withCancellation(
+      folly::CancellationToken{},
+      destination.allocate(key, size, creationTime, ttlSecs));
+  co_await folly::coro::co_safe_point;
   if (allocated.hasError()) {
     XLOG_EVERY_MS(WARN, 1000) << "Failed to allocate destination for item "
                               << key << ": " << allocated.error();
     co_return;
   }
 
-  auto moved = co_await connector.transfer(ReadDescriptor(std::move(item)),
-                                           std::move(allocated).value());
+  auto moved = co_await folly::coro::co_withCancellation(
+      folly::CancellationToken{},
+      connector.transfer(ReadDescriptor(std::move(item)),
+                         std::move(allocated).value()));
+  co_await folly::coro::co_safe_point;
   if (moved.hasError()) {
     XLOG_EVERY_MS(WARN, 1000)
         << "Failed to transfer item " << key << ": " << moved.error();
     co_return;
   }
 
-  auto inserted =
-      co_await destination.insertOrReplace(std::move(moved).value().release());
+  auto inserted = co_await folly::coro::co_withCancellation(
+      folly::CancellationToken{},
+      destination.insertOrReplace(std::move(moved).value().release()));
   if (inserted.hasError()) {
     XLOG_EVERY_MS(WARN, 1000) << "Failed to insert transferred item " << key
                               << ": " << inserted.error();
