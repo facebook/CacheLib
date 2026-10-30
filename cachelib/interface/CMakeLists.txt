@@ -16,6 +16,7 @@ add_library (cachelib_interface
   Cache.cpp
   CacheItem.cpp
   Handle.cpp
+  InFlightTransfers.cpp
   MemcpyConnector.cpp
   TransferExecutor.cpp
   Stats.cpp
@@ -75,6 +76,7 @@ if (BUILD_TESTS)
     add_source_test (components/tests/FlashCacheComponentTest.cpp)
   endif()
   add_source_test (tests/ResultTest.cpp)
+  add_source_test (tests/InFlightTransfersTest.cpp)
   add_source_test (utils/tests/CoroFiberAdapterTest.cpp)
   add_source_test (utils/tests/ShardedSerializerTest.cpp)
 endif()
