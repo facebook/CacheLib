@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/ThreadLocal.h>
 #include <folly/logging/xlog.h>

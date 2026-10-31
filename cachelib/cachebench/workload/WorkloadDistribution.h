@@ -15,7 +15,6 @@
  */
 
 #pragma once
-#include <folly/Format.h>
 
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"

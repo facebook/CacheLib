@@ -19,8 +19,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fmt/core.h>
-#include <folly/Format.h>
 #include <folly/Random.h>
+#include <folly/String.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/DistributedMutex.h>
 #include <sys/mman.h>

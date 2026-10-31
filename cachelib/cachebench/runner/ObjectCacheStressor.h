@@ -17,8 +17,8 @@
 #pragma once
 
 #include <fmt/format.h>
-#include <folly/Format.h>
 #include <folly/Random.h>
+#include <folly/Range.h>
 #include <folly/ScopeGuard.h>
 #include <folly/TokenBucket.h>
 #include <folly/system/ThreadName.h>
