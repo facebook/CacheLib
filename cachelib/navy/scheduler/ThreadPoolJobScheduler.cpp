@@ -17,6 +17,7 @@
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 #include <fmt/core.h>
+#include <folly/String.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/SysResource.h>
 #include <folly/system/ThreadName.h>

@@ -27,7 +27,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
 #include <folly/logging/xlog.h>
