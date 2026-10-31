@@ -41,7 +41,6 @@ clang-format on
 #include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/BenchmarkUtil.h>
-#include <folly/Format.h>
 #include <folly/init/Init.h>
 #include <folly/memory/MallctlHelper.h>
 #include <folly/memory/Malloc.h>

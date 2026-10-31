@@ -21,7 +21,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #pragma GCC diagnostic pop
 #include <folly/container/Array.h>
 #include <folly/lang/Aligned.h>

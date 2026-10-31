@@ -27,8 +27,8 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include <folly/Format.h>
 #include <folly/Math.h>
+#include <folly/Range.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"

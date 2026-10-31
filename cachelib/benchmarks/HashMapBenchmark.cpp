@@ -16,7 +16,7 @@
 
 #include <fmt/format.h>
 #include <folly/Benchmark.h>
-#include <folly/Format.h>
+#include <folly/Conv.h>
 #include <folly/Portability.h>
 #include <folly/Random.h>
 #include <folly/container/F14Map.h>

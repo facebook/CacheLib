@@ -19,7 +19,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <fmt/format.h>
-#include <folly/Format.h>
+#include <folly/Range.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/common/Time.h"
