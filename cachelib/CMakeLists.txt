@@ -331,7 +331,7 @@ if (BUILD_WITH_DTO)
   set(CACHELIB_DTO_GIT_REPOSITORY "https://github.com/intel/DTO.git"
       CACHE STRING "Git repository for DTO when no installed copy is found")
   # Tag v1.2.
-  set(CACHELIB_DTO_GIT_TAG "7eb15200bcd95cf8a49d018856eb647b6f4e0ae9"
+  set(CACHELIB_DTO_GIT_TAG "6ef831d9204f9156b1e816c7b603e7f0718193ce"
       CACHE STRING "DTO revision to fetch when no installed copy is found")
 
   find_package(DTO 1.2 CONFIG QUIET)
